@@ -9,7 +9,7 @@ build/
 *.spec
 
 # PyInstaller dist binary output (uncomment if you do not want to track compiled binaries in git)
-# dist/
+dist/
 
 # Environment / IDE files
 .vscode/
