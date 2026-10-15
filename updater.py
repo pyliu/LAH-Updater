@@ -204,20 +204,24 @@ def get_zip_member_path(info):
     return info.filename
 
 
-def detect_strip_prefix(zf, expected_folder_name, zip_stem):
+def detect_strip_prefix(zf, expected_folder_name, zip_stem, target_leaf_name=""):
     """
     【關鍵防呆機制】：
     檢查 zip 壓縮包內部的頂層結構。
-    如果壓縮檔頂層已經包含與目標資料夾同名的單一資料夾（例如 www.zip 點開裡面第一層就是 www/ 資料夾），
-    或者頂層只有單一與壓縮檔同名的資料夾，且無散落於根目錄的單獨檔案，
-    則傳回該資料夾前綴 (例如 'www/')，以便在解壓縮時自動對齊消除外層，避免變成 www\\www 的雙層目錄！
+    如果壓縮檔頂層已經包含與預期名稱、壓縮檔名或目標目錄同名的單一資料夾，
+    且無散落於根目錄的單獨檔案，則傳回該資料夾前綴 (例如 'www/')，
+    後續解壓縮時自動對齊消除外層，避免變成 www\\www 的雙層目錄！
     若頂層直接散落各檔案或有多個不同頂層資料夾，則傳回空字串 ""。
     """
     top_dirs = set()
     has_root_files = False
 
-    norm_expected = expected_folder_name.strip("/\\").lower()
-    norm_stem = zip_stem.strip("/\\").lower()
+    candidates = {
+        expected_folder_name.strip("/\\").lower(),
+        zip_stem.strip("/\\").lower()
+    }
+    if target_leaf_name:
+        candidates.add(target_leaf_name.strip("/\\").lower())
 
     for info in zf.infolist():
         fname = get_zip_member_path(info).replace('\\', '/').strip('/')
@@ -236,8 +240,7 @@ def detect_strip_prefix(zf, expected_folder_name, zip_stem):
 
     if not has_root_files and len(top_dirs) == 1:
         single_dir = list(top_dirs)[0]
-        # 頂層單一目錄與預期目錄相同，或與 zip 檔名相同
-        if single_dir.lower() == norm_expected or single_dir.lower() == norm_stem:
+        if single_dir.lower() in candidates:
             return single_dir + '/'
 
     return ""
@@ -284,8 +287,8 @@ class UpdaterApp:
     def __init__(self, root):
         self.root = root
         self.root.title("智慧控管與監控系統 - 自動更新工具")
-        self.root.geometry("860x760")
-        self.root.minsize(800, 680)
+        self.root.geometry("880x800")
+        self.root.minsize(820, 700)
 
         # 基礎路徑
         self.app_dir = get_app_dir()
@@ -303,6 +306,8 @@ class UpdaterApp:
         self._build_ui()
         self._detect_apache_service()
         self.rescan()
+        # 啟動時偵測預設安裝目錄是否存在，若無則提示使用者選擇
+        self._check_default_root_dir()
 
     def _init_variables(self):
         # 根目錄路徑
@@ -318,7 +323,8 @@ class UpdaterApp:
                 "filepath": "",
                 "filesize": 0,
                 "status_var": tk.StringVar(value="⚪ 偵測中..."),
-                "target_path_var": tk.StringVar(value="")
+                "target_path_var": tk.StringVar(value=""),
+                "is_custom_path": False
             }
 
         # Apache 自動重啟勾選
@@ -355,13 +361,13 @@ class UpdaterApp:
         admin_label.pack(side=tk.RIGHT, padx=5)
 
         # 2. 安裝根目錄選擇區塊
-        dir_frame = ttk.LabelFrame(main_frame, text=" 📂 安裝根目錄設定 ", padding="10")
+        dir_frame = ttk.LabelFrame(main_frame, text=" 📂 安裝根目錄設定 (預設連動基底) ", padding="10")
         dir_frame.pack(fill=tk.X, pady=(0, 10))
 
         dir_inner = ttk.Frame(dir_frame)
         dir_inner.pack(fill=tk.X)
 
-        ttk.Label(dir_inner, text="目標安裝根目錄：", font=("Microsoft JhengHei UI", 9, "bold")).pack(side=tk.LEFT, padx=(0, 5))
+        ttk.Label(dir_inner, text="系統安裝根目錄：", font=("Microsoft JhengHei UI", 9, "bold")).pack(side=tk.LEFT, padx=(0, 5))
         self.root_entry = ttk.Entry(dir_inner, textvariable=self.root_dir_var, font=("Consolas", 10))
         self.root_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 8))
 
@@ -369,55 +375,89 @@ class UpdaterApp:
         self.btn_browse.pack(side=tk.RIGHT)
 
         # 3. 更新包偵測清單區塊
-        pkg_frame = ttk.LabelFrame(main_frame, text=" 📦 更新包偵測與選取清單 ", padding="10")
+        pkg_frame = ttk.LabelFrame(main_frame, text=" 📦 更新包偵測與各模組安裝路徑 ", padding="10")
         pkg_frame.pack(fill=tk.X, pady=(0, 10))
 
         # 表頭提示
         header_hint = ttk.Label(
             pkg_frame,
-            text=f"來源更新目錄：{self.app_dir}",
+            text=f"來源更新目錄：{self.app_dir}  (各模組路徑預設跟隨根目錄，亦可單獨點擊「瀏覽...」自訂)",
             foreground="#555555",
             font=("Microsoft JhengHei UI", 8)
         )
         header_hint.pack(anchor=tk.W, pady=(0, 6))
 
-        # 建立 4 個更新包項目元件
+        # 建立 4 個更新包項目元件（兩列卡片式佈局，支援個別自訂目標路徑）
         self.chk_widgets = {}
+        self.path_entries = {}
+        self.browse_buttons = {}
+        self.reset_buttons = {}
+
         for pkg in PACKAGE_CONFIGS:
             p_id = pkg["id"]
             v = self.pkg_vars[p_id]
 
-            row_frame = ttk.Frame(pkg_frame, padding="3")
-            row_frame.pack(fill=tk.X, pady=2)
+            item_card = ttk.Frame(pkg_frame, padding="2")
+            item_card.pack(fill=tk.X, pady=3)
 
-            # 左側：勾選框與標題
+            # 第 1 列：核取方塊 + 狀態標籤
+            top_line = ttk.Frame(item_card)
+            top_line.pack(fill=tk.X)
+
             chk = ttk.Checkbutton(
-                row_frame,
+                top_line,
                 text=pkg["title"],
                 variable=v["checked"]
             )
-            chk.pack(side=tk.LEFT, padx=(0, 10))
+            chk.pack(side=tk.LEFT)
             self.chk_widgets[p_id] = chk
 
-            # 中間：偵測狀態標籤
             status_lbl = tk.Label(
-                row_frame,
+                top_line,
                 textvariable=v["status_var"],
                 font=("Microsoft JhengHei UI", 9, "bold"),
-                anchor="w",
-                width=24
+                anchor="e"
             )
-            status_lbl.pack(side=tk.LEFT, padx=(0, 10))
+            status_lbl.pack(side=tk.RIGHT, padx=4)
             v["status_label_widget"] = status_lbl
 
-            # 右側：目標路徑動態顯示
-            target_lbl = ttk.Label(
-                row_frame,
+            # 第 2 列：縮排的個別目標解壓縮路徑輸入框 + 瀏覽按鈕 + 重設按鈕
+            bottom_line = ttk.Frame(item_card, padding=(22, 1, 0, 0))
+            bottom_line.pack(fill=tk.X)
+
+            ttk.Label(
+                bottom_line,
+                text="目標路徑：",
+                font=("Microsoft JhengHei UI", 8),
+                foreground="#555555"
+            ).pack(side=tk.LEFT)
+
+            path_entry = ttk.Entry(
+                bottom_line,
                 textvariable=v["target_path_var"],
-                font=("Consolas", 9),
-                foreground="#333333"
+                font=("Consolas", 9)
             )
-            target_lbl.pack(side=tk.LEFT, fill=tk.X, expand=True)
+            path_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(2, 6))
+            path_entry.bind("<KeyRelease>", lambda e, pid=p_id: self._on_module_path_manual_edit(pid))
+            self.path_entries[p_id] = path_entry
+
+            btn_browse_pkg = ttk.Button(
+                bottom_line,
+                text="瀏覽...",
+                width=7,
+                command=lambda pid=p_id: self._browse_pkg_target_dir(pid)
+            )
+            btn_browse_pkg.pack(side=tk.LEFT, padx=(0, 4))
+            self.browse_buttons[p_id] = btn_browse_pkg
+
+            btn_reset_pkg = ttk.Button(
+                bottom_line,
+                text="↺ 重設",
+                width=6,
+                command=lambda pid=p_id: self._reset_pkg_target_dir(pid)
+            )
+            btn_reset_pkg.pack(side=tk.LEFT)
+            self.reset_buttons[p_id] = btn_reset_pkg
 
         # 服務控制與功能按鈕列
         ctrl_row = ttk.Frame(pkg_frame, padding="4")
@@ -440,7 +480,7 @@ class UpdaterApp:
         self.notes_text = scrolledtext.ScrolledText(
             self.notes_frame,
             wrap=tk.WORD,
-            height=5,
+            height=4,
             font=("Microsoft JhengHei UI", 9),
             bg="#fbfbfb",
             fg="#222222"
@@ -519,25 +559,80 @@ class UpdaterApp:
 
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
 
+    def _check_default_root_dir(self):
+        """
+        程式啟動時偵測預設根目錄 (如 C:\AppServ) 是否存在。
+        若找不到，在視窗顯示後彈出提示對話框，引導使用者立即選取系統安裝根目錄。
+        """
+        default_dir = self.root_dir_var.get().strip()
+        if not default_dir or not os.path.exists(default_dir):
+            def _prompt():
+                msg = (
+                    f"⚠️ 偵測到預設安裝目錄不存在：\n【{default_dir}】\n\n"
+                    "若您的系統安裝於其他磁碟機（例如 D:\\AppServ 或自訂目錄），\n"
+                    "是否立即瀏覽並選取正確的安裝根目錄？\n\n"
+                    "（點選「是」開啟瀏覽對話框；點選「否」亦可稍後於介面手動輸入，或為各模組個別自訂路徑）"
+                )
+                self.log(f"⚠️ 預設安裝目錄 [{default_dir}] 不存在，請確認安裝路徑。", "warning")
+                if messagebox.askyesno("安裝目錄提示", msg, icon=messagebox.WARNING):
+                    self._browse_root_dir()
+
+            self.root.after(250, _prompt)
+
     def _browse_root_dir(self):
-        """開啟資料夾瀏覽選擇器"""
-        current = self.root_dir_var.get()
-        selected = filedialog.askdirectory(initialdir=current if os.path.exists(current) else "C:\\", title="請選擇安裝根目錄")
+        """開啟資料夾瀏覽選擇器設定安裝根目錄"""
+        current = self.root_dir_var.get().strip()
+        init_dir = current if (current and os.path.exists(current)) else "C:\\"
+        selected = filedialog.askdirectory(initialdir=init_dir, title="請選擇系統安裝根目錄")
         if selected:
-            # 規範化為 Windows 反斜線路徑
             norm = os.path.normpath(selected)
             self.root_dir_var.set(norm)
+            self.log(f"已更新安裝根目錄為：{norm}", "info")
 
     def _on_root_dir_changed(self, *args):
-        """當安裝根目錄變更時，即時連動更新 4 個壓縮包的目標解壓縮路徑"""
+        """當安裝根目錄變更時，即時連動更新未個別自訂路徑的壓縮包目標路徑"""
         base = self.root_dir_var.get().strip()
         for pkg in PACKAGE_CONFIGS:
+            v = self.pkg_vars[pkg["id"]]
+            # 若使用者未單獨指定此模組的路徑，才隨根目錄連動
+            if not v.get("is_custom_path", False):
+                rel = pkg["rel_target"]
+                full_target = os.path.normpath(os.path.join(base, rel)) if base else rel
+                v["target_path_var"].set(full_target)
+
+    def _browse_pkg_target_dir(self, pkg_id):
+        """為單一模組開啟瀏覽視窗自訂目標安裝路徑"""
+        v = self.pkg_vars[pkg_id]
+        pkg = next((p for p in PACKAGE_CONFIGS if p["id"] == pkg_id), None)
+        title = pkg["title"] if pkg else pkg_id
+
+        current = v["target_path_var"].get().strip()
+        init_dir = current if (current and os.path.exists(current)) else self.root_dir_var.get().strip()
+        if not os.path.exists(init_dir):
+            init_dir = "C:\\"
+
+        selected = filedialog.askdirectory(initialdir=init_dir, title=f"請選擇 [{title}] 的目標解壓縮路徑")
+        if selected:
+            norm = os.path.normpath(selected)
+            v["target_path_var"].set(norm)
+            v["is_custom_path"] = True
+            self.log(f"已為模組 [{pkg['name']}] 設定自訂安裝路徑：{norm}", "info")
+
+    def _reset_pkg_target_dir(self, pkg_id):
+        """重設單一模組路徑，恢復與安裝根目錄連動"""
+        v = self.pkg_vars[pkg_id]
+        v["is_custom_path"] = False
+        pkg = next((p for p in PACKAGE_CONFIGS if p["id"] == pkg_id), None)
+        if pkg:
+            base = self.root_dir_var.get().strip()
             rel = pkg["rel_target"]
-            if base:
-                full_target = os.path.normpath(os.path.join(base, rel))
-            else:
-                full_target = rel
-            self.pkg_vars[pkg["id"]]["target_path_var"].set(f"➔ 目標：{full_target}")
+            norm = os.path.normpath(os.path.join(base, rel)) if base else rel
+            v["target_path_var"].set(norm)
+            self.log(f"已重設模組 [{pkg['name']}] 目標路徑為跟隨根目錄：{norm}", "info")
+
+    def _on_module_path_manual_edit(self, pkg_id):
+        """當使用者手動在文字框修改路徑時，將該模組標記為自訂路徑"""
+        self.pkg_vars[pkg_id]["is_custom_path"] = True
 
     def _detect_apache_service(self):
         """偵測 Apache 服務名稱"""
@@ -639,11 +734,14 @@ class UpdaterApp:
         self.btn_browse.configure(state=state)
         self.btn_rescan.configure(state=state)
         self.chk_apache.configure(state=state)
-        for p_id, chk in self.chk_widgets.items():
-            if self.pkg_vars[p_id]["exists"]:
-                chk.configure(state=state)
-            else:
-                chk.configure(state="disabled")
+
+        for p_id in self.pkg_vars:
+            exists = self.pkg_vars[p_id]["exists"]
+            chk_state = state if exists else "disabled"
+            self.chk_widgets[p_id].configure(state=chk_state)
+            self.path_entries[p_id].configure(state=state)
+            self.browse_buttons[p_id].configure(state=state)
+            self.reset_buttons[p_id].configure(state=state)
 
         if is_updating:
             self.btn_start.configure(state="disabled", bg="#9e9e9e", cursor="wait")
@@ -655,11 +753,6 @@ class UpdaterApp:
         if self.is_updating:
             return
 
-        base_dir = self.root_dir_var.get().strip()
-        if not base_dir:
-            messagebox.showwarning("提示", "請先設定安裝根目錄！")
-            return
-
         selected_pkgs = [
             pkg for pkg in PACKAGE_CONFIGS
             if self.pkg_vars[pkg["id"]]["exists"] and self.pkg_vars[pkg["id"]]["checked"].get()
@@ -669,7 +762,14 @@ class UpdaterApp:
             messagebox.showwarning("提示", "未勾選任何要更新的壓縮包項目！")
             return
 
-        summary = "\n".join([f"• {p['name']} ➔ {os.path.join(base_dir, p['rel_target'])}" for p in selected_pkgs])
+        # 驗證每個選取的模組都有指定目標路徑
+        for p in selected_pkgs:
+            tgt = self.pkg_vars[p["id"]]["target_path_var"].get().strip()
+            if not tgt:
+                messagebox.showwarning("提示", f"模組 [{p['name']}] 未設定目標路徑，請先輸入或選擇目標路徑！")
+                return
+
+        summary = "\n".join([f"• {p['name']} ➔ {self.pkg_vars[p['id']]['target_path_var'].get().strip()}" for p in selected_pkgs])
         apache_note = f"\n• 更新前後將自動重啟 Apache 服務 ({self.apache_service_name or '自動搜尋'})" if self.restart_apache_var.get() else ""
 
         confirm = messagebox.askyesno(
@@ -680,10 +780,10 @@ class UpdaterApp:
             return
 
         self.set_ui_updating_state(True)
-        worker = threading.Thread(target=self._run_update_process, args=(base_dir, selected_pkgs), daemon=True)
+        worker = threading.Thread(target=self._run_update_process, args=(selected_pkgs,), daemon=True)
         worker.start()
 
-    def _run_update_process(self, base_dir, selected_pkgs):
+    def _run_update_process(self, selected_pkgs):
         """背景更新執行緒主要流程"""
         start_time = time.time()
         self.log("=" * 60, "info")
@@ -730,12 +830,13 @@ class UpdaterApp:
             if total_files_all == 0:
                 total_files_all = 1
 
-            # 步驟 3：逐一解壓縮各壓縮包
+            # 步驟 3：逐一解壓縮各壓縮包至個別指定的目標路徑
             processed_files = 0
 
             for idx, pkg in enumerate(selected_pkgs, start=1):
                 p_name = pkg["name"]
-                target_folder = os.path.normpath(os.path.join(base_dir, pkg["rel_target"]))
+                # 取得該模組個別設定的目標解壓縮路徑
+                target_folder = os.path.normpath(self.pkg_vars[pkg["id"]]["target_path_var"].get().strip())
                 zpath = self.pkg_vars[pkg["id"]]["filepath"]
                 valid_items, pkg_count = pkg_file_counts[pkg["id"]]
 
@@ -746,7 +847,8 @@ class UpdaterApp:
                 with zipfile.ZipFile(zpath, 'r') as zf:
                     # 執行【關鍵防呆機制】：檢測頂層結構
                     zip_stem = os.path.splitext(p_name)[0]
-                    strip_prefix = detect_strip_prefix(zf, pkg["expected_folder"], zip_stem)
+                    target_leaf = os.path.basename(target_folder)
+                    strip_prefix = detect_strip_prefix(zf, pkg["expected_folder"], zip_stem, target_leaf)
 
                     if strip_prefix:
                         self.log(f"🛡️ [防呆機制觸發] 偵測到頂層包含 '{strip_prefix}' 單一目錄，已自動對齊解壓至目標路徑！", "warning")
