@@ -99,11 +99,11 @@ PACKAGE_CONFIGS = [
 
 使用 PyInstaller 進行編譯：
 ```powershell
-pyinstaller --noconfirm --onefile --windowed --uac-admin --name "系統自動更新工具" updater.py
+pyinstaller --noconfirm --onefile --windowed --uac-admin --name "智慧控管與監控系統 - 自動更新工具" updater.py
 ```
 
 - `--uac-admin`：會在二進位清單中注入 `<requestedExecutionLevel level="requireAdministrator" ... />`，啟動時即觸發 Windows UAC。
-- 輸出位置：`dist/系統自動更新工具.exe`。
+- 輸出位置：`dist/智慧控管與監控系統 - 自動更新工具.exe`。
 - 通常發布時可將該檔額外複製一份命名為 `dist/Updater.exe`，以符合不同維運習慣。
 
 ---

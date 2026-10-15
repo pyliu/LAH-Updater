@@ -78,7 +78,7 @@ pip install pyinstaller
 
 ### 步驟 2：執行打包指令
 ```powershell
-pyinstaller --noconfirm --onefile --windowed --uac-admin --name "系統自動更新工具" updater.py
+pyinstaller --noconfirm --onefile --windowed --uac-admin --name "智慧控管與監控系統 - 自動更新工具" updater.py
 ```
 
 **參數解析：**
@@ -86,11 +86,11 @@ pyinstaller --noconfirm --onefile --windowed --uac-admin --name "系統自動更
 - `--onefile`：將所有依賴庫打包為單一獨立執行檔 (`.exe`)。
 - `--windowed` (或 `-w`)：隱藏後台終端機黑視窗，僅顯示 GUI 視窗。
 - `--uac-admin`：在 exe 內建 Manifest 加入系統管理員權限要求 (`requireAdministrator`)，確保啟動時自動彈出 UAC 提權視窗。
-- `--name "系統自動更新工具"`：指定產出檔名。
+- `--name "智慧控管與監控系統 - 自動更新工具"`：指定產出檔名。
 
 ### 步驟 3：產出確認
 打包完成後，執行檔將位於 `dist/` 目錄中：
-- `dist/系統自動更新工具.exe` (或可更名為 `dist/Updater.exe`)
+- `dist/智慧控管與監控系統 - 自動更新工具.exe` (或可更名為 `dist/Updater.exe`)
 
 ---
 
@@ -100,17 +100,17 @@ pyinstaller --noconfirm --onefile --windowed --uac-admin --name "系統自動更
 
 ```text
 📦 20261015-系統更新包/
- ├── 系統自動更新工具.exe     (或 Updater.exe)
- ├── ★更新說明★.txt          (版本說明文件，非必填)
- ├── www.zip                 (本次更新內容，若有則放)
- ├── LAH-NUXTJS.zip          (本次更新內容，若有則放)
- ├── node_modules.zip        (視需求提供)
- └── lah-messenger-server.zip (視需求提供)
+ ├── 智慧控管與監控系統 - 自動更新工具.exe  (或 Updater.exe)
+ ├── ★更新說明★.txt                       (版本說明文件，非必填)
+ ├── www.zip                              (本次更新內容，若有則放)
+ ├── LAH-NUXTJS.zip                       (本次更新內容，若有則放)
+ ├── node_modules.zip                     (視需求提供)
+ └── lah-messenger-server.zip             (視需求提供)
 ```
 
 ### 操作步驟：
-1. 雙擊執行 `系統自動更新工具.exe`（系統將跳出 UAC 管理員權限確認，請點選「是」）。
-2. 確認介面上偵測到的更新包狀態與目標路徑（若 Apache 安裝於非 C 槽，可按「瀏覽...」更改安裝根目錄）。
+1. 雙擊執行 `智慧控管與監控系統 - 自動更新工具.exe`（系統將跳出 UAC 管理員權限確認，請點選「是」）。
+2. 確認介面上偵測到的更新包狀態與目標路徑（若 Apache 安裝於非 C 槽，可按「瀏覽...」更改安裝根目錄，亦可為各模組個別自訂路徑）。
 3. 勾選需要更新的項目（預設已偵測到的檔案會自動勾選）。
 4. 點選 **「🚀 開始更新」**。
 5. 程式將自動停止 Apache、執行解壓對齊覆蓋、重新啟動 Apache，完成後彈出完成訊息並可選擇是否清除已更新的壓縮包。
@@ -121,14 +121,14 @@ pyinstaller --noconfirm --onefile --windowed --uac-admin --name "系統自動更
 
 ```text
 lah-updater/
- ├── updater.py            # 主程式原始碼 (GUI、解壓防呆、Apache 控制)
- ├── 系統自動更新工具.spec   # PyInstaller 編譯設定檔
- ├── AGENTS.md             # AI 代理人維護與架構指南
- ├── README.md             # 專案說明與操作指南
- ├── .gitignore            # Git 忽略檔案設定
- ├── build/                # 打包過程暫存目錄 (Git 忽略)
- └── dist/                 # 打包最終產出目錄
-      └── 系統自動更新工具.exe
+ ├── updater.py                           # 主程式原始碼 (GUI、解壓防呆、Apache 控制)
+ ├── 智慧控管與監控系統 - 自動更新工具.spec # PyInstaller 編譯設定檔
+ ├── AGENTS.md                            # AI 代理人維護與架構指南
+ ├── README.md                            # 專案說明與操作指南
+ ├── .gitignore                           # Git 忽略檔案設定
+ ├── build/                               # 打包過程暫存目錄 (Git 忽略)
+ └── dist/                                # 打包最終產出目錄
+      └── 智慧控管與監控系統 - 自動更新工具.exe
 ```
 
 ---
