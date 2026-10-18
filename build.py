@@ -1,0 +1,55 @@
+# -*- coding: utf-8 -*-
+"""
+智慧控管與監控系統 - 自動更新工具
+PyInstaller 單一執行檔打包輔助腳本
+"""
+import os
+import sys
+import shutil
+import subprocess
+
+# 安全容錯：避免 Windows CMD 在 CP950 編碼下因特殊符號噴 UnicodeEncodeError
+if sys.stdout and hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(errors="replace")
+if sys.stderr and hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(errors="replace")
+
+def main():
+    print("=" * 60)
+    print("正在編譯打包「智慧控管與監控系統 - 自動更新工具」...")
+    print("=" * 60)
+
+    # 確保工作目錄為腳本所在目錄
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    os.chdir(script_dir)
+
+    cmd = [
+        sys.executable, "-m", "PyInstaller",
+        "--noconfirm",
+        "--onefile",
+        "--windowed",
+        "--uac-admin",
+        "--name", "智慧控管與監控系統 - 自動更新工具",
+        "updater.py"
+    ]
+
+    ret = subprocess.run(cmd)
+
+    print("-" * 60)
+    if ret.returncode == 0:
+        exe_path = os.path.join(script_dir, "dist", "智慧控管與監控系統 - 自動更新工具.exe")
+        print(f"[OK] 編譯成功！產出路徑：\n{exe_path}")
+
+        # 依 AGENTS.md 規範額外複製一份 dist/Updater.exe
+        backup_exe = os.path.join(script_dir, "dist", "Updater.exe")
+        try:
+            shutil.copyfile(exe_path, backup_exe)
+            print(f"[OK] 已同步複製一份為：\n{backup_exe}")
+        except Exception:
+            pass
+    else:
+        print(f"[ERROR] 編譯失敗，回傳碼：{ret.returncode}")
+    print("=" * 60)
+
+if __name__ == "__main__":
+    main()

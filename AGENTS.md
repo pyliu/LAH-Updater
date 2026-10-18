@@ -121,13 +121,21 @@ python -m py_compile updater.py
 ```
 
 ### 3.2 使用 PyInstaller 進行編譯（需人工授權）
+建議直接使用專案內建之一鍵打包腳本（已整合純 ASCII 批次檔轉發與 Python 原生 UTF-8 繁體中文檔名防衝碼處理）：
 ```powershell
-pyinstaller --noconfirm --onefile --windowed --uac-admin --name "智慧控管與監控系統 - 自動更新工具" updater.py
+# 方式 A：一鍵執行批次檔
+.\build.bat
+
+# 方式 B：直接執行 Python 打包腳本
+python build.py
+
+# 方式 C：手動執行 PyInstaller 指令
+python -m PyInstaller --noconfirm --onefile --windowed --uac-admin --name "智慧控管與監控系統 - 自動更新工具" updater.py
 ```
 
 - `--uac-admin`：會在二進位清單中注入 `<requestedExecutionLevel level="requireAdministrator" ... />`，啟動時即觸發 Windows UAC。
 - 輸出位置：`dist/智慧控管與監控系統 - 自動更新工具.exe`。
-- 通常發布時可將該檔額外複製一份命名為 `dist/Updater.exe`，以符合不同維運習慣。
+- `build.py` 在編譯完成後會自動同步於 `dist/` 額外複製一份命名為 `dist/Updater.exe`，以符合不同維運習慣。
 
 ---
 

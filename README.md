@@ -79,8 +79,17 @@ pip install pyinstaller
 ```
 
 ### 步驟 2：執行打包指令
+您可直接在專案目錄執行一鍵打包批次檔（已內建 UTF-8 與 Python 原生防衝碼處理）：
 ```powershell
-pyinstaller --noconfirm --onefile --windowed --uac-admin --name "智慧控管與監控系統 - 自動更新工具" updater.py
+.\build.bat
+```
+或手動執行 Python 打包腳本：
+```powershell
+python build.py
+```
+或直接輸入完整 PyInstaller 指令：
+```powershell
+python -m PyInstaller --noconfirm --onefile --windowed --uac-admin --name "智慧控管與監控系統 - 自動更新工具" updater.py
 ```
 
 **參數解析：**
@@ -92,7 +101,7 @@ pyinstaller --noconfirm --onefile --windowed --uac-admin --name "智慧控管與
 
 ### 步驟 3：產出確認
 打包完成後，執行檔將位於 `dist/` 目錄中：
-- `dist/智慧控管與監控系統 - 自動更新工具.exe` (或可更名為 `dist/Updater.exe`)
+- `dist/智慧控管與監控系統 - 自動更新工具.exe` (並自動同步備份一份為 `dist/Updater.exe`)
 
 ---
 
@@ -124,12 +133,15 @@ pyinstaller --noconfirm --onefile --windowed --uac-admin --name "智慧控管與
 ```text
 LAH-Updater/
  ├── updater.py                           # 主程式原始碼 (GUI、解壓防呆、Apache 與 PM2 控制)
+ ├── build.bat                            # 一鍵打包批次檔 (純 ASCII 轉發，避開 CMD 編碼與 BOM 衝碼)
+ ├── build.py                             # Python 原生打包輔助腳本 (處理 PyInstaller 參數與雙檔案產出)
  ├── AGENTS.md                            # AI 代理人維護與架構指南
  ├── README.md                            # 專案說明與操作指南
  ├── .gitignore                           # Git 忽略檔案設定
  ├── build/                               # 打包過程暫存目錄 (Git 忽略)
  └── dist/                                # 打包最終產出目錄 (Git 忽略)
-      └── 智慧控管與監控系統 - 自動更新工具.exe
+      ├── 智慧控管與監控系統 - 自動更新工具.exe
+      └── Updater.exe
 ```
 
 ---
