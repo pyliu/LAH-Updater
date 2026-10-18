@@ -379,13 +379,15 @@ class UpdaterApp:
     def __init__(self, root):
         self.root = root
         self.root.title("智慧控管與監控系統 - 自動更新工具")
-        self.root.geometry("880x720")
-        self.root.minsize(800, 580)
+        self.root.geometry("880x580")
+        self.root.minsize(800, 480)
 
         # 基礎路徑
         self.app_dir = get_app_dir()
         self.is_updating = False
         self.apache_service_name = None
+        self.release_note_name = None
+        self.release_note_content = None
 
         # 樣式設定
         self.style = ttk.Style()
@@ -565,23 +567,7 @@ class UpdaterApp:
         self.btn_rescan = ttk.Button(ctrl_row, text="🔄 重新掃描", command=self.rescan, width=12)
         self.btn_rescan.pack(side=tk.RIGHT)
 
-        # 4. 版本更新說明 (可折疊/顯示區塊)
-        self.notes_frame = ttk.LabelFrame(main_frame, text=" 📋 版本更新說明 ", padding="6")
-        self.notes_frame.pack(fill=tk.BOTH, expand=False, pady=(0, 6))
-
-        self.notes_text = scrolledtext.ScrolledText(
-            self.notes_frame,
-            wrap=tk.WORD,
-            height=3,
-            font=("Microsoft JhengHei UI", 9),
-            bg="#fbfbfb",
-            fg="#222222"
-        )
-        self.notes_text.pack(fill=tk.BOTH, expand=True)
-        self.notes_text.insert(tk.END, "（目前未載入更新說明文字檔）")
-        self.notes_text.configure(state="disabled")
-
-        # 5. 底部按鈕列（優先向底部 pack，確保在任何解析度或縮放下永遠不被遮擋）
+        # 4. 底部按鈕列（優先向底部 pack，確保在任何解析度或縮放下永遠固定於底端）
         bottom_frame = ttk.Frame(main_frame)
         bottom_frame.pack(side=tk.BOTTOM, fill=tk.X, pady=(6, 0))
 
@@ -602,9 +588,18 @@ class UpdaterApp:
             pady=4,
             cursor="hand2"
         )
-        self.btn_start.pack(side=tk.RIGHT)
+        self.btn_start.pack(side=tk.RIGHT, padx=(8, 0))
 
-        # 6. 進度條與即時 Log 顯示區塊（填補剩餘中間垂直空間，隨視窗放大自動伸展）
+        self.btn_view_notes = ttk.Button(
+            bottom_frame,
+            text="📋 查看更新說明",
+            command=self._show_release_notes_dialog,
+            state="disabled",
+            width=16
+        )
+        self.btn_view_notes.pack(side=tk.RIGHT)
+
+        # 5. 進度條與即時 Log 顯示區塊（填補剩餘中間垂直空間，隨視窗放大自動伸展）
         log_frame = ttk.LabelFrame(main_frame, text=" 📊 更新進度與執行日誌 ", padding="6")
         log_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 6))
 
@@ -650,6 +645,66 @@ class UpdaterApp:
         self.log_box.tag_config("time", foreground="#6a9955")
 
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
+
+    def _show_release_notes_dialog(self):
+        """彈出獨立視窗顯示版本更新說明內容"""
+        if not self.release_note_content:
+            messagebox.showinfo("版本更新說明", "目前同目錄下未偵測到任何版本更新說明文字檔。")
+            return
+
+        dlg = tk.Toplevel(self.root)
+        dlg.title(f"📋 版本更新說明 - {self.release_note_name}")
+        dlg.geometry("640x500")
+        dlg.minsize(520, 380)
+        dlg.transient(self.root)
+
+        # 嘗試置中於主視窗上方
+        try:
+            self.root.update_idletasks()
+            rx = self.root.winfo_rootx()
+            ry = self.root.winfo_rooty()
+            rw = self.root.winfo_width()
+            rh = self.root.winfo_height()
+            dx = max(30, rx + (rw - 640) // 2)
+            dy = max(30, ry + (rh - 500) // 2)
+            dlg.geometry(f"640x500+{dx}+{dy}")
+        except Exception:
+            pass
+
+        content_frame = ttk.Frame(dlg, padding="12")
+        content_frame.pack(fill=tk.BOTH, expand=True)
+
+        # 頂部檔案提示列
+        top_frame = ttk.Frame(content_frame)
+        top_frame.pack(fill=tk.X, pady=(0, 8))
+        ttk.Label(
+            top_frame,
+            text=f"📄 更新說明檔案：{self.release_note_name}",
+            font=("Microsoft JhengHei UI", 10, "bold")
+        ).pack(side=tk.LEFT)
+
+        # 說明文字滾動顯示區
+        txt = scrolledtext.ScrolledText(
+            content_frame,
+            wrap=tk.WORD,
+            font=("Microsoft JhengHei UI", 10),
+            bg="#fbfbfb",
+            fg="#222222",
+            relief=tk.SOLID,
+            borderwidth=1
+        )
+        txt.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
+        txt.insert(tk.END, self.release_note_content.strip())
+        txt.configure(state="disabled")
+
+        # 底部按鈕列
+        btn_frame = ttk.Frame(content_frame)
+        btn_frame.pack(fill=tk.X)
+        btn_close = ttk.Button(btn_frame, text="關閉 (Esc)", command=dlg.destroy, width=12)
+        btn_close.pack(side=tk.RIGHT)
+
+        dlg.bind("<Escape>", lambda e: dlg.destroy())
+        dlg.focus_set()
 
     def _check_default_root_dir(self):
         r"""
@@ -778,18 +833,13 @@ class UpdaterApp:
         else:
             self.log("掃描完成：同目錄下未偵測到任何指定更新壓縮包 (.zip)。", "warning")
 
-        # 讀取版本說明
-        note_name, note_content = find_release_notes(self.app_dir)
-        self.notes_text.configure(state="normal")
-        self.notes_text.delete("1.0", tk.END)
-        if note_name and note_content:
-            self.notes_frame.configure(text=f" 📋 版本更新說明 ({note_name}) ")
-            self.notes_text.insert(tk.END, note_content.strip())
-            self.log(f"已成功載入更新說明檔：{note_name}", "info")
+        # 讀取版本說明並切換彈窗按鈕狀態
+        self.release_note_name, self.release_note_content = find_release_notes(self.app_dir)
+        if self.release_note_name and self.release_note_content:
+            self.btn_view_notes.configure(state="normal", text="📋 查看更新說明")
+            self.log(f"已成功載入更新說明檔：{self.release_note_name}", "info")
         else:
-            self.notes_frame.configure(text=" 📋 版本更新說明 ")
-            self.notes_text.insert(tk.END, "（同目錄下未偵測到包含「更新說明」字樣的 .txt 說明檔）")
-        self.notes_text.configure(state="disabled")
+            self.btn_view_notes.configure(state="disabled", text="📋 無更新說明")
 
     def log(self, message, level="info"):
         """執行緒安全的日誌輸出"""
