@@ -5,6 +5,7 @@ Automated Update Utility for System Services
 """
 
 import os
+import re
 import sys
 import time
 import shutil
@@ -25,28 +26,32 @@ PACKAGE_CONFIGS = [
         "name": "www.zip",
         "rel_target": "www",
         "title": "前端 / 網站核心 (www.zip)",
-        "expected_folder": "www"
+        "expected_folder": "www",
+        "is_nodejs": False
     },
     {
         "id": "lah_nuxtjs",
         "name": "LAH-NUXTJS.zip",
         "rel_target": "LAH-NUXTJS",
         "title": "Nuxt.js 應用系統 (LAH-NUXTJS.zip)",
-        "expected_folder": "LAH-NUXTJS"
+        "expected_folder": "LAH-NUXTJS",
+        "is_nodejs": True
     },
     {
         "id": "node_modules",
         "name": "node_modules.zip",
         "rel_target": os.path.join("LAH-NUXTJS", "node_modules"),
         "title": "Node.js 模組套件 (node_modules.zip)",
-        "expected_folder": "node_modules"
+        "expected_folder": "node_modules",
+        "is_nodejs": True
     },
     {
         "id": "messenger",
         "name": "lah-messenger-server.zip",
         "rel_target": "lah-messenger-server",
         "title": "即時通訊伺服器 (lah-messenger-server.zip)",
-        "expected_folder": "lah-messenger-server"
+        "expected_folder": "lah-messenger-server",
+        "is_nodejs": True
     }
 ]
 
@@ -184,6 +189,93 @@ def start_apache_service(svc_name, log_func):
 
     log_func(f"⚠️ 警告：啟動 Apache 服務 [{svc_name}] 等待逾時，請手動確認服務狀態。", "warning")
     return False
+
+
+def _decode_console_bytes(raw_bytes):
+    """將子程序輸出的位元組安全解碼為字串（相容 UTF-8 與 Windows 繁中 CP950）"""
+    if not raw_bytes:
+        return ""
+    for enc in ["utf-8", "cp950", "big5"]:
+        try:
+            text = raw_bytes.decode(enc)
+            break
+        except UnicodeDecodeError:
+            continue
+    else:
+        text = raw_bytes.decode("utf-8", errors="replace")
+    # 移除 ANSI 色彩控制碼，保持 GUI 日誌整潔
+    return re.sub(r"\x1b\[[0-9;]*[a-zA-Z]", "", text)
+
+
+def resolve_pm2_command():
+    """
+    解析 Windows 環境下的 pm2 執行檔路徑。
+    優先使用 shutil.which 尋找 pm2.cmd / pm2，若因 UAC 提權導致環境變數遺失，
+    則依序檢查常見的全域 npm 與 NVM 安裝路徑。
+    """
+    found = shutil.which("pm2.cmd") or shutil.which("pm2")
+    if found:
+        return found
+
+    candidates = []
+    appdata = os.environ.get("APPDATA", "")
+    if appdata:
+        candidates.append(os.path.join(appdata, "npm", "pm2.cmd"))
+    userprofile = os.environ.get("USERPROFILE", "")
+    if userprofile:
+        candidates.append(os.path.join(userprofile, "AppData", "Roaming", "npm", "pm2.cmd"))
+    prog_files = os.environ.get("ProgramFiles", r"C:\Program Files")
+    candidates.append(os.path.join(prog_files, "nodejs", "pm2.cmd"))
+    candidates.append(r"C:\nvm4w\nodejs\pm2.cmd")
+
+    for path in candidates:
+        if path and os.path.isfile(path):
+            return path
+
+    return None
+
+
+def restart_pm2_services(log_func):
+    """執行 pm2 restart all 重啟所有由 PM2 託管的 Node.js 服務"""
+    log_func("-" * 50, "info")
+    log_func("⏳ 正在執行 [pm2 restart all] 重啟 Node.js 相關服務...", "info")
+
+    pm2_bin = resolve_pm2_command()
+    if pm2_bin:
+        cmd = ["cmd.exe", "/d", "/s", "/c", f'"{pm2_bin}" restart all --no-color']
+    else:
+        cmd = ["cmd.exe", "/d", "/s", "/c", "pm2 restart all --no-color"]
+
+    try:
+        res = subprocess.run(
+            cmd,
+            capture_output=True,
+            timeout=60,
+            creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
+        )
+        out_text = _decode_console_bytes(res.stdout).strip()
+        err_text = _decode_console_bytes(res.stderr).strip()
+
+        if out_text:
+            for line in out_text.splitlines():
+                if line.strip():
+                    log_func(f"  {line.rstrip()}", "info")
+
+        if res.returncode == 0:
+            log_func("✅ 已成功執行 [pm2 restart all] 重啟所有 Node.js 專案服務！", "success")
+            return True, ""
+        else:
+            err_msg = err_text or out_text or f"返回碼 {res.returncode}"
+            log_func(f"⚠️ [pm2 restart all] 執行回傳非零狀態 ({res.returncode}): {err_msg}", "warning")
+            return False, err_msg
+    except subprocess.TimeoutExpired:
+        msg = "執行 pm2 restart all 超過 60 秒逾時，請於終端機手動確認 pm2 status。"
+        log_func(f"⚠️ {msg}", "warning")
+        return False, msg
+    except Exception as e:
+        msg = f"呼叫 pm2 restart all 時發生異常: {e}"
+        log_func(f"❌ {msg}", "error")
+        return False, msg
 
 
 def get_zip_member_path(info):
@@ -560,7 +652,7 @@ class UpdaterApp:
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
 
     def _check_default_root_dir(self):
-        """
+        r"""
         程式啟動時偵測預設根目錄 (如 C:\AppServ) 是否存在。
         若找不到，在視窗顯示後彈出提示對話框，引導使用者立即選取系統安裝根目錄。
         """
@@ -911,6 +1003,50 @@ class UpdaterApp:
             self.log("=" * 60, "success")
             self.log(f"🎉 全部選取的更新包已順利更新完成！(總耗時: {elapsed:.1f} 秒)", "success")
 
+            # 步驟 5：若本次更新包含 Node.js 相關專案模組，詢問使用者是否執行 pm2 restart all
+            nodejs_pkgs = [pkg["name"] for pkg in selected_pkgs if pkg.get("is_nodejs", False)]
+            if nodejs_pkgs:
+                pm2_decision = {"run": False}
+                pm2_event = threading.Event()
+
+                def _ask_pm2_restart():
+                    try:
+                        pkg_list_str = "、".join(nodejs_pkgs)
+                        pm2_decision["run"] = messagebox.askyesno(
+                            "重啟 Node.js 服務確認 (PM2)",
+                            f"偵測到本次更新包含 Node.js 相關模組：\n【{pkg_list_str}】\n\n"
+                            "是否要立即為您執行「pm2 restart all」以重啟所有 Node.js 專案服務\n"
+                            "（如 LAH-FE、LAH-SCHEDULER、lah-messenger-server）？"
+                        )
+                    finally:
+                        pm2_event.set()
+
+                self.root.after(0, _ask_pm2_restart)
+                pm2_event.wait()
+
+                if pm2_decision["run"]:
+                    self.set_progress(98, "正在執行 pm2 restart all 重啟 Node.js 服務...")
+                    pm2_ok, pm2_err = restart_pm2_services(self.log)
+                    elapsed = time.time() - start_time
+                    self.set_progress(100, f"✅ 全部更新與 PM2 重啟作業完成！(耗時 {elapsed:.1f} 秒)")
+                    if not pm2_ok:
+                        warn_event = threading.Event()
+
+                        def _warn_pm2():
+                            try:
+                                messagebox.showwarning(
+                                    "PM2 重啟提醒",
+                                    f"執行「pm2 restart all」時回傳非預期結果：\n{pm2_err}\n\n"
+                                    "請稍後於終端機手動執行 pm2 restart all 或檢查 PM2 服務狀態。"
+                                )
+                            finally:
+                                warn_event.set()
+
+                        self.root.after(0, _warn_pm2)
+                        warn_event.wait()
+                else:
+                    self.log("ℹ️ 使用者選擇略過執行 [pm2 restart all]。", "info")
+
             # 彈出完成與空間清理對話框
             def _post_update_dialog():
                 ask_cleanup = messagebox.askyesno(
@@ -938,8 +1074,16 @@ class UpdaterApp:
 
         except PermissionError as pe:
             self.log(f"❌ 更新失敗 (存取權限被拒絕): {pe}", "error")
-            self.log("💡 建議：請確認是否有其他程式或文字編輯器正在開啟該檔案，或確認管理員權限。", "warning")
-            self.root.after(0, lambda: messagebox.showerror("更新失敗", f"存取權限被拒絕！\n{pe}\n\n請以系統管理員權限執行或關閉正在使用該檔案的軟體。"))
+            self.log("💡 建議：請確認是否有其他程式或 PM2 服務正在鎖定該檔案（若更新 node_modules，建議先執行 pm2 stop all），或確認管理員權限。", "warning")
+            self.root.after(
+                0,
+                lambda: messagebox.showerror(
+                    "更新失敗",
+                    f"存取權限被拒絕！\n{pe}\n\n"
+                    "請以系統管理員權限執行，或關閉正在使用該檔案的軟體。\n"
+                    "（若解壓縮 node_modules 等模組失敗，請先於終端機執行 pm2 stop all 釋放檔案鎖定後再試）"
+                )
+            )
         except Exception as ex:
             self.log(f"❌ 更新過程發生未預期錯誤: {ex}", "error")
             self.root.after(0, lambda: messagebox.showerror("更新錯誤", f"更新過程發生錯誤：\n{ex}"))

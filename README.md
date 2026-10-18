@@ -40,12 +40,14 @@
    - 支援彈性模糊比對：檔名只要包含「`更新說明`」的 `.txt` 檔案（例如 `★更新說明★.txt` 或 `1.9.5-★更新說明★.txt`）皆可自動讀取。
    - 若同目錄下有多個符合的檔案（歷史殘留），**自動依檔案最後修改時間 (mtime) 優先載入最新發布的版本**。
    - 支援 UTF-8 / UTF-8-BOM / CP950 自動編碼容錯。
-6. **更新完成空間清理確認**：
+6. **Node.js 服務智慧重啟 (PM2 Restart)**：
+   - 當本次更新包含 Node.js 相關模組（`LAH-NUXTJS.zip`、`node_modules.zip` 或 `lah-messenger-server.zip`）時，更新結束後會主動詢問是否執行 `pm2 restart all` 重啟所有 Node.js 服務，並將執行結果即時輸出至日誌視窗。
+7. **更新完成空間清理確認**：
    - 更新全部順利完成後，會主動跳出詢問是否刪除本次已更新完成的 `.zip` 壓縮包以釋放磁碟空間（更新說明文字檔會完整保留）。
-7. **多執行緒 (Threading) 與終端風格日誌**：
+8. **多執行緒 (Threading) 與終端風格日誌**：
    - 解壓縮與服務操作均在獨立背景執行緒進行，介面流暢不卡頓。
    - 包含平滑進度條（Progressbar）、當前解壓檔名即時狀態與彩色即時日誌（INFO、SUCCESS、WARNING、ERROR）。
-8. **UAC 系統管理員權限**：
+9. **UAC 系統管理員權限**：
    - 編譯時已內嵌 `--uac-admin` 清單，在 Windows 啟動時會主動要求系統管理員權限以確保有權控制 Windows 服務及修改受保護目錄。
 
 ---
@@ -59,7 +61,7 @@
 ### 2. 原始碼直接執行
 ```powershell
 # 切換至專案目錄
-cd d:\DEV\lah-updater
+cd .\LAH-Updater
 
 # 直接啟動 GUI 程式
 python updater.py
@@ -113,21 +115,20 @@ pyinstaller --noconfirm --onefile --windowed --uac-admin --name "智慧控管與
 2. 確認介面上偵測到的更新包狀態與目標路徑（若 Apache 安裝於非 C 槽，可按「瀏覽...」更改安裝根目錄，亦可為各模組個別自訂路徑）。
 3. 勾選需要更新的項目（預設已偵測到的檔案會自動勾選）。
 4. 點選 **「🚀 開始更新」**。
-5. 程式將自動停止 Apache、執行解壓對齊覆蓋、重新啟動 Apache，完成後彈出完成訊息並可選擇是否清除已更新的壓縮包。
+5. 程式將自動停止 Apache、執行解壓對齊覆蓋、重新啟動 Apache；若包含 Node.js 相關模組，會詢問是否執行 `pm2 restart all`，最後可選擇是否清除已更新的壓縮包。
 
 ---
 
 ## 📂 專案檔案結構
 
 ```text
-lah-updater/
- ├── updater.py                           # 主程式原始碼 (GUI、解壓防呆、Apache 控制)
- ├── 智慧控管與監控系統 - 自動更新工具.spec # PyInstaller 編譯設定檔
+LAH-Updater/
+ ├── updater.py                           # 主程式原始碼 (GUI、解壓防呆、Apache 與 PM2 控制)
  ├── AGENTS.md                            # AI 代理人維護與架構指南
  ├── README.md                            # 專案說明與操作指南
  ├── .gitignore                           # Git 忽略檔案設定
  ├── build/                               # 打包過程暫存目錄 (Git 忽略)
- └── dist/                                # 打包最終產出目錄
+ └── dist/                                # 打包最終產出目錄 (Git 忽略)
       └── 智慧控管與監控系統 - 自動更新工具.exe
 ```
 

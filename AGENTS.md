@@ -27,8 +27,8 @@ def get_app_dir():
 
 ---
 
-### 2.2 更新包設定規範 (`PACKAGE_CONFIGS`)
-目前系統維護 4 種更新包。若未來有新增或調整模組需求，僅需擴充 `PACKAGE_CONFIGS` 清單：
+### 2.2 更新包設定規範 (`PACKAGE_CONFIGS`) 與跨專案對應
+目前系統維護 4 種更新包，分別對應 `LAH-Workspace` 工作區內之子專案產出。若未來有新增或調整模組需求，僅需擴充 `PACKAGE_CONFIGS` 清單：
 ```python
 PACKAGE_CONFIGS = [
     {
@@ -36,7 +36,8 @@ PACKAGE_CONFIGS = [
         "name": "www.zip",
         "rel_target": "www",
         "title": "前端 / 網站核心 (www.zip)",
-        "expected_folder": "www"
+        "expected_folder": "www",
+        "is_nodejs": False
     },
     ...
 ]
@@ -44,6 +45,14 @@ PACKAGE_CONFIGS = [
 - `name`：同目錄下比對的 zip 檔名。
 - `rel_target`：相對於根目錄（如 `C:\AppServ`）的解壓縮路徑。
 - `expected_folder`：預期的頂層資料夾名稱（用於雙層目錄防呆對齊）。
+- `is_nodejs`：標記該更新包是否屬於由 PM2 託管的 Node.js 服務模組（`LAH-NUXTJS.zip`、`node_modules.zip`、`lah-messenger-server.zip` 均為 `True`；`www.zip` 為 `False`）。
+
+| 壓縮包檔名 | 對應工作區子專案 | `is_nodejs` | 目標部署說明 |
+| :--- | :--- | :---: | :--- |
+| `www.zip` | `./LAH-API/www` | `False` | Apache PHP 後端核心與舊版網頁 |
+| `LAH-NUXTJS.zip` | `./LAH-FE` | `True` | Nuxt 2 智慧管控前端與排程 (`LAH-FE`, `LAH-SCHEDULER`) |
+| `node_modules.zip` | `./LAH-FE/node_modules` | `True` | 前端執行期 Node.js 依賴套件 |
+| `lah-messenger-server.zip` | `./lah-messenger-server` | `True` | 即時通訊 WebSocket 伺服器 (`LAH-WSS`) |
 
 ---
 
@@ -55,7 +64,7 @@ PACKAGE_CONFIGS = [
 **判定邏輯**：
 1. 檢視 zip 內所有非隱藏檔案之頂層路徑。
 2. 若頂層「**不存在任何直接散落的檔案**」且「**僅有單一頂層資料夾**」。
-3. 且該資料夾名稱符合 `expected_folder` 或與 zip 檔名相同（不分大小寫）。
+3. 且該資料夾名稱符合 `expected_folder`、壓縮檔主檔名或目標路徑結尾目錄名稱（不分大小寫）。
 4. 判定為外層包裝目錄，回傳前綴（如 `www/`），解壓縮時自動剔除此外層前綴；否則回傳空字串 `""` 直接解壓。
 
 ---
@@ -82,22 +91,36 @@ PACKAGE_CONFIGS = [
 
 ---
 
-### 2.6 版本更新說明比對規範 (`find_release_notes`)
+### 2.6 PM2 Node.js 服務重啟機制 (`resolve_pm2_command` / `restart_pm2_services`)
+- **智慧觸發條件**：僅當本次勾選更新的項目包含 `is_nodejs=True` 之模組（`LAH-NUXTJS.zip`、`node_modules.zip`、`lah-messenger-server.zip`）時，於全部壓縮包解壓與 Apache 恢復完成後、彈出刪除壓縮包確認前，主動詢問使用者是否執行 `pm2 restart all`。
+- **Windows `pm2.cmd` 尋址與執行規範**：
+  - 在 Windows 下，`pm2` 為批次檔（`pm2.cmd`），不可直接以 `subprocess.run(["pm2", ...])` 呼叫（會拋出 `FileNotFoundError`）。
+  - 透過 `resolve_pm2_command()` 優先以 `shutil.which("pm2.cmd")` / `shutil.which("pm2")` 解析；若因 UAC 管理員提權導致 `PATH` 遺失，自動回退檢查 `%APPDATA%\npm\pm2.cmd`、`%USERPROFILE%\AppData\Roaming\npm\pm2.cmd`、`C:\Program Files\nodejs\pm2.cmd` 與 `C:\nvm4w\nodejs\pm2.cmd`。
+  - 執行時透過 `cmd.exe /d /s /c "... restart all --no-color"` 呼叫，設定 60 秒逾時與 `CREATE_NO_WINDOW`，並透過 `_decode_console_bytes` 進行 `utf-8` / `cp950` 解碼與 ANSI 控制碼剝除，將輸出即時寫入 GUI 日誌視窗。
+
+---
+
+### 2.7 版本更新說明比對規範 (`find_release_notes`)
 - 採模糊比對：只要檔名以 `.txt` 結尾且含有「`更新說明`」字串（如 `★更新說明★.txt` 或 `1.9.5-★更新說明★.txt`）。
 - 排序規則：取得所有符合檔案的 `os.path.getmtime`，由新至舊排序，**永遠載入最新修改日期的那一份**。
-- 編碼容錯：依序嘗試 `utf-8-sig` ➔ `utf-8` ➔ `cp950` ➔ `big5` ➔ `latin-1`。
+- 編碼容錯：依序嘗試 `utf-8-sig` ➔ `utf-8` ➔ `cp950` ➔ `big5` ➔ `gbk` ➔ `latin-1`。
 
 ---
 
-### 2.7 執行緒模型與 UI 互動
-- 所有解壓縮與外部指令（`net`, `sc`）必須放在 `threading.Thread(..., daemon=True)` 執行。
-- 主執行緒（Main GUI Thread）不得被阻斷。所有日誌附加與進度條更新必須透過 `self.root.after(0, ...)` 派發回主執行緒更新。
+### 2.8 執行緒模型與 UI 互動
+- 所有解壓縮與外部指令（`net`, `sc`, `pm2`）必須放在 `threading.Thread(..., daemon=True)` 背景執行緒中執行。
+- 主執行緒（Main GUI Thread）不得被阻斷。所有日誌附加、進度條更新與 `messagebox` 彈窗必須透過 `self.root.after(0, ...)` 派發回主執行緒更新（若需於背景執行緒等待使用者對話框選擇，應搭配 `threading.Event` 同步）。
 
 ---
 
-## 3. 打包與發布標準流程
+## 3. 驗證與打包發布標準流程
 
-使用 PyInstaller 進行編譯：
+### 3.1 語法檢查（修改後必跑）
+```powershell
+python -m py_compile updater.py
+```
+
+### 3.2 使用 PyInstaller 進行編譯（需人工授權）
 ```powershell
 pyinstaller --noconfirm --onefile --windowed --uac-admin --name "智慧控管與監控系統 - 自動更新工具" updater.py
 ```
@@ -112,8 +135,9 @@ pyinstaller --noconfirm --onefile --windowed --uac-admin --name "智慧控管與
 
 當您修改或擴充本專案時，請逐項檢查：
 - [ ] 是否保持標準庫設計，未引入額外第三方執行期套件？
+- [ ] 是否執行過 `python -m py_compile updater.py` 確認語法無誤？
 - [ ] 是否保持 `sys.frozen` 相容性？
 - [ ] 若更動解壓縮邏輯，是否維持 `detect_strip_prefix` 的雙層目錄防呆與 Zip Slip 安全防護？
-- [ ] 若更動服務管理，是否維持 `finally` 區塊的 Apache 自動緊急重啟？
+- [ ] 若更動服務管理，是否維持 `finally` 區塊的 Apache 自動緊急重啟與 PM2 背景非阻斷重啟？
 - [ ] 介面修改後，在變更根目錄時是否仍然正確動態更新目標路徑標籤？
-- [ ] 是否在 Windows 終端執行過 `pyinstaller` 確認打包無錯誤產出？
+- [ ] `.gitignore` 是否持續排除測試用 `*.zip`、`*更新說明*.txt` 與 `build/`、`dist/` 產物？

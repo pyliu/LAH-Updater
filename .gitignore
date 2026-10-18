@@ -23,3 +23,7 @@ ehthumbs.db
 Desktop.ini
 $RECYCLE.BIN/
 .DS_Store
+
+# Local test update packages & release notes (prevent accidental commits)
+*.zip
+*更新說明*.txt
