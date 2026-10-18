@@ -379,8 +379,8 @@ class UpdaterApp:
     def __init__(self, root):
         self.root = root
         self.root.title("智慧控管與監控系統 - 自動更新工具")
-        self.root.geometry("880x800")
-        self.root.minsize(820, 700)
+        self.root.geometry("880x720")
+        self.root.minsize(800, 580)
 
         # 基礎路徑
         self.app_dir = get_app_dir()
@@ -433,12 +433,12 @@ class UpdaterApp:
 
         # 1. 頂部標題區塊
         header_frame = ttk.Frame(main_frame)
-        header_frame.pack(fill=tk.X, pady=(0, 10))
+        header_frame.pack(fill=tk.X, pady=(0, 6))
 
         title_label = ttk.Label(
             header_frame,
             text="🚀 智慧控管與監控系統 - 自動更新工具",
-            font=("Microsoft JhengHei UI", 16, "bold")
+            font=("Microsoft JhengHei UI", 15, "bold")
         )
         title_label.pack(side=tk.LEFT)
 
@@ -453,8 +453,8 @@ class UpdaterApp:
         admin_label.pack(side=tk.RIGHT, padx=5)
 
         # 2. 安裝根目錄選擇區塊
-        dir_frame = ttk.LabelFrame(main_frame, text=" 📂 安裝根目錄設定 (預設連動基底) ", padding="10")
-        dir_frame.pack(fill=tk.X, pady=(0, 10))
+        dir_frame = ttk.LabelFrame(main_frame, text=" 📂 安裝根目錄設定 (預設連動基底) ", padding="6")
+        dir_frame.pack(fill=tk.X, pady=(0, 6))
 
         dir_inner = ttk.Frame(dir_frame)
         dir_inner.pack(fill=tk.X)
@@ -467,8 +467,8 @@ class UpdaterApp:
         self.btn_browse.pack(side=tk.RIGHT)
 
         # 3. 更新包偵測清單區塊
-        pkg_frame = ttk.LabelFrame(main_frame, text=" 📦 更新包偵測與各模組安裝路徑 ", padding="10")
-        pkg_frame.pack(fill=tk.X, pady=(0, 10))
+        pkg_frame = ttk.LabelFrame(main_frame, text=" 📦 更新包偵測與各模組安裝路徑 ", padding="6")
+        pkg_frame.pack(fill=tk.X, pady=(0, 6))
 
         # 表頭提示
         header_hint = ttk.Label(
@@ -477,7 +477,7 @@ class UpdaterApp:
             foreground="#555555",
             font=("Microsoft JhengHei UI", 8)
         )
-        header_hint.pack(anchor=tk.W, pady=(0, 6))
+        header_hint.pack(anchor=tk.W, pady=(0, 4))
 
         # 建立 4 個更新包項目元件（兩列卡片式佈局，支援個別自訂目標路徑）
         self.chk_widgets = {}
@@ -489,8 +489,8 @@ class UpdaterApp:
             p_id = pkg["id"]
             v = self.pkg_vars[p_id]
 
-            item_card = ttk.Frame(pkg_frame, padding="2")
-            item_card.pack(fill=tk.X, pady=3)
+            item_card = ttk.Frame(pkg_frame, padding="1")
+            item_card.pack(fill=tk.X, pady=1)
 
             # 第 1 列：核取方塊 + 狀態標籤
             top_line = ttk.Frame(item_card)
@@ -552,8 +552,8 @@ class UpdaterApp:
             self.reset_buttons[p_id] = btn_reset_pkg
 
         # 服務控制與功能按鈕列
-        ctrl_row = ttk.Frame(pkg_frame, padding="4")
-        ctrl_row.pack(fill=tk.X, pady=(8, 0))
+        ctrl_row = ttk.Frame(pkg_frame, padding="2")
+        ctrl_row.pack(fill=tk.X, pady=(4, 0))
 
         self.chk_apache = ttk.Checkbutton(
             ctrl_row,
@@ -566,13 +566,13 @@ class UpdaterApp:
         self.btn_rescan.pack(side=tk.RIGHT)
 
         # 4. 版本更新說明 (可折疊/顯示區塊)
-        self.notes_frame = ttk.LabelFrame(main_frame, text=" 📋 版本更新說明 ", padding="8")
-        self.notes_frame.pack(fill=tk.BOTH, expand=False, pady=(0, 10))
+        self.notes_frame = ttk.LabelFrame(main_frame, text=" 📋 版本更新說明 ", padding="6")
+        self.notes_frame.pack(fill=tk.BOTH, expand=False, pady=(0, 6))
 
         self.notes_text = scrolledtext.ScrolledText(
             self.notes_frame,
             wrap=tk.WORD,
-            height=4,
+            height=3,
             font=("Microsoft JhengHei UI", 9),
             bg="#fbfbfb",
             fg="#222222"
@@ -581,54 +581,9 @@ class UpdaterApp:
         self.notes_text.insert(tk.END, "（目前未載入更新說明文字檔）")
         self.notes_text.configure(state="disabled")
 
-        # 5. 進度條與即時 Log 顯示區塊
-        log_frame = ttk.LabelFrame(main_frame, text=" 📊 更新進度與執行日誌 ", padding="10")
-        log_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
-
-        # 進度列與百分比
-        progress_info_frame = ttk.Frame(log_frame)
-        progress_info_frame.pack(fill=tk.X, pady=(0, 4))
-
-        status_lbl = ttk.Label(
-            progress_info_frame,
-            textvariable=self.progress_status_var,
-            font=("Microsoft JhengHei UI", 9)
-        )
-        status_lbl.pack(side=tk.LEFT, fill=tk.X, expand=True)
-
-        percent_lbl = ttk.Label(
-            progress_info_frame,
-            textvariable=self.progress_percent_var,
-            font=("Consolas", 9, "bold"),
-            foreground="#1976d2"
-        )
-        percent_lbl.pack(side=tk.RIGHT)
-
-        self.progress_bar = ttk.Progressbar(log_frame, mode="determinate")
-        self.progress_bar.pack(fill=tk.X, pady=(0, 8))
-
-        # 即時日誌 ScrolledText
-        self.log_box = scrolledtext.ScrolledText(
-            log_frame,
-            wrap=tk.WORD,
-            height=7,
-            font=("Consolas", 9),
-            bg="#1e1e1e",
-            fg="#d4d4d4",
-            insertbackground="#ffffff"
-        )
-        self.log_box.pack(fill=tk.BOTH, expand=True)
-
-        # 日誌標籤樣式
-        self.log_box.tag_config("info", foreground="#9cdcfe")
-        self.log_box.tag_config("success", foreground="#4ec9b0")
-        self.log_box.tag_config("warning", foreground="#ce9178")
-        self.log_box.tag_config("error", foreground="#f44747")
-        self.log_box.tag_config("time", foreground="#6a9955")
-
-        # 6. 底部按鈕列
+        # 5. 底部按鈕列（優先向底部 pack，確保在任何解析度或縮放下永遠不被遮擋）
         bottom_frame = ttk.Frame(main_frame)
-        bottom_frame.pack(fill=tk.X)
+        bottom_frame.pack(side=tk.BOTTOM, fill=tk.X, pady=(6, 0))
 
         self.btn_exit = ttk.Button(bottom_frame, text="關閉離開", command=self._on_close, width=12)
         self.btn_exit.pack(side=tk.RIGHT, padx=(8, 0))
@@ -648,6 +603,51 @@ class UpdaterApp:
             cursor="hand2"
         )
         self.btn_start.pack(side=tk.RIGHT)
+
+        # 6. 進度條與即時 Log 顯示區塊（填補剩餘中間垂直空間，隨視窗放大自動伸展）
+        log_frame = ttk.LabelFrame(main_frame, text=" 📊 更新進度與執行日誌 ", padding="6")
+        log_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 6))
+
+        # 進度列與百分比
+        progress_info_frame = ttk.Frame(log_frame)
+        progress_info_frame.pack(fill=tk.X, pady=(0, 3))
+
+        status_lbl = ttk.Label(
+            progress_info_frame,
+            textvariable=self.progress_status_var,
+            font=("Microsoft JhengHei UI", 9)
+        )
+        status_lbl.pack(side=tk.LEFT, fill=tk.X, expand=True)
+
+        percent_lbl = ttk.Label(
+            progress_info_frame,
+            textvariable=self.progress_percent_var,
+            font=("Consolas", 9, "bold"),
+            foreground="#1976d2"
+        )
+        percent_lbl.pack(side=tk.RIGHT)
+
+        self.progress_bar = ttk.Progressbar(log_frame, mode="determinate")
+        self.progress_bar.pack(fill=tk.X, pady=(0, 6))
+
+        # 即時日誌 ScrolledText
+        self.log_box = scrolledtext.ScrolledText(
+            log_frame,
+            wrap=tk.WORD,
+            height=5,
+            font=("Consolas", 9),
+            bg="#1e1e1e",
+            fg="#d4d4d4",
+            insertbackground="#ffffff"
+        )
+        self.log_box.pack(fill=tk.BOTH, expand=True)
+
+        # 日誌標籤樣式
+        self.log_box.tag_config("info", foreground="#9cdcfe")
+        self.log_box.tag_config("success", foreground="#4ec9b0")
+        self.log_box.tag_config("warning", foreground="#ce9178")
+        self.log_box.tag_config("error", foreground="#f44747")
+        self.log_box.tag_config("time", foreground="#6a9955")
 
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
 
