@@ -136,7 +136,6 @@ python -m PyInstaller --noconfirm --onefile --windowed --uac-admin --name "智�
 
 - `--uac-admin`：會在二進位清單中注入 `<requestedExecutionLevel level="requireAdministrator" ... />`，啟動時即觸發 Windows UAC。
 - 輸出位置：`dist/智慧控管與監控系統 - 自動更新工具.exe`。
-- `build.py` 在編譯完成後會自動同步於 `dist/` 額外複製一份命名為 `dist/Updater.exe`，以符合不同維運習慣。
 
 ---
 

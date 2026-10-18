@@ -39,14 +39,6 @@ def main():
     if ret.returncode == 0:
         exe_path = os.path.join(script_dir, "dist", "智慧控管與監控系統 - 自動更新工具.exe")
         print(f"[OK] 編譯成功！產出路徑：\n{exe_path}")
-
-        # 依 AGENTS.md 規範額外複製一份 dist/Updater.exe
-        backup_exe = os.path.join(script_dir, "dist", "Updater.exe")
-        try:
-            shutil.copyfile(exe_path, backup_exe)
-            print(f"[OK] 已同步複製一份為：\n{backup_exe}")
-        except Exception:
-            pass
     else:
         print(f"[ERROR] 編譯失敗，回傳碼：{ret.returncode}")
     print("=" * 60)

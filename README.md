@@ -101,7 +101,7 @@ python -m PyInstaller --noconfirm --onefile --windowed --uac-admin --name "智�
 
 ### 步驟 3：產出確認
 打包完成後，執行檔將位於 `dist/` 目錄中：
-- `dist/智慧控管與監控系統 - 自動更新工具.exe` (並自動同步備份一份為 `dist/Updater.exe`)
+- `dist/智慧控管與監控系統 - 自動更新工具.exe`
 
 ---
 
@@ -111,7 +111,7 @@ python -m PyInstaller --noconfirm --onefile --windowed --uac-admin --name "智�
 
 ```text
 📦 20261015-系統更新包/
- ├── 智慧控管與監控系統 - 自動更新工具.exe  (或 Updater.exe)
+ ├── 智慧控管與監控系統 - 自動更新工具.exe
  ├── ★更新說明★.txt                       (版本說明文件，非必填)
  ├── www.zip                              (本次更新內容，若有則放)
  ├── LAH-NUXTJS.zip                       (本次更新內容，若有則放)
@@ -134,14 +134,13 @@ python -m PyInstaller --noconfirm --onefile --windowed --uac-admin --name "智�
 LAH-Updater/
  ├── updater.py                           # 主程式原始碼 (GUI、解壓防呆、Apache 與 PM2 控制)
  ├── build.bat                            # 一鍵打包批次檔 (純 ASCII 轉發，避開 CMD 編碼與 BOM 衝碼)
- ├── build.py                             # Python 原生打包輔助腳本 (處理 PyInstaller 參數與雙檔案產出)
+ ├── build.py                             # Python 原生打包輔助腳本 (處理 PyInstaller 參數與編譯產出)
  ├── AGENTS.md                            # AI 代理人維護與架構指南
  ├── README.md                            # 專案說明與操作指南
  ├── .gitignore                           # Git 忽略檔案設定
  ├── build/                               # 打包過程暫存目錄 (Git 忽略)
  └── dist/                                # 打包最終產出目錄 (Git 忽略)
-      ├── 智慧控管與監控系統 - 自動更新工具.exe
-      └── Updater.exe
+      └── 智慧控管與監控系統 - 自動更新工具.exe
 ```
 
 ---
