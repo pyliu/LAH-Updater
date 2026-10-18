@@ -440,11 +440,11 @@ class UpdaterApp:
                 "is_custom_path": False
             }
 
-        # Apache 自動重啟勾選
-        self.restart_apache_var = tk.BooleanVar(value=True)
+        # Apache 自動重啟勾選（預設留白，偵測到本機服務時自動勾選）
+        self.restart_apache_var = tk.BooleanVar(value=False)
 
-        # PM2 自動重啟勾選
-        self.restart_pm2_var = tk.BooleanVar(value=True)
+        # PM2 自動重啟勾選（預設留白，偵測到本機 PM2 套件時自動勾選）
+        self.restart_pm2_var = tk.BooleanVar(value=False)
 
         # 進度百分比與狀態文字
         self.progress_percent_var = tk.StringVar(value="0%")
@@ -590,7 +590,9 @@ class UpdaterApp:
         self.chk_apache = ttk.Checkbutton(
             ctrl_row_apache,
             text="更新前後自動重啟 Apache 服務 (解壓縮前停止、完成後啟動)",
-            variable=self.restart_apache_var
+            variable=self.restart_apache_var,
+            onvalue=True,
+            offvalue=False
         )
         self.chk_apache.pack(side=tk.LEFT)
 
@@ -604,7 +606,9 @@ class UpdaterApp:
         self.chk_pm2 = ttk.Checkbutton(
             ctrl_row_pm2,
             text="更新後自動重啟 PM2 服務 (更新後重啟服務)",
-            variable=self.restart_pm2_var
+            variable=self.restart_pm2_var,
+            onvalue=True,
+            offvalue=False
         )
         self.chk_pm2.pack(side=tk.LEFT)
 
@@ -930,17 +934,19 @@ class UpdaterApp:
         self.pkg_vars[pkg_id]["is_custom_path"] = True
 
     def _detect_apache_service(self):
-        """偵測 Apache 服務名稱"""
+        """偵測 Apache 服務名稱（有偵測到服務預設選取，沒有則留白）"""
         self.apache_service_name = query_apache_service()
         if self.apache_service_name:
             self.chk_apache.configure(
                 text=f"更新前後自動重啟 Apache 服務 (已偵測到服務：{self.apache_service_name})"
             )
+            self.restart_apache_var.set(True)
             self.log(f"已偵測到本機 Apache 服務：[{self.apache_service_name}]", "info")
         else:
             self.chk_apache.configure(
                 text="更新前後自動重啟 Apache 服務 (系統未偵測到常見 Apache 服務)"
             )
+            self.restart_apache_var.set(False)
             self.log("未在系統中偵測到常見 Apache 服務 (如 Apache2.4)，若有需求請確認服務名稱。", "warning")
 
     def _detect_pm2_service(self):
