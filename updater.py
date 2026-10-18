@@ -379,8 +379,8 @@ class UpdaterApp:
     def __init__(self, root):
         self.root = root
         self.root.title("智慧控管與監控系統 - 自動更新工具")
-        self.root.geometry("880x580")
-        self.root.minsize(800, 480)
+        self.root.geometry("880x480")
+        self.root.minsize(800, 440)
 
         # 基礎路徑
         self.app_dir = get_app_dir()
@@ -427,6 +427,13 @@ class UpdaterApp:
         # 進度百分比與狀態文字
         self.progress_percent_var = tk.StringVar(value="0%")
         self.progress_status_var = tk.StringVar(value="準備就緒，請確認更新項目後點選「開始更新」")
+
+        # 執行日誌歷史與彈窗元件參照
+        self.log_history = []
+        self.progress_dlg = None
+        self.progress_log_box = None
+        self.progress_bar = None
+        self.btn_close_progress = None
 
     def _build_ui(self):
         # 主容器
@@ -590,6 +597,14 @@ class UpdaterApp:
         )
         self.btn_start.pack(side=tk.RIGHT, padx=(8, 0))
 
+        self.btn_view_log = ttk.Button(
+            bottom_frame,
+            text="📊 檢視執行日誌",
+            command=self._open_progress_dialog,
+            width=16
+        )
+        self.btn_view_log.pack(side=tk.RIGHT, padx=(8, 0))
+
         self.btn_view_notes = ttk.Button(
             bottom_frame,
             text="📋 查看更新說明",
@@ -598,51 +613,6 @@ class UpdaterApp:
             width=16
         )
         self.btn_view_notes.pack(side=tk.RIGHT)
-
-        # 5. 進度條與即時 Log 顯示區塊（填補剩餘中間垂直空間，隨視窗放大自動伸展）
-        log_frame = ttk.LabelFrame(main_frame, text=" 📊 更新進度與執行日誌 ", padding="6")
-        log_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 6))
-
-        # 進度列與百分比
-        progress_info_frame = ttk.Frame(log_frame)
-        progress_info_frame.pack(fill=tk.X, pady=(0, 3))
-
-        status_lbl = ttk.Label(
-            progress_info_frame,
-            textvariable=self.progress_status_var,
-            font=("Microsoft JhengHei UI", 9)
-        )
-        status_lbl.pack(side=tk.LEFT, fill=tk.X, expand=True)
-
-        percent_lbl = ttk.Label(
-            progress_info_frame,
-            textvariable=self.progress_percent_var,
-            font=("Consolas", 9, "bold"),
-            foreground="#1976d2"
-        )
-        percent_lbl.pack(side=tk.RIGHT)
-
-        self.progress_bar = ttk.Progressbar(log_frame, mode="determinate")
-        self.progress_bar.pack(fill=tk.X, pady=(0, 6))
-
-        # 即時日誌 ScrolledText
-        self.log_box = scrolledtext.ScrolledText(
-            log_frame,
-            wrap=tk.WORD,
-            height=5,
-            font=("Consolas", 9),
-            bg="#1e1e1e",
-            fg="#d4d4d4",
-            insertbackground="#ffffff"
-        )
-        self.log_box.pack(fill=tk.BOTH, expand=True)
-
-        # 日誌標籤樣式
-        self.log_box.tag_config("info", foreground="#9cdcfe")
-        self.log_box.tag_config("success", foreground="#4ec9b0")
-        self.log_box.tag_config("warning", foreground="#ce9178")
-        self.log_box.tag_config("error", foreground="#f44747")
-        self.log_box.tag_config("time", foreground="#6a9955")
 
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
 
@@ -705,6 +675,150 @@ class UpdaterApp:
 
         dlg.bind("<Escape>", lambda e: dlg.destroy())
         dlg.focus_set()
+
+    def _open_progress_dialog(self):
+        """開啟獨立的更新進度與執行日誌視窗（較大空間顯示即時進度與文字 LOG）"""
+        if self.progress_dlg and self.progress_dlg.winfo_exists():
+            self.progress_dlg.lift()
+            self.progress_dlg.focus_set()
+            return
+
+        self.progress_dlg = tk.Toplevel(self.root)
+        self.progress_dlg.title("📊 更新進度與執行日誌")
+        self.progress_dlg.geometry("780x540")
+        self.progress_dlg.minsize(640, 420)
+        self.progress_dlg.transient(self.root)
+
+        # 嘗試置中於主視窗上方
+        try:
+            self.root.update_idletasks()
+            rx = self.root.winfo_rootx()
+            ry = self.root.winfo_rooty()
+            rw = self.root.winfo_width()
+            rh = self.root.winfo_height()
+            dx = max(20, rx + (rw - 780) // 2)
+            dy = max(20, ry + (rh - 540) // 2)
+            self.progress_dlg.geometry(f"780x540+{dx}+{dy}")
+        except Exception:
+            pass
+
+        dlg_frame = ttk.Frame(self.progress_dlg, padding="14")
+        dlg_frame.pack(fill=tk.BOTH, expand=True)
+
+        # 1. 頂部狀態列與進度百分比
+        info_frame = ttk.Frame(dlg_frame)
+        info_frame.pack(fill=tk.X, pady=(0, 6))
+
+        status_lbl = ttk.Label(
+            info_frame,
+            textvariable=self.progress_status_var,
+            font=("Microsoft JhengHei UI", 10, "bold")
+        )
+        status_lbl.pack(side=tk.LEFT, fill=tk.X, expand=True)
+
+        percent_lbl = ttk.Label(
+            info_frame,
+            textvariable=self.progress_percent_var,
+            font=("Consolas", 12, "bold"),
+            foreground="#1976d2"
+        )
+        percent_lbl.pack(side=tk.RIGHT)
+
+        # 2. 進度條
+        self.progress_bar = ttk.Progressbar(dlg_frame, mode="determinate")
+        self.progress_bar.pack(fill=tk.X, pady=(0, 8))
+
+        # 嘗試套用目前進度數值
+        try:
+            cur_pct = float(self.progress_percent_var.get().replace('%', ''))
+            self.progress_bar["value"] = cur_pct
+        except Exception:
+            pass
+
+        # 3. 獨立大尺寸即時日誌視窗 (ScrolledText)
+        log_frame = ttk.LabelFrame(dlg_frame, text=" 📜 即時執行日誌 ", padding="6")
+        log_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 8))
+
+        self.progress_log_box = scrolledtext.ScrolledText(
+            log_frame,
+            wrap=tk.WORD,
+            font=("Consolas", 9),
+            bg="#1e1e1e",
+            fg="#d4d4d4",
+            insertbackground="#ffffff"
+        )
+        self.progress_log_box.pack(fill=tk.BOTH, expand=True)
+
+        # 日誌標籤樣式
+        self.progress_log_box.tag_config("info", foreground="#9cdcfe")
+        self.progress_log_box.tag_config("success", foreground="#4ec9b0")
+        self.progress_log_box.tag_config("warning", foreground="#ce9178")
+        self.progress_log_box.tag_config("error", foreground="#f44747")
+        self.progress_log_box.tag_config("time", foreground="#6a9955")
+
+        # 填入自啟動以來所記錄的歷史日誌
+        for now_str, msg, level in self.log_history:
+            self.progress_log_box.insert(tk.END, now_str, "time")
+            self.progress_log_box.insert(tk.END, msg + "\n", level)
+        self.progress_log_box.see(tk.END)
+
+        # 4. 底部控制按鈕列
+        dlg_bottom = ttk.Frame(dlg_frame)
+        dlg_bottom.pack(fill=tk.X)
+
+        if self.is_updating:
+            btn_text = "更新進行中，請稍候..."
+            btn_state = "disabled"
+        else:
+            btn_text = "關閉視窗 (Esc)"
+            btn_state = "normal"
+            self.progress_dlg.bind("<Escape>", lambda e: self._close_progress_dialog())
+
+        self.btn_close_progress = ttk.Button(
+            dlg_bottom,
+            text=btn_text,
+            command=self._close_progress_dialog,
+            state=btn_state,
+            width=22
+        )
+        self.btn_close_progress.pack(side=tk.RIGHT)
+
+        self.progress_dlg.protocol("WM_DELETE_WINDOW", self._on_progress_dlg_close)
+        self.progress_dlg.focus_set()
+
+    def _on_progress_dlg_close(self):
+        """處理進度視窗點選右上角關閉"""
+        if self.is_updating:
+            messagebox.showwarning(
+                "更新進行中",
+                "更新作業正在背景執行中，請稍候完成。\n完成後即可點選關閉視窗。",
+                parent=self.progress_dlg
+            )
+            return
+        self._close_progress_dialog()
+
+    def _close_progress_dialog(self):
+        """關閉進度視窗並清除元件參照"""
+        if self.is_updating:
+            return
+        if self.progress_dlg and self.progress_dlg.winfo_exists():
+            self.progress_dlg.destroy()
+        self.progress_dlg = None
+        self.progress_log_box = None
+        self.progress_bar = None
+        self.btn_close_progress = None
+
+    def _on_update_completed_ui(self):
+        """更新完成或出錯時，恢復主視窗狀態並啟用進度彈窗關閉按鈕"""
+        self.set_ui_updating_state(False)
+        if self.btn_close_progress and self.btn_close_progress.winfo_exists():
+            self.btn_close_progress.configure(
+                text="關閉視窗 (Esc)",
+                state="normal"
+            )
+        if self.progress_dlg and self.progress_dlg.winfo_exists():
+            self.progress_dlg.bind("<Escape>", lambda e: self._close_progress_dialog())
+            self.progress_dlg.lift()
 
     def _check_default_root_dir(self):
         r"""
@@ -842,12 +956,15 @@ class UpdaterApp:
             self.btn_view_notes.configure(state="disabled", text="📋 無更新說明")
 
     def log(self, message, level="info"):
-        """執行緒安全的日誌輸出"""
+        """執行緒安全的日誌輸出與歷史記錄"""
+        now_str = datetime.now().strftime("[%H:%M:%S] ")
+        self.log_history.append((now_str, message, level))
+
         def _append():
-            now_str = datetime.now().strftime("[%H:%M:%S] ")
-            self.log_box.insert(tk.END, now_str, "time")
-            self.log_box.insert(tk.END, message + "\n", level)
-            self.log_box.see(tk.END)
+            if self.progress_log_box and self.progress_log_box.winfo_exists():
+                self.progress_log_box.insert(tk.END, now_str, "time")
+                self.progress_log_box.insert(tk.END, message + "\n", level)
+                self.progress_log_box.see(tk.END)
 
         if threading.current_thread() is threading.main_thread():
             _append()
@@ -858,10 +975,11 @@ class UpdaterApp:
         """設定進度條與狀態文字"""
         def _update():
             p_val = max(0.0, min(100.0, float(percent)))
-            self.progress_bar["value"] = p_val
             self.progress_percent_var.set(f"{p_val:.1f}%")
             if status_text:
                 self.progress_status_var.set(status_text)
+            if self.progress_bar and self.progress_bar.winfo_exists():
+                self.progress_bar["value"] = p_val
 
         if threading.current_thread() is threading.main_thread():
             _update()
@@ -922,6 +1040,7 @@ class UpdaterApp:
             return
 
         self.set_ui_updating_state(True)
+        self._open_progress_dialog()
         worker = threading.Thread(target=self._run_update_process, args=(selected_pkgs,), daemon=True)
         worker.start()
 
@@ -1062,11 +1181,13 @@ class UpdaterApp:
                 def _ask_pm2_restart():
                     try:
                         pkg_list_str = "、".join(nodejs_pkgs)
+                        parent_w = self.progress_dlg if (self.progress_dlg and self.progress_dlg.winfo_exists()) else self.root
                         pm2_decision["run"] = messagebox.askyesno(
                             "重啟 Node.js 服務確認 (PM2)",
                             f"偵測到本次更新包含 Node.js 相關模組：\n【{pkg_list_str}】\n\n"
                             "是否要立即為您執行「pm2 restart all」以重啟所有 Node.js 專案服務\n"
-                            "（如 LAH-FE、LAH-SCHEDULER、lah-messenger-server）？"
+                            "（如 LAH-FE、LAH-SCHEDULER、lah-messenger-server）？",
+                            parent=parent_w
                         )
                     finally:
                         pm2_event.set()
@@ -1084,10 +1205,12 @@ class UpdaterApp:
 
                         def _warn_pm2():
                             try:
+                                parent_w = self.progress_dlg if (self.progress_dlg and self.progress_dlg.winfo_exists()) else self.root
                                 messagebox.showwarning(
                                     "PM2 重啟提醒",
                                     f"執行「pm2 restart all」時回傳非預期結果：\n{pm2_err}\n\n"
-                                    "請稍後於終端機手動執行 pm2 restart all 或檢查 PM2 服務狀態。"
+                                    "請稍後於終端機手動執行 pm2 restart all 或檢查 PM2 服務狀態。",
+                                    parent=parent_w
                                 )
                             finally:
                                 warn_event.set()
@@ -1099,11 +1222,13 @@ class UpdaterApp:
 
             # 彈出完成與空間清理對話框
             def _post_update_dialog():
+                parent_w = self.progress_dlg if (self.progress_dlg and self.progress_dlg.winfo_exists()) else self.root
                 ask_cleanup = messagebox.askyesno(
                     "更新完成 - 清理空間確認",
                     f"🎉 所有選取的系統模組已順利更新完成！(耗時 {elapsed:.1f} 秒)\n\n"
                     "是否要一併刪除本次已更新成功的壓縮包 (.zip) 以釋放磁碟空間？\n"
-                    "（點選「是」僅清除本次已完成更新的 zip 檔，說明文字檔仍會完整保留）"
+                    "（點選「是」僅清除本次已完成更新的 zip 檔，說明文字檔仍會完整保留）",
+                    parent=parent_w
                 )
                 if ask_cleanup:
                     del_count = 0
@@ -1125,30 +1250,35 @@ class UpdaterApp:
         except PermissionError as pe:
             self.log(f"❌ 更新失敗 (存取權限被拒絕): {pe}", "error")
             self.log("💡 建議：請確認是否有其他程式或 PM2 服務正在鎖定該檔案（若更新 node_modules，建議先執行 pm2 stop all），或確認管理員權限。", "warning")
-            self.root.after(
-                0,
-                lambda: messagebox.showerror(
+            def _show_perm_err():
+                parent_w = self.progress_dlg if (self.progress_dlg and self.progress_dlg.winfo_exists()) else self.root
+                messagebox.showerror(
                     "更新失敗",
                     f"存取權限被拒絕！\n{pe}\n\n"
                     "請以系統管理員權限執行，或關閉正在使用該檔案的軟體。\n"
-                    "（若解壓縮 node_modules 等模組失敗，請先於終端機執行 pm2 stop all 釋放檔案鎖定後再試）"
+                    "（若解壓縮 node_modules 等模組失敗，請先於終端機執行 pm2 stop all 釋放檔案鎖定後再試）",
+                    parent=parent_w
                 )
-            )
+            self.root.after(0, _show_perm_err)
         except Exception as ex:
             self.log(f"❌ 更新過程發生未預期錯誤: {ex}", "error")
-            self.root.after(0, lambda: messagebox.showerror("更新錯誤", f"更新過程發生錯誤：\n{ex}"))
+            def _show_unexp_err():
+                parent_w = self.progress_dlg if (self.progress_dlg and self.progress_dlg.winfo_exists()) else self.root
+                messagebox.showerror("更新錯誤", f"更新過程發生錯誤：\n{ex}", parent=parent_w)
+            self.root.after(0, _show_unexp_err)
         finally:
             # 確保若先前停止過 Apache 服務，發生異常中斷時也一定嘗試重啟，維持系統服務運作
             if should_restart_apache and svc_name and apache_was_stopped and not apache_restarted:
                 self.log(f"⚠️ 偵測到更新中斷或異常，緊急嘗試恢復 Apache 服務 [{svc_name}]...", "warning")
                 start_apache_service(svc_name, self.log)
                 apache_restarted = True
-            self.root.after(0, lambda: self.set_ui_updating_state(False))
+            self.root.after(0, self._on_update_completed_ui)
 
     def _on_close(self):
         """視窗關閉防呆"""
         if self.is_updating:
-            if not messagebox.askyesno("警告", "更新作業正在背景進行中，確定要強制中斷離開嗎？"):
+            parent_w = self.progress_dlg if (self.progress_dlg and self.progress_dlg.winfo_exists()) else self.root
+            if not messagebox.askyesno("警告", "更新作業正在背景進行中，確定要強制中斷離開嗎？", parent=parent_w):
                 return
         self.root.destroy()
 
