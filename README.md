@@ -10,9 +10,9 @@
 
 | 壓縮包檔名 | 預設相對路徑 | 預設完整目標路徑 | 說明 |
 | :--- | :--- | :--- | :--- |
-| **`www.zip`** | `www` | `C:\AppServ\www` | 前端與網站核心目錄 |
-| **`LAH-NUXTJS.zip`** | `LAH-NUXTJS` | `C:\AppServ\LAH-NUXTJS` | Nuxt.js 應用服務系統 |
-| **`node_modules.zip`** | `LAH-NUXTJS\node_modules` | `C:\AppServ\LAH-NUXTJS\node_modules` | Node.js 依賴套件包 |
+| **`www.zip`** | `www` | `C:\AppServ\www` | 後端API 更新包 |
+| **`LAH-NUXTJS.zip`** | `LAH-NUXTJS` | `C:\AppServ\LAH-NUXTJS` | 前端網站 更新包 |
+| **`node_modules.zip`** | `LAH-NUXTJS\node_modules` | `C:\AppServ\LAH-NUXTJS\node_modules` | 前端網站 核心套件 |
 | **`lah-messenger-server.zip`** | `lah-messenger-server` | `C:\AppServ\lah-messenger-server` | 即時通訊推播伺服器 |
 
 > 💡 **彈性安裝路徑機制**：
@@ -40,13 +40,14 @@
    - 支援彈性模糊比對：檔名只要包含「`更新說明`」的 `.txt` 檔案（例如 `★更新說明★.txt` 或 `1.9.5-★更新說明★.txt`）皆可自動讀取。
    - 主畫面移除冗長文字框，於「開始更新」旁設置「📋 查看更新說明」按鈕，點擊即彈出獨立置中對話框供完整閱讀（支援 Esc 快速鍵關閉）；若未提供說明檔時按鈕自動反灰停用（顯示「📋 無更新說明」），大幅降低主視窗高度。
    - 若同目錄下有多個符合的檔案（歷史殘留），**自動依檔案最後修改時間 (mtime) 優先載入最新發布的版本**，支援 UTF-8 / UTF-8-BOM / CP950 自動編碼容錯。
-6. **Node.js 服務智慧重啟 (PM2 Restart)**：
-   - 當本次更新包含 Node.js 相關模組（`LAH-NUXTJS.zip`、`node_modules.zip` 或 `lah-messenger-server.zip`）時，更新結束後會主動詢問是否執行 `pm2 restart all` 重啟所有 Node.js 服務，並將執行結果即時輸出至日誌視窗。
+6. **PM2 管理套件偵測與更新後自動重啟服務**：
+   - 於主畫面提供獨立 PM2 服務管理選項（位於 Apache 服務下方），啟動時自動偵測本機 PM2 指令路徑。
+   - 勾選後於更新完成自動執行 `pm2 restart all` 重啟所有 Node.js 服務（如 LAH-FE、LAH-SCHEDULER、lah-messenger-server），並將執行結果即時輸出至日誌視窗。
 7. **更新完成空間清理確認**：
    - 更新全部順利完成後，會主動跳出詢問是否刪除本次已更新完成的 `.zip` 壓縮包以釋放磁碟空間（更新說明文字檔會完整保留）。
-8. **獨立彈窗更新進度與大尺寸文字日誌**：
-   - 主畫面移除擁擠的日誌區域，維持緊湊清爽（880x480），底部功能按鈕永遠置底清晰可見。
-   - 點擊「🚀 開始更新」時自動彈出獨立大尺寸視窗（780x540），提供平滑進度條（Progressbar）、即時處理項目狀態與寬敞的深色終端風格彩色執行日誌（INFO、SUCCESS、WARNING、ERROR）。
+8. **文字放大 25% 舒適排版與獨立大尺寸日誌彈窗**：
+   - 全介面標準字體與各區塊字級全數等比例放大 25%，視覺更加清晰好讀；主視窗隨之最佳化為 `980x620`，所有控制按鈕永遠置底清晰可見。
+   - 點擊「🚀 開始更新」時自動彈出獨立大尺寸視窗（`860x600`），提供平滑進度條（Progressbar）、即時處理項目狀態與寬敞的深色終端風格彩色執行日誌（INFO、SUCCESS、WARNING、ERROR）。
    - 主畫面底部亦保留「📊 檢視執行日誌」按鈕，方便隨時開啟查看最新或歷史執行紀錄。
 9. **UAC 系統管理員權限**：
    - 編譯時已內嵌 `--uac-admin` 清單，在 Windows 啟動時會主動要求系統管理員權限以確保有權控制 Windows 服務及修改受保護目錄。

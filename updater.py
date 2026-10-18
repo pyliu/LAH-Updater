@@ -18,6 +18,7 @@ from datetime import datetime
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 from tkinter import scrolledtext
+from tkinter import font as tkfont
 
 # 定義 4 種更新包規格
 PACKAGE_CONFIGS = [
@@ -25,7 +26,7 @@ PACKAGE_CONFIGS = [
         "id": "www",
         "name": "www.zip",
         "rel_target": "www",
-        "title": "前端 / 網站核心 (www.zip)",
+        "title": "後端API 更新包 (www.zip)",
         "expected_folder": "www",
         "is_nodejs": False
     },
@@ -33,7 +34,7 @@ PACKAGE_CONFIGS = [
         "id": "lah_nuxtjs",
         "name": "LAH-NUXTJS.zip",
         "rel_target": "LAH-NUXTJS",
-        "title": "Nuxt.js 應用系統 (LAH-NUXTJS.zip)",
+        "title": "前端網站 更新包 (LAH-NUXTJS.zip)",
         "expected_folder": "LAH-NUXTJS",
         "is_nodejs": True
     },
@@ -41,7 +42,7 @@ PACKAGE_CONFIGS = [
         "id": "node_modules",
         "name": "node_modules.zip",
         "rel_target": os.path.join("LAH-NUXTJS", "node_modules"),
-        "title": "Node.js 模組套件 (node_modules.zip)",
+        "title": "前端網站 核心套件 (node_modules.zip)",
         "expected_folder": "node_modules",
         "is_nodejs": True
     },
@@ -379,15 +380,27 @@ class UpdaterApp:
     def __init__(self, root):
         self.root = root
         self.root.title("智慧控管與監控系統 - 自動更新工具")
-        self.root.geometry("880x480")
-        self.root.minsize(800, 440)
+        self.root.geometry("980x620")
+        self.root.minsize(860, 560)
 
         # 基礎路徑
         self.app_dir = get_app_dir()
         self.is_updating = False
         self.apache_service_name = None
+        self.pm2_path = None
         self.release_note_name = None
         self.release_note_content = None
+
+        # 文字放大 25%：縮放 Tkinter 內建 Named Fonts
+        for name in ("TkDefaultFont", "TkTextFont", "TkFixedFont", "TkMenuFont", "TkHeadingFont", "TkCaptionFont", "TkSmallCaptionFont", "TkIconFont", "TkTooltipFont"):
+            try:
+                f = tkfont.nametofont(name)
+                sz = f.cget("size")
+                if sz != 0:
+                    sign = 1 if sz > 0 else -1
+                    f.configure(size=int(round(abs(sz) * 1.25)) * sign)
+            except Exception:
+                pass
 
         # 樣式設定
         self.style = ttk.Style()
@@ -396,9 +409,15 @@ class UpdaterApp:
         except Exception:
             pass
 
+        self.style.configure(".", font=("Microsoft JhengHei UI", 11))
+        self.style.configure("TLabelframe.Label", font=("Microsoft JhengHei UI", 11, "bold"))
+        self.style.configure("TButton", font=("Microsoft JhengHei UI", 11))
+        self.style.configure("TCheckbutton", font=("Microsoft JhengHei UI", 11))
+
         self._init_variables()
         self._build_ui()
         self._detect_apache_service()
+        self._detect_pm2_service()
         self.rescan()
         # 啟動時偵測預設安裝目錄是否存在，若無則提示使用者選擇
         self._check_default_root_dir()
@@ -424,6 +443,9 @@ class UpdaterApp:
         # Apache 自動重啟勾選
         self.restart_apache_var = tk.BooleanVar(value=True)
 
+        # PM2 自動重啟勾選
+        self.restart_pm2_var = tk.BooleanVar(value=True)
+
         # 進度百分比與狀態文字
         self.progress_percent_var = tk.StringVar(value="0%")
         self.progress_status_var = tk.StringVar(value="準備就緒，請確認更新項目後點選「開始更新」")
@@ -442,12 +464,12 @@ class UpdaterApp:
 
         # 1. 頂部標題區塊
         header_frame = ttk.Frame(main_frame)
-        header_frame.pack(fill=tk.X, pady=(0, 6))
+        header_frame.pack(fill=tk.X, pady=(0, 8))
 
         title_label = ttk.Label(
             header_frame,
             text="🚀 智慧控管與監控系統 - 自動更新工具",
-            font=("Microsoft JhengHei UI", 15, "bold")
+            font=("Microsoft JhengHei UI", 19, "bold")
         )
         title_label.pack(side=tk.LEFT)
 
@@ -457,34 +479,34 @@ class UpdaterApp:
             header_frame,
             text=admin_badge,
             fg=badge_fg,
-            font=("Microsoft JhengHei UI", 9, "bold")
+            font=("Microsoft JhengHei UI", 11, "bold")
         )
         admin_label.pack(side=tk.RIGHT, padx=5)
 
         # 2. 安裝根目錄選擇區塊
-        dir_frame = ttk.LabelFrame(main_frame, text=" 📂 安裝根目錄設定 (預設連動基底) ", padding="6")
-        dir_frame.pack(fill=tk.X, pady=(0, 6))
+        dir_frame = ttk.LabelFrame(main_frame, text=" 📂 安裝根目錄設定 (預設連動基底) ", padding="8")
+        dir_frame.pack(fill=tk.X, pady=(0, 8))
 
         dir_inner = ttk.Frame(dir_frame)
         dir_inner.pack(fill=tk.X)
 
-        ttk.Label(dir_inner, text="系統安裝根目錄：", font=("Microsoft JhengHei UI", 9, "bold")).pack(side=tk.LEFT, padx=(0, 5))
-        self.root_entry = ttk.Entry(dir_inner, textvariable=self.root_dir_var, font=("Consolas", 10))
+        ttk.Label(dir_inner, text="系統安裝根目錄：", font=("Microsoft JhengHei UI", 11, "bold")).pack(side=tk.LEFT, padx=(0, 6))
+        self.root_entry = ttk.Entry(dir_inner, textvariable=self.root_dir_var, font=("Consolas", 12))
         self.root_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 8))
 
         self.btn_browse = ttk.Button(dir_inner, text="瀏覽...", command=self._browse_root_dir, width=10)
         self.btn_browse.pack(side=tk.RIGHT)
 
         # 3. 更新包偵測清單區塊
-        pkg_frame = ttk.LabelFrame(main_frame, text=" 📦 更新包偵測與各模組安裝路徑 ", padding="6")
-        pkg_frame.pack(fill=tk.X, pady=(0, 6))
+        pkg_frame = ttk.LabelFrame(main_frame, text=" 📦 更新包偵測與各模組安裝路徑 ", padding="8")
+        pkg_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 8))
 
         # 表頭提示
         header_hint = ttk.Label(
             pkg_frame,
             text=f"來源更新目錄：{self.app_dir}  (各模組路徑預設跟隨根目錄，亦可單獨點擊「瀏覽...」自訂)",
             foreground="#555555",
-            font=("Microsoft JhengHei UI", 8)
+            font=("Microsoft JhengHei UI", 10)
         )
         header_hint.pack(anchor=tk.W, pady=(0, 4))
 
@@ -516,27 +538,27 @@ class UpdaterApp:
             status_lbl = tk.Label(
                 top_line,
                 textvariable=v["status_var"],
-                font=("Microsoft JhengHei UI", 9, "bold"),
+                font=("Microsoft JhengHei UI", 11, "bold"),
                 anchor="e"
             )
             status_lbl.pack(side=tk.RIGHT, padx=4)
             v["status_label_widget"] = status_lbl
 
             # 第 2 列：縮排的個別目標解壓縮路徑輸入框 + 瀏覽按鈕 + 重設按鈕
-            bottom_line = ttk.Frame(item_card, padding=(22, 1, 0, 0))
+            bottom_line = ttk.Frame(item_card, padding=(24, 1, 0, 0))
             bottom_line.pack(fill=tk.X)
 
             ttk.Label(
                 bottom_line,
                 text="目標路徑：",
-                font=("Microsoft JhengHei UI", 8),
+                font=("Microsoft JhengHei UI", 10),
                 foreground="#555555"
             ).pack(side=tk.LEFT)
 
             path_entry = ttk.Entry(
                 bottom_line,
                 textvariable=v["target_path_var"],
-                font=("Consolas", 9)
+                font=("Consolas", 11)
             )
             path_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(2, 6))
             path_entry.bind("<KeyRelease>", lambda e, pid=p_id: self._on_module_path_manual_edit(pid))
@@ -561,22 +583,34 @@ class UpdaterApp:
             self.reset_buttons[p_id] = btn_reset_pkg
 
         # 服務控制與功能按鈕列
-        ctrl_row = ttk.Frame(pkg_frame, padding="2")
-        ctrl_row.pack(fill=tk.X, pady=(4, 0))
+        # 第 1 列：Apache 服務偵測重啟選項 + 重新掃描按鈕
+        ctrl_row_apache = ttk.Frame(pkg_frame, padding="2")
+        ctrl_row_apache.pack(fill=tk.X, pady=(6, 2))
 
         self.chk_apache = ttk.Checkbutton(
-            ctrl_row,
+            ctrl_row_apache,
             text="更新前後自動重啟 Apache 服務 (解壓縮前停止、完成後啟動)",
             variable=self.restart_apache_var
         )
         self.chk_apache.pack(side=tk.LEFT)
 
-        self.btn_rescan = ttk.Button(ctrl_row, text="🔄 重新掃描", command=self.rescan, width=12)
+        self.btn_rescan = ttk.Button(ctrl_row_apache, text="🔄 重新掃描", command=self.rescan, width=12)
         self.btn_rescan.pack(side=tk.RIGHT)
+
+        # 第 2 列：PM2 管理套件偵測與更新後重啟服務選項（置於 Apache 下方）
+        ctrl_row_pm2 = ttk.Frame(pkg_frame, padding="2")
+        ctrl_row_pm2.pack(fill=tk.X, pady=(1, 2))
+
+        self.chk_pm2 = ttk.Checkbutton(
+            ctrl_row_pm2,
+            text="更新後自動重啟 PM2 服務 (更新後重啟服務)",
+            variable=self.restart_pm2_var
+        )
+        self.chk_pm2.pack(side=tk.LEFT)
 
         # 4. 底部按鈕列（優先向底部 pack，確保在任何解析度或縮放下永遠固定於底端）
         bottom_frame = ttk.Frame(main_frame)
-        bottom_frame.pack(side=tk.BOTTOM, fill=tk.X, pady=(6, 0))
+        bottom_frame.pack(side=tk.BOTTOM, fill=tk.X, pady=(8, 0))
 
         self.btn_exit = ttk.Button(bottom_frame, text="關閉離開", command=self._on_close, width=12)
         self.btn_exit.pack(side=tk.RIGHT, padx=(8, 0))
@@ -585,7 +619,7 @@ class UpdaterApp:
             bottom_frame,
             text="🚀 開始更新",
             command=self.start_update_thread,
-            font=("Microsoft JhengHei UI", 11, "bold"),
+            font=("Microsoft JhengHei UI", 14, "bold"),
             bg="#1976d2",
             fg="#ffffff",
             activebackground="#1565c0",
@@ -624,8 +658,8 @@ class UpdaterApp:
 
         dlg = tk.Toplevel(self.root)
         dlg.title(f"📋 版本更新說明 - {self.release_note_name}")
-        dlg.geometry("640x500")
-        dlg.minsize(520, 380)
+        dlg.geometry("720x560")
+        dlg.minsize(600, 420)
         dlg.transient(self.root)
 
         # 嘗試置中於主視窗上方
@@ -635,13 +669,13 @@ class UpdaterApp:
             ry = self.root.winfo_rooty()
             rw = self.root.winfo_width()
             rh = self.root.winfo_height()
-            dx = max(30, rx + (rw - 640) // 2)
-            dy = max(30, ry + (rh - 500) // 2)
-            dlg.geometry(f"640x500+{dx}+{dy}")
+            dx = max(30, rx + (rw - 720) // 2)
+            dy = max(30, ry + (rh - 560) // 2)
+            dlg.geometry(f"720x560+{dx}+{dy}")
         except Exception:
             pass
 
-        content_frame = ttk.Frame(dlg, padding="12")
+        content_frame = ttk.Frame(dlg, padding="14")
         content_frame.pack(fill=tk.BOTH, expand=True)
 
         # 頂部檔案提示列
@@ -650,14 +684,14 @@ class UpdaterApp:
         ttk.Label(
             top_frame,
             text=f"📄 更新說明檔案：{self.release_note_name}",
-            font=("Microsoft JhengHei UI", 10, "bold")
+            font=("Microsoft JhengHei UI", 12, "bold")
         ).pack(side=tk.LEFT)
 
         # 說明文字滾動顯示區
         txt = scrolledtext.ScrolledText(
             content_frame,
             wrap=tk.WORD,
-            font=("Microsoft JhengHei UI", 10),
+            font=("Microsoft JhengHei UI", 12),
             bg="#fbfbfb",
             fg="#222222",
             relief=tk.SOLID,
@@ -685,8 +719,8 @@ class UpdaterApp:
 
         self.progress_dlg = tk.Toplevel(self.root)
         self.progress_dlg.title("📊 更新進度與執行日誌")
-        self.progress_dlg.geometry("780x540")
-        self.progress_dlg.minsize(640, 420)
+        self.progress_dlg.geometry("860x600")
+        self.progress_dlg.minsize(720, 480)
         self.progress_dlg.transient(self.root)
 
         # 嘗試置中於主視窗上方
@@ -696,9 +730,9 @@ class UpdaterApp:
             ry = self.root.winfo_rooty()
             rw = self.root.winfo_width()
             rh = self.root.winfo_height()
-            dx = max(20, rx + (rw - 780) // 2)
-            dy = max(20, ry + (rh - 540) // 2)
-            self.progress_dlg.geometry(f"780x540+{dx}+{dy}")
+            dx = max(20, rx + (rw - 860) // 2)
+            dy = max(20, ry + (rh - 600) // 2)
+            self.progress_dlg.geometry(f"860x600+{dx}+{dy}")
         except Exception:
             pass
 
@@ -712,14 +746,14 @@ class UpdaterApp:
         status_lbl = ttk.Label(
             info_frame,
             textvariable=self.progress_status_var,
-            font=("Microsoft JhengHei UI", 10, "bold")
+            font=("Microsoft JhengHei UI", 12, "bold")
         )
         status_lbl.pack(side=tk.LEFT, fill=tk.X, expand=True)
 
         percent_lbl = ttk.Label(
             info_frame,
             textvariable=self.progress_percent_var,
-            font=("Consolas", 12, "bold"),
+            font=("Consolas", 15, "bold"),
             foreground="#1976d2"
         )
         percent_lbl.pack(side=tk.RIGHT)
@@ -742,7 +776,7 @@ class UpdaterApp:
         self.progress_log_box = scrolledtext.ScrolledText(
             log_frame,
             wrap=tk.WORD,
-            font=("Consolas", 9),
+            font=("Consolas", 11),
             bg="#1e1e1e",
             fg="#d4d4d4",
             insertbackground="#ffffff"
@@ -909,9 +943,27 @@ class UpdaterApp:
             )
             self.log("未在系統中偵測到常見 Apache 服務 (如 Apache2.4)，若有需求請確認服務名稱。", "warning")
 
+    def _detect_pm2_service(self):
+        """偵測本機 PM2 管理套件與指令路徑"""
+        self.pm2_path = resolve_pm2_command()
+        if self.pm2_path:
+            self.chk_pm2.configure(
+                text=f"更新後自動重啟 PM2 服務 (已偵測到套件：{os.path.basename(self.pm2_path)}，更新後重啟服務)"
+            )
+            self.restart_pm2_var.set(True)
+            self.log(f"已偵測到本機 PM2 管理套件：[{self.pm2_path}]", "info")
+        else:
+            self.chk_pm2.configure(
+                text="更新後自動重啟 PM2 服務 (系統未偵測到 PM2 管理套件)"
+            )
+            self.restart_pm2_var.set(False)
+            self.log("未在系統中偵測到常見 PM2 管理套件 (pm2.cmd)，若有需求請確認安裝與 PATH 環境變數。", "warning")
+
     def rescan(self):
         """重新掃描更新包與更新說明檔案"""
         self.log(f"正在掃描更新目錄：{self.app_dir} ...", "info")
+        self._detect_apache_service()
+        self._detect_pm2_service()
         detected_count = 0
 
         # 更新各壓縮包目標路徑
@@ -994,6 +1046,7 @@ class UpdaterApp:
         self.btn_browse.configure(state=state)
         self.btn_rescan.configure(state=state)
         self.chk_apache.configure(state=state)
+        self.chk_pm2.configure(state=state)
 
         for p_id in self.pkg_vars:
             exists = self.pkg_vars[p_id]["exists"]
@@ -1031,10 +1084,11 @@ class UpdaterApp:
 
         summary = "\n".join([f"• {p['name']} ➔ {self.pkg_vars[p['id']]['target_path_var'].get().strip()}" for p in selected_pkgs])
         apache_note = f"\n• 更新前後將自動重啟 Apache 服務 ({self.apache_service_name or '自動搜尋'})" if self.restart_apache_var.get() else ""
+        pm2_note = "\n• 更新完成後將自動重啟 PM2 服務 (pm2 restart all)" if self.restart_pm2_var.get() else ""
 
         confirm = messagebox.askyesno(
             "確認開始更新",
-            f"即將開始更新以下項目：\n{summary}{apache_note}\n\n是否確認立即執行解壓縮覆蓋？"
+            f"即將開始更新以下項目：\n{summary}{apache_note}{pm2_note}\n\n是否確認立即執行解壓縮覆蓋？"
         )
         if not confirm:
             return
@@ -1172,53 +1226,31 @@ class UpdaterApp:
             self.log("=" * 60, "success")
             self.log(f"🎉 全部選取的更新包已順利更新完成！(總耗時: {elapsed:.1f} 秒)", "success")
 
-            # 步驟 5：若本次更新包含 Node.js 相關專案模組，詢問使用者是否執行 pm2 restart all
-            nodejs_pkgs = [pkg["name"] for pkg in selected_pkgs if pkg.get("is_nodejs", False)]
-            if nodejs_pkgs:
-                pm2_decision = {"run": False}
-                pm2_event = threading.Event()
+            # 步驟 5：若有勾選「更新後自動重啟 PM2 服務」，自動執行 pm2 restart all
+            if self.restart_pm2_var.get():
+                self.set_progress(98, "正在執行 pm2 restart all 重啟 PM2 服務...")
+                pm2_ok, pm2_err = restart_pm2_services(self.log)
+                elapsed = time.time() - start_time
+                self.set_progress(100, f"✅ 全部更新與 PM2 重啟作業完成！(耗時 {elapsed:.1f} 秒)")
+                if not pm2_ok:
+                    warn_event = threading.Event()
 
-                def _ask_pm2_restart():
-                    try:
-                        pkg_list_str = "、".join(nodejs_pkgs)
-                        parent_w = self.progress_dlg if (self.progress_dlg and self.progress_dlg.winfo_exists()) else self.root
-                        pm2_decision["run"] = messagebox.askyesno(
-                            "重啟 Node.js 服務確認 (PM2)",
-                            f"偵測到本次更新包含 Node.js 相關模組：\n【{pkg_list_str}】\n\n"
-                            "是否要立即為您執行「pm2 restart all」以重啟所有 Node.js 專案服務\n"
-                            "（如 LAH-FE、LAH-SCHEDULER、lah-messenger-server）？",
-                            parent=parent_w
-                        )
-                    finally:
-                        pm2_event.set()
+                    def _warn_pm2():
+                        try:
+                            parent_w = self.progress_dlg if (self.progress_dlg and self.progress_dlg.winfo_exists()) else self.root
+                            messagebox.showwarning(
+                                "PM2 重啟提醒",
+                                f"執行「pm2 restart all」時回傳非預期結果：\n{pm2_err}\n\n"
+                                "請稍後於終端機手動執行 pm2 restart all 或檢查 PM2 服務狀態。",
+                                parent=parent_w
+                            )
+                        finally:
+                            warn_event.set()
 
-                self.root.after(0, _ask_pm2_restart)
-                pm2_event.wait()
-
-                if pm2_decision["run"]:
-                    self.set_progress(98, "正在執行 pm2 restart all 重啟 Node.js 服務...")
-                    pm2_ok, pm2_err = restart_pm2_services(self.log)
-                    elapsed = time.time() - start_time
-                    self.set_progress(100, f"✅ 全部更新與 PM2 重啟作業完成！(耗時 {elapsed:.1f} 秒)")
-                    if not pm2_ok:
-                        warn_event = threading.Event()
-
-                        def _warn_pm2():
-                            try:
-                                parent_w = self.progress_dlg if (self.progress_dlg and self.progress_dlg.winfo_exists()) else self.root
-                                messagebox.showwarning(
-                                    "PM2 重啟提醒",
-                                    f"執行「pm2 restart all」時回傳非預期結果：\n{pm2_err}\n\n"
-                                    "請稍後於終端機手動執行 pm2 restart all 或檢查 PM2 服務狀態。",
-                                    parent=parent_w
-                                )
-                            finally:
-                                warn_event.set()
-
-                        self.root.after(0, _warn_pm2)
-                        warn_event.wait()
-                else:
-                    self.log("ℹ️ 使用者選擇略過執行 [pm2 restart all]。", "info")
+                    self.root.after(0, _warn_pm2)
+                    warn_event.wait()
+            else:
+                self.log("ℹ️ 未勾選「更新後重啟 PM2 服務」，略過 PM2 重啟作業。", "info")
 
             # 彈出完成與空間清理對話框
             def _post_update_dialog():
