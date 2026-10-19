@@ -107,6 +107,27 @@ python -m PyInstaller --noconfirm --onefile --windowed --uac-admin --name "智�
 
 ---
 
+## 🗜️ 打包系統更新壓縮包 (`www.zip` & `LAH-NUXTJS.zip`)
+
+專案內建 `pack.bat` 與 `pack.py`，整合原 `zip_api.*` 與 `zip_fe.*` 打包規則：
+1. 自動進入 `LAH-FE` 執行 `yarn build` 並等待編譯完成。
+2. 將 `LAH-API/www` 打包為 `www.zip`（自動排除 `.env` 與 `include/config/AD*.php` 等機敏設定檔）。
+3. 將 `LAH-FE` 編譯後檔案打包為 `LAH-NUXTJS.zip`。
+4. 預設自動輸出至：`d:\DEV\@各所分享區\@智慧管控系統\@更新程式\`。
+
+```powershell
+# 一鍵執行完整流程（yarn build + 打包 www.zip 與 LAH-NUXTJS.zip）
+.\pack.bat
+
+# 或使用 Python 執行（支援選用參數）
+python pack.py
+python pack.py --skip-build   # 略過 yarn build 直接打包
+python pack.py --api-only     # 僅打包 www.zip
+python pack.py --fe-only      # 僅編譯並打包 LAH-NUXTJS.zip
+```
+
+---
+
 ## 🚀 發布與使用者操作說明
 
 發布版本時，請將產出的執行檔與更新壓縮包放在**同一個資料夾**下打包提供給維運人員：
@@ -135,8 +156,10 @@ python -m PyInstaller --noconfirm --onefile --windowed --uac-admin --name "智�
 ```text
 LAH-Updater/
  ├── updater.py                           # 主程式原始碼 (GUI、解壓防呆、Apache 與 PM2 控制)
- ├── build.bat                            # 一鍵打包批次檔 (純 ASCII 轉發，避開 CMD 編碼與 BOM 衝碼)
- ├── build.py                             # Python 原生打包輔助腳本 (處理 PyInstaller 參數與編譯產出)
+ ├── build.bat                            # 一鍵打包安裝程式批次檔 (純 ASCII 轉發，避開 CMD 編碼與 BOM 衝碼)
+ ├── build.py                             # Python 原生 PyInstaller 打包輔助腳本
+ ├── pack.bat                             # 一鍵編譯前端並打包原始碼壓縮包批次檔 (純 ASCII 轉發)
+ ├── pack.py                              # Python 原始碼打包腳本 (執行 yarn build 並產出 www.zip / LAH-NUXTJS.zip)
  ├── AGENTS.md                            # AI 代理人維護與架構指南
  ├── README.md                            # 專案說明與操作指南
  ├── .gitignore                           # Git 忽略檔案設定

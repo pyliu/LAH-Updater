@@ -137,6 +137,16 @@ python -m PyInstaller --noconfirm --onefile --windowed --uac-admin --name "智�
 - `--uac-admin`：會在二進位清單中注入 `<requestedExecutionLevel level="requireAdministrator" ... />`，啟動時即觸發 Windows UAC。
 - 輸出位置：`dist/智慧控管與監控系統 - 自動更新工具.exe`。
 
+### 3.3 打包系統原始碼更新包（`pack.bat` / `pack.py`）
+提供一鍵自動化腳本，先進入 `LAH-FE` 執行 `yarn build`，待完成後依 `zip_api.*` 與 `zip_fe.*` 清單與排除規則將 `LAH-API/www` 與 `LAH-FE` 分別壓縮為 `www.zip` 與 `LAH-NUXTJS.zip`，並輸出至 `d:\DEV\@各所分享區\@智慧管控系統\@更新程式\`：
+```powershell
+# 方式 A：一鍵執行批次檔
+.\pack.bat
+
+# 方式 B：直接執行 Python 腳本（支援 --skip-build, --api-only, --fe-only, --output-dir 參數）
+python pack.py
+```
+
 ---
 
 ## 4. 變更檢查清單 (Review Checklist for Agents)
