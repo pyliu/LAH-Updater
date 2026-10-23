@@ -1,12 +1,14 @@
 # -*- coding: utf-8 -*-
-"""
+r"""
 智慧控管與監控系統 - 原始碼自動編譯與打包腳本 (pack.py)
 
 功能流程：
-1. 進入 LAH-FE 執行 `yarn build` 進行前端正式環境編譯，並等待其完成。
-2. 依據 zip_api.* 規則，將 LAH-API (www) 打包為 www.zip（排除 .env 與 AD 設定檔）。
-3. 依據 zip_fe.* 規則，將 LAH-FE 編譯後檔案打包為 LAH-NUXTJS.zip。
-4. 產出壓縮檔預設輸出至：d:\\DEV\\@各所分享區\\@智慧管控系統\\@更新程式\\
+1. 進入 LAH-FE 執行 `yarn build` 進行前端正式環境編譯，並等待其完成（可使用 --skip-build 略過）。
+2. 依據 zip_api.* 規則，將 LAH-API (www) 打包為 www.zip（後端 PHP7 更新包）。
+3. 將 LAH-API (API) 打包為 LAH-API.zip（後端 PHP8 更新包）。
+4. 依據 zip_fe.* 規則，將 LAH-FE 編譯後檔案打包為 LAH-NUXTJS.zip（前端更新包）。
+5. 產出壓縮檔預設輸出至分享區：d:\DEV\@各所分享區\@智慧管控系統\@更新程式\
+   若該分享區目錄不存在（如於未掛載 D 槽之本機開發環境），自動回退輸出至腳本同層 dist 目錄。
 """
 import argparse
 import fnmatch
@@ -31,7 +33,7 @@ if sys.stderr and hasattr(sys.stderr, "reconfigure"):
 
 DEFAULT_OUTPUT_DIR = r"d:\DEV\@各所分享區\@智慧管控系統\@更新程式"
 
-# 對應 zip_api.txt（基底目錄：LAH-API/www）
+# 對應 zip_api.txt（基底目錄：LAH-API/www - PHP7 API）
 API_INCLUDES = [
     "api",
     "include",
@@ -45,7 +47,7 @@ API_INCLUDES = [
     ".htaccess",
 ]
 
-# 對應 zip_api_exclude.txt（基底目錄：LAH-API/www）
+# 對應 zip_api_exclude.txt（基底目錄：LAH-API/www - PHP7 API）
 API_EXCLUDES = [
     r"include\config\AD.php",
     r"include\config\AD.VALID.php",
@@ -53,6 +55,28 @@ API_EXCLUDES = [
     r"include\config\AD.ALL.php",
     r"include\config\AD.LOCKED.php",
     ".env",
+]
+
+# LAH-API (API - PHP8 API) 打包規則
+API8_INCLUDES = [
+    "*",
+    ".env.example",
+]
+
+API8_EXCLUDES = [
+    ".env",
+    ".git*",
+    ".vscode",
+    "*.log",
+    "*.tmp",
+    "*.bak",
+    "__pycache__",
+    "*.zip",
+    r"include\config\AD.php",
+    r"include\config\AD.VALID.php",
+    r"include\config\AD.INVALID.php",
+    r"include\config\AD.ALL.php",
+    r"include\config\AD.LOCKED.php",
 ]
 
 # 對應 zip_fe.txt（基底目錄：LAH-FE）
@@ -77,13 +101,18 @@ FE_EXCLUDES = [
 
 
 def resolve_project_dirs(script_dir):
-    """自動探測 LAH-API/www 與 LAH-FE 的真實路徑（相容工作區 Junction 與獨立目錄）"""
+    """自動探測 LAH-API/www (PHP7)、LAH-API/API (PHP8) 與 LAH-FE 的真實路徑（相容工作區 Junction 與獨立目錄）"""
     workspace_dir = os.path.dirname(script_dir)
 
     api_candidates = [
         os.path.join(workspace_dir, "LAH-API", "www"),
         r"d:\DEV\lah-workspace\LAH-API\www",
         r"d:\DEV\Land-Affairs-Helper\www",
+    ]
+    api8_candidates = [
+        os.path.join(workspace_dir, "LAH-API", "API"),
+        r"d:\DEV\lah-workspace\LAH-API\API",
+        r"d:\DEV\Land-Affairs-Helper\API",
     ]
     fe_candidates = [
         os.path.join(workspace_dir, "LAH-FE"),
@@ -92,8 +121,9 @@ def resolve_project_dirs(script_dir):
     ]
 
     api_dir = next((p for p in api_candidates if os.path.isdir(p)), api_candidates[0])
+    api8_dir = next((p for p in api8_candidates if os.path.isdir(p)), api8_candidates[0])
     fe_dir = next((p for p in fe_candidates if os.path.isdir(p)), fe_candidates[0])
-    return os.path.realpath(api_dir), os.path.realpath(fe_dir)
+    return os.path.realpath(api_dir), os.path.realpath(api8_dir), os.path.realpath(fe_dir)
 
 
 def is_excluded(rel_path, exclude_patterns):
@@ -239,24 +269,46 @@ def build_zip_package(title, base_dir, zip_path, include_patterns, exclude_patte
 def main():
     parser = argparse.ArgumentParser(description="智慧控管與監控系統 - 原始碼自動編譯與打包工具")
     parser.add_argument("--skip-build", action="store_true", help="略過 LAH-FE 的 yarn build 步驟，直接打包現有檔案")
-    parser.add_argument("--api-only", action="store_true", help="僅打包 LAH-API (www.zip)")
+    parser.add_argument("--api-only", action="store_true", help="僅打包 LAH-API PHP7 (www.zip)")
+    parser.add_argument("--api8-only", action="store_true", help="僅打包 LAH-API PHP8 (LAH-API.zip)")
     parser.add_argument("--fe-only", action="store_true", help="僅編譯並打包 LAH-FE (LAH-NUXTJS.zip)")
-    parser.add_argument("--output-dir", default=DEFAULT_OUTPUT_DIR, help=f"指定輸出目錄（預設：{DEFAULT_OUTPUT_DIR}）")
+    parser.add_argument("--output-dir", default=None, help=f"指定輸出目錄（若未指定且預設分享區不存在，將自動輸出至腳本同層 dist 目錄）")
     args = parser.parse_args()
 
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    api_dir, fe_dir = resolve_project_dirs(script_dir)
-    output_dir = os.path.abspath(args.output_dir)
+    dist_dir = os.path.join(script_dir, "dist")
+    api_dir, api8_dir, fe_dir = resolve_project_dirs(script_dir)
 
-    do_api = not args.fe_only
-    do_fe = not args.api_only
+    # 決定輸出目錄：未指定且預設分享區不存在時自動回退至 dist
+    if args.output_dir:
+        output_dir = os.path.abspath(args.output_dir)
+    else:
+        if os.path.isdir(DEFAULT_OUTPUT_DIR):
+            output_dir = os.path.abspath(DEFAULT_OUTPUT_DIR)
+        else:
+            output_dir = dist_dir
+            print(f"[提示] 預設分享區不存在（{DEFAULT_OUTPUT_DIR}），自動導向本機輸出目錄：{output_dir}")
+
+    os.makedirs(output_dir, exist_ok=True)
+
+    # 決定打包項目：若未指定特定 only 參數，則預設三者全部打包
+    has_specific_target = args.api_only or args.api8_only or args.fe_only
+    if has_specific_target:
+        do_api = args.api_only
+        do_api8 = args.api8_only
+        do_fe = args.fe_only
+    else:
+        do_api = True
+        do_api8 = True
+        do_fe = True
 
     print("=" * 60)
     print("智慧控管與監控系統 - 原始碼打包工具 (LAH-API / LAH-FE)")
     print("=" * 60)
-    print(f"LAH-API 來源：{api_dir}")
-    print(f"LAH-FE  來源：{fe_dir}")
-    print(f"ZIP 輸出目錄：{output_dir}")
+    print(f"LAH-API (PHP7) 來源：{api_dir}")
+    print(f"LAH-API (PHP8) 來源：{api8_dir}")
+    print(f"LAH-FE         來源：{fe_dir}")
+    print(f"ZIP 輸出目錄        ：{output_dir}")
 
     overall_start = time.time()
 
@@ -265,13 +317,19 @@ def main():
         if not run_fe_build(fe_dir):
             sys.exit(1)
 
-    # 2. 打包 LAH-API -> www.zip
+    # 2. 打包 LAH-API (PHP7) -> www.zip
     if do_api:
         www_zip_path = os.path.join(output_dir, "www.zip")
-        if not build_zip_package("LAH-API 後端更新包 (www.zip)", api_dir, www_zip_path, API_INCLUDES, API_EXCLUDES):
+        if not build_zip_package("LAH-API (PHP7) 後端更新包 (www.zip)", api_dir, www_zip_path, API_INCLUDES, API_EXCLUDES):
             sys.exit(1)
 
-    # 3. 打包 LAH-FE -> LAH-NUXTJS.zip
+    # 3. 打包 LAH-API (PHP8) -> LAH-API.zip
+    if do_api8:
+        api8_zip_path = os.path.join(output_dir, "LAH-API.zip")
+        if not build_zip_package("LAH-API (PHP8) 後端更新包 (LAH-API.zip)", api8_dir, api8_zip_path, API8_INCLUDES, API8_EXCLUDES):
+            sys.exit(1)
+
+    # 4. 打包 LAH-FE -> LAH-NUXTJS.zip
     if do_fe:
         fe_zip_path = os.path.join(output_dir, "LAH-NUXTJS.zip")
         if not build_zip_package("LAH-FE 前端更新包 (LAH-NUXTJS.zip)", fe_dir, fe_zip_path, FE_INCLUDES, FE_EXCLUDES):
@@ -283,6 +341,8 @@ def main():
     print(f"輸出位置：{output_dir}")
     if do_api:
         print(f"  - {os.path.join(output_dir, 'www.zip')}")
+    if do_api8:
+        print(f"  - {os.path.join(output_dir, 'LAH-API.zip')}")
     if do_fe:
         print(f"  - {os.path.join(output_dir, 'LAH-NUXTJS.zip')}")
     print("=" * 60)
