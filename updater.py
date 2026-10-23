@@ -20,7 +20,7 @@ from tkinter import ttk, filedialog, messagebox
 from tkinter import scrolledtext
 from tkinter import font as tkfont
 
-# 定義 4 種更新包規格
+# 定義 5 種更新包規格
 PACKAGE_CONFIGS = [
     {
         "id": "www",
@@ -52,6 +52,14 @@ PACKAGE_CONFIGS = [
         "rel_target": "lah-messenger-server",
         "title": "即時通訊伺服器 (lah-messenger-server.zip)",
         "expected_folder": "lah-messenger-server",
+        "is_nodejs": True
+    },
+    {
+        "id": "node",
+        "name": "node.zip",
+        "rel_target": "node",
+        "title": "Node.js 綠色執行環境 (node.zip)",
+        "expected_folder": "node",
         "is_nodejs": True
     }
 ]
@@ -208,30 +216,38 @@ def _decode_console_bytes(raw_bytes):
     return re.sub(r"\x1b\[[0-9;]*[a-zA-Z]", "", text)
 
 
-def resolve_pm2_command():
-    """
+def resolve_pm2_command(root_dir=None):
+    r"""
     解析 Windows 環境下的 pm2 執行檔路徑。
-    優先使用 shutil.which 尋找 pm2.cmd / pm2，若因 UAC 提權導致環境變數遺失，
-    則依序檢查常見的全域 npm 與 NVM 安裝路徑。
+    優先使用綠色便攜環境路徑 (如 C:\AppServ\node\pm2.cmd 或自訂安裝根目錄下的 node\pm2.cmd)，
+    其次使用 shutil.which 尋找 pm2.cmd / pm2，若因 UAC 提權導致環境變數遺失，
+    則依序檢查常見安裝路徑。
     """
+    candidates = []
+    if root_dir:
+        candidates.append(os.path.join(root_dir, "node", "pm2.cmd"))
+    candidates.append(r"C:\AppServ\node\pm2.cmd")
+
+    for path in candidates:
+        if path and os.path.isfile(path):
+            return path
+
     found = shutil.which("pm2.cmd") or shutil.which("pm2")
     if found:
         return found
 
-    candidates = [
-        r"C:\AppServ\node\pm2.cmd",
-    ]
     appdata = os.environ.get("APPDATA", "")
+    localappdata = os.environ.get("LOCALAPPDATA", "")
+    userprofile = os.environ.get("USERPROFILE", "")
+    prog_files = os.environ.get("ProgramFiles", r"C:\Program Files")
+
     if appdata:
         candidates.append(os.path.join(appdata, "npm", "pm2.cmd"))
-    localappdata = os.environ.get("LOCALAPPDATA", "")
     if localappdata:
         candidates.append(os.path.join(localappdata, "Volta", "bin", "pm2.cmd"))
-    userprofile = os.environ.get("USERPROFILE", "")
     if userprofile:
         candidates.append(os.path.join(userprofile, "AppData", "Roaming", "npm", "pm2.cmd"))
         candidates.append(os.path.join(userprofile, "AppData", "Local", "Volta", "bin", "pm2.cmd"))
-    prog_files = os.environ.get("ProgramFiles", r"C:\Program Files")
     candidates.append(os.path.join(prog_files, "nodejs", "pm2.cmd"))
     candidates.append(os.path.join(prog_files, "Volta", "pm2.cmd"))
     candidates.append(r"C:\nvm4w\nodejs\pm2.cmd")
@@ -243,12 +259,91 @@ def resolve_pm2_command():
     return None
 
 
-def restart_pm2_services(log_func):
+def stop_pm2_services(log_func, root_dir=None):
+    """執行 pm2 stop all 暫停所有由 PM2 託管的 Node.js 服務（釋放 node.exe 檔案鎖定）"""
+    log_func("-" * 50, "info")
+    log_func("⏳ 正在執行 [pm2 stop all] 暫停 Node.js 相關服務...", "info")
+
+    pm2_bin = resolve_pm2_command(root_dir)
+    if pm2_bin:
+        cmd = [pm2_bin, "stop", "all", "--no-color"]
+    else:
+        cmd = ["cmd.exe", "/d", "/s", "/c", "pm2 stop all --no-color"]
+
+    try:
+        res = subprocess.run(
+            cmd,
+            capture_output=True,
+            timeout=30,
+            creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
+        )
+        out_text = _decode_console_bytes(res.stdout).strip()
+        err_text = _decode_console_bytes(res.stderr).strip()
+
+        if out_text:
+            for line in out_text.splitlines():
+                if line.strip():
+                    log_func(f"  {line.rstrip()}", "info")
+
+        if res.returncode == 0:
+            log_func("✅ 已成功執行 [pm2 stop all] 暫停 Node.js 專案服務！", "success")
+            return True, ""
+        else:
+            err_msg = err_text or out_text or f"返回碼 {res.returncode}"
+            log_func(f"ℹ️ [pm2 stop all] 回傳狀態 ({res.returncode}): {err_msg}", "info")
+            return False, err_msg
+    except Exception as e:
+        log_func(f"ℹ️ 呼叫 pm2 stop all 略過或異常: {e}", "info")
+        return False, str(e)
+
+
+def kill_pm2_daemon(log_func, root_dir=None):
+    """執行 pm2 kill 徹底終止 PM2 守護程序以完全釋放 node.exe"""
+    log_func("⏳ 正在執行 [pm2 kill] 終止 PM2 守護程序以完全釋放檔案鎖定...", "warning")
+
+    pm2_bin = resolve_pm2_command(root_dir)
+    if pm2_bin:
+        cmd = [pm2_bin, "kill", "--no-color"]
+    else:
+        cmd = ["cmd.exe", "/d", "/s", "/c", "pm2 kill --no-color"]
+
+    try:
+        res = subprocess.run(
+            cmd,
+            capture_output=True,
+            timeout=30,
+            creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
+        )
+        out_text = _decode_console_bytes(res.stdout).strip()
+        if res.returncode == 0:
+            log_func("✅ 已成功執行 [pm2 kill] 完全釋放 PM2 行程！", "success")
+            time.sleep(1)
+            return True, ""
+        else:
+            return False, out_text
+    except Exception as e:
+        log_func(f"ℹ️ 呼叫 pm2 kill 異常: {e}", "info")
+        return False, str(e)
+
+
+def is_file_locked(filepath):
+    """檢測檔案是否已被其他行程開啟鎖定（例如執行中的 .exe）"""
+    if not os.path.exists(filepath):
+        return False
+    try:
+        with open(filepath, "a+b") as f:
+            pass
+        return False
+    except OSError:
+        return True
+
+
+def restart_pm2_services(log_func, root_dir=None):
     """執行 pm2 restart all 重啟所有由 PM2 託管的 Node.js 服務"""
     log_func("-" * 50, "info")
     log_func("⏳ 正在執行 [pm2 restart all] 重啟 Node.js 相關服務...", "info")
 
-    pm2_bin = resolve_pm2_command()
+    pm2_bin = resolve_pm2_command(root_dir)
     if pm2_bin:
         cmd = [pm2_bin, "restart", "all", "--no-color"]
     else:
@@ -387,8 +482,8 @@ class UpdaterApp:
     def __init__(self, root):
         self.root = root
         self.root.title("智慧控管與監控系統 - 自動更新工具")
-        self.root.geometry("980x620")
-        self.root.minsize(860, 560)
+        self.root.geometry("980x660")
+        self.root.minsize(860, 580)
 
         # 基礎路徑
         self.app_dir = get_app_dir()
@@ -958,7 +1053,8 @@ class UpdaterApp:
 
     def _detect_pm2_service(self):
         """偵測本機 PM2 管理套件與指令路徑"""
-        self.pm2_path = resolve_pm2_command()
+        root_dir = self.root_dir_var.get().strip() if hasattr(self, 'root_dir_var') else None
+        self.pm2_path = resolve_pm2_command(root_dir)
         if self.pm2_path:
             self.chk_pm2.configure(
                 text=f"更新後自動重啟 PM2 服務 (已偵測到套件：{os.path.basename(self.pm2_path)}，更新後重啟服務)"
@@ -1098,10 +1194,11 @@ class UpdaterApp:
         summary = "\n".join([f"• {p['name']} ➔ {self.pkg_vars[p['id']]['target_path_var'].get().strip()}" for p in selected_pkgs])
         apache_note = f"\n• 更新前後將自動重啟 Apache 服務 ({self.apache_service_name or '自動搜尋'})" if self.restart_apache_var.get() else ""
         pm2_note = "\n• 更新完成後將自動重啟 PM2 服務 (pm2 restart all)" if self.restart_pm2_var.get() else ""
+        node_note = "\n• 包含 Node.js 綠色執行環境更新，解壓前將安全暫停 Node 服務以釋放檔案鎖定" if any(p["id"] == "node" for p in selected_pkgs) else ""
 
         confirm = messagebox.askyesno(
             "確認開始更新",
-            f"即將開始更新以下項目：\n{summary}{apache_note}{pm2_note}\n\n是否確認立即執行解壓縮覆蓋？"
+            f"即將開始更新以下項目：\n{summary}{apache_note}{pm2_note}{node_note}\n\n是否確認立即執行解壓縮覆蓋？"
         )
         if not confirm:
             return
@@ -1131,6 +1228,29 @@ class UpdaterApp:
                     apache_was_stopped = stop_apache_service(svc_name, self.log)
                 else:
                     self.log("ℹ️ 勾選了重啟 Apache，但系統未偵測到 Apache 服務，跳過停止步驟。", "warning")
+
+            # 步驟 1.5：若有更新 node.zip，執行階梯式安全防護釋放 node.exe 鎖定
+            root_dir = self.root_dir_var.get().strip()
+            is_updating_node = any(p["id"] == "node" for p in selected_pkgs)
+            if is_updating_node:
+                self.set_progress(3, "正在檢查 Node.js 執行狀態並釋放檔案鎖定...")
+                self.log("ℹ️ 偵測到更新項目包含 Node.js 綠色執行環境，執行安全停機防護...", "info")
+                node_tgt = os.path.normpath(self.pkg_vars["node"]["target_path_var"].get().strip()) if "node" in self.pkg_vars else os.path.join(root_dir, "node")
+                target_node_exe = os.path.join(node_tgt, "node.exe")
+
+                # 第一階段：執行 pm2 stop all 暫停工作服務
+                stop_ok, _ = stop_pm2_services(self.log, root_dir)
+
+                # 檢測 node.exe 是否仍被占用（如 PM2 God 守護進程本身使用該 node.exe）
+                if is_file_locked(target_node_exe):
+                    self.log("⚠️ 偵測到 node.exe 仍被背景守護進程鎖定，執行 [pm2 kill] 徹底釋放...", "warning")
+                    kill_ok, _ = kill_pm2_daemon(self.log, root_dir)
+                    if is_file_locked(target_node_exe):
+                        self.log(f"⚠️ 警告：{target_node_exe} 仍處於鎖定狀態，若解壓存取被拒請手動結束 node.exe 行程。", "warning")
+                    else:
+                        self.log("✅ node.exe 檔案鎖定已成功完全解除！", "success")
+                else:
+                    self.log("✅ node.exe 檔案未受鎖定，可安全執行覆蓋解壓。", "info")
 
             # 步驟 2：統計所有選取壓縮包的總檔案數（用於進度計算）
             self.set_progress(5, "正在計算待解壓縮檔案數量...")
@@ -1242,7 +1362,7 @@ class UpdaterApp:
             # 步驟 5：若有勾選「更新後自動重啟 PM2 服務」，自動執行 pm2 restart all
             if self.restart_pm2_var.get():
                 self.set_progress(98, "正在執行 pm2 restart all 重啟 PM2 服務...")
-                pm2_ok, pm2_err = restart_pm2_services(self.log)
+                pm2_ok, pm2_err = restart_pm2_services(self.log, root_dir)
                 elapsed = time.time() - start_time
                 self.set_progress(100, f"✅ 全部更新與 PM2 重啟作業完成！(耗時 {elapsed:.1f} 秒)")
                 if not pm2_ok:

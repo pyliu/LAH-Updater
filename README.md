@@ -6,7 +6,7 @@
 
 ## 📌 系統需求與更新包規格
 
-本工具主要用於快速佈署與更新伺服器核心模組，預設安裝根目錄為 `C:\AppServ`。程式啟動時會自動偵測「與執行檔同目錄」下的 4 種更新壓縮包：
+本工具主要用於快速佈署與更新伺服器核心模組，預設安裝根目錄為 `C:\AppServ`。程式啟動時會自動偵測「與執行檔同目錄」下的 5 種更新壓縮包：
 
 | 壓縮包檔名 | 預設相對路徑 | 預設完整目標路徑 | 說明 |
 | :--- | :--- | :--- | :--- |
@@ -14,6 +14,7 @@
 | **`LAH-NUXTJS.zip`** | `LAH-NUXTJS` | `C:\AppServ\LAH-NUXTJS` | 前端網站 更新包 |
 | **`node_modules.zip`** | `LAH-NUXTJS\node_modules` | `C:\AppServ\LAH-NUXTJS\node_modules` | 前端網站 核心套件 |
 | **`lah-messenger-server.zip`** | `lah-messenger-server` | `C:\AppServ\lah-messenger-server` | 即時通訊推播伺服器 |
+| **`node.zip`** | `node` | `C:\AppServ\node` | Node.js 綠色執行環境 (含 npm, pm2, yarn) |
 
 > 💡 **彈性安裝路徑機制**：
 > - **啟動自動檢查**：程式啟動時會主動檢測預設安裝目錄（`C:\AppServ`）是否存在，若不存在會主動跳出提示導引使用者立即瀏覽選取正確路徑。

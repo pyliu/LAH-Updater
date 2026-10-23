@@ -28,7 +28,7 @@ def get_app_dir():
 ---
 
 ### 2.2 更新包設定規範 (`PACKAGE_CONFIGS`) 與跨專案對應
-目前系統維護 4 種更新包，分別對應 `LAH-Workspace` 工作區內之子專案產出。若未來有新增或調整模組需求，僅需擴充 `PACKAGE_CONFIGS` 清單：
+目前系統維護 5 種更新包，分別對應 `LAH-Workspace` 工作區內之子專案產出。若未來有新增或調整模組需求，僅需擴充 `PACKAGE_CONFIGS` 清單：
 ```python
 PACKAGE_CONFIGS = [
     {
@@ -53,6 +53,7 @@ PACKAGE_CONFIGS = [
 | `LAH-NUXTJS.zip` | `./LAH-FE` | `True` | Nuxt 2 智慧管控前端與排程 (`LAH-FE`, `LAH-SCHEDULER`) |
 | `node_modules.zip` | `./LAH-FE/node_modules` | `True` | 前端執行期 Node.js 依賴套件 |
 | `lah-messenger-server.zip` | `./lah-messenger-server` | `True` | 即時通訊 WebSocket 伺服器 (`LAH-WSS`) |
+| `node.zip` | `C:\AppServ\node` | `True` | Node.js 綠色便攜執行環境 (含 npm, pm2, yarn) |
 
 ---
 
