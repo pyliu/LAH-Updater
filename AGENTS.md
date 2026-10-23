@@ -94,9 +94,9 @@ PACKAGE_CONFIGS = [
 ### 2.6 PM2 Node.js 服務重啟機制 (`resolve_pm2_command` / `restart_pm2_services`)
 - **智慧觸發條件**：僅當本次勾選更新的項目包含 `is_nodejs=True` 之模組（`LAH-NUXTJS.zip`、`node_modules.zip`、`lah-messenger-server.zip`）時，於全部壓縮包解壓與 Apache 恢復完成後、彈出刪除壓縮包確認前，主動詢問使用者是否執行 `pm2 restart all`。
 - **Windows `pm2.cmd` 尋址與執行規範**：
-  - 在 Windows 下，`pm2` 為批次檔（`pm2.cmd`），不可直接以 `subprocess.run(["pm2", ...])` 呼叫（會拋出 `FileNotFoundError`）。
-  - 透過 `resolve_pm2_command()` 優先以 `shutil.which("pm2.cmd")` / `shutil.which("pm2")` 解析；若因 UAC 管理員提權導致 `PATH` 遺失，自動回退檢查 `%APPDATA%\npm\pm2.cmd`、`%USERPROFILE%\AppData\Roaming\npm\pm2.cmd`、`C:\Program Files\nodejs\pm2.cmd` 與 `C:\nvm4w\nodejs\pm2.cmd`。
-  - 執行時透過 `cmd.exe /d /s /c "... restart all --no-color"` 呼叫，設定 60 秒逾時與 `CREATE_NO_WINDOW`，並透過 `_decode_console_bytes` 進行 `utf-8` / `cp950` 解碼與 ANSI 控制碼剝除，將輸出即時寫入 GUI 日誌視窗。
+  - 在 Windows 下，`pm2` 為批次檔（`pm2.cmd`），不可直接以 `subprocess.run(["pm2", ...])`（無副檔名）呼叫（會拋出 `FileNotFoundError`）。
+  - 透過 `resolve_pm2_command()` 優先以 `shutil.which("pm2.cmd")` / `shutil.which("pm2")` 解析；若因 UAC 管理員提權導致 `PATH` 遺失，自動回退檢查 `%APPDATA%\npm\pm2.cmd`、`%LOCALAPPDATA%\Volta\bin\pm2.cmd`、`%USERPROFILE%\AppData\Roaming\npm\pm2.cmd`、`C:\Program Files\nodejs\pm2.cmd`、`C:\Program Files\Volta\pm2.cmd` 與 `C:\nvm4w\nodejs\pm2.cmd`。
+  - 執行時直接以 `[pm2_bin, "restart", "all", "--no-color"]` 串列傳入 `subprocess.run`（避免將含引號路徑字串包入 `cmd.exe /c` 串列時遭 `subprocess.list2cmdline` 轉義為 `\"` 導致命令解析失敗），設定 60 秒逾時與 `CREATE_NO_WINDOW`，並透過 `_decode_console_bytes` 進行 `utf-8` / `cp950` 解碼與 ANSI 控制碼剝除，將輸出即時寫入 GUI 日誌視窗。
 
 ---
 

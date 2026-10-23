@@ -222,11 +222,16 @@ def resolve_pm2_command():
     appdata = os.environ.get("APPDATA", "")
     if appdata:
         candidates.append(os.path.join(appdata, "npm", "pm2.cmd"))
+    localappdata = os.environ.get("LOCALAPPDATA", "")
+    if localappdata:
+        candidates.append(os.path.join(localappdata, "Volta", "bin", "pm2.cmd"))
     userprofile = os.environ.get("USERPROFILE", "")
     if userprofile:
         candidates.append(os.path.join(userprofile, "AppData", "Roaming", "npm", "pm2.cmd"))
+        candidates.append(os.path.join(userprofile, "AppData", "Local", "Volta", "bin", "pm2.cmd"))
     prog_files = os.environ.get("ProgramFiles", r"C:\Program Files")
     candidates.append(os.path.join(prog_files, "nodejs", "pm2.cmd"))
+    candidates.append(os.path.join(prog_files, "Volta", "pm2.cmd"))
     candidates.append(r"C:\nvm4w\nodejs\pm2.cmd")
 
     for path in candidates:
@@ -243,7 +248,7 @@ def restart_pm2_services(log_func):
 
     pm2_bin = resolve_pm2_command()
     if pm2_bin:
-        cmd = ["cmd.exe", "/d", "/s", "/c", f'"{pm2_bin}" restart all --no-color']
+        cmd = [pm2_bin, "restart", "all", "--no-color"]
     else:
         cmd = ["cmd.exe", "/d", "/s", "/c", "pm2 restart all --no-color"]
 
