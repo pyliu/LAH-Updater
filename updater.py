@@ -29,7 +29,7 @@ PACKAGE_CONFIGS = [
         "id": "www",
         "name": "www.zip",
         "rel_target": "www",
-        "title": "後端API 更新包 (www.zip)",
+        "title": "後端 PHP7 更新包 (www.zip)",
         "expected_folder": "www",
         "is_nodejs": False
     },
@@ -37,7 +37,7 @@ PACKAGE_CONFIGS = [
         "id": "lah_api",
         "name": "LAH-API.zip",
         "rel_target": "LAH-API",
-        "title": "現代化後端API (LAH-API.zip)",
+        "title": "後端 PHP8 更新包 (LAH-API.zip)",
         "expected_folder": "LAH-API",
         "alt_folders": ["api"],
         "is_nodejs": False
@@ -811,8 +811,8 @@ class UpdaterApp:
     def __init__(self, root):
         self.root = root
         self.root.title("智慧控管與監控系統 - 自動更新工具")
-        self.root.geometry("980x660")
-        self.root.minsize(860, 580)
+        self.root.geometry("980x720")
+        self.root.minsize(860, 640)
 
         # 基礎路徑
         self.app_dir = get_app_dir()
@@ -891,12 +891,12 @@ class UpdaterApp:
 
     def _build_ui(self):
         # 主容器
-        main_frame = ttk.Frame(self.root, padding="14")
+        main_frame = ttk.Frame(self.root, padding="10")
         main_frame.pack(fill=tk.BOTH, expand=True)
 
-        # 1. 頂部標題區塊
+        # 1. 頂部標題區塊 (side=tk.TOP)
         header_frame = ttk.Frame(main_frame)
-        header_frame.pack(fill=tk.X, pady=(0, 8))
+        header_frame.pack(side=tk.TOP, fill=tk.X, pady=(0, 6))
 
         title_label = ttk.Label(
             header_frame,
@@ -915,9 +915,50 @@ class UpdaterApp:
         )
         admin_label.pack(side=tk.RIGHT, padx=5)
 
-        # 2. 安裝根目錄選擇區塊
-        dir_frame = ttk.LabelFrame(main_frame, text=" 📂 安裝根目錄設定 (預設連動基底) ", padding="8")
-        dir_frame.pack(fill=tk.X, pady=(0, 8))
+        # 【關鍵佈局順序修復】：底部按鈕列必須在中央展開區塊之前優先向 side=tk.BOTTOM pack！
+        # 如此無論視窗解析度或 DPI 縮放為何，底部控制按鈕永遠 100% 完整保留，絕對不會被擠壓或裁切！
+        bottom_frame = ttk.Frame(main_frame)
+        bottom_frame.pack(side=tk.BOTTOM, fill=tk.X, pady=(6, 0))
+
+        self.btn_exit = ttk.Button(bottom_frame, text="關閉離開", command=self._on_close, width=12)
+        self.btn_exit.pack(side=tk.RIGHT, padx=(8, 0))
+
+        self.btn_start = tk.Button(
+            bottom_frame,
+            text="🚀 開始更新",
+            command=self.start_update_thread,
+            font=("Microsoft JhengHei UI", 14, "bold"),
+            bg="#1976d2",
+            fg="#ffffff",
+            activebackground="#1565c0",
+            activeforeground="#ffffff",
+            relief=tk.FLAT,
+            padx=18,
+            pady=4,
+            cursor="hand2"
+        )
+        self.btn_start.pack(side=tk.RIGHT, padx=(8, 0))
+
+        self.btn_view_log = ttk.Button(
+            bottom_frame,
+            text="📊 檢視執行日誌",
+            command=self._open_progress_dialog,
+            width=16
+        )
+        self.btn_view_log.pack(side=tk.RIGHT, padx=(8, 0))
+
+        self.btn_view_notes = ttk.Button(
+            bottom_frame,
+            text="📋 查看更新說明",
+            command=self._show_release_notes_dialog,
+            state="disabled",
+            width=16
+        )
+        self.btn_view_notes.pack(side=tk.RIGHT)
+
+        # 2. 安裝根目錄選擇區塊 (side=tk.TOP)
+        dir_frame = ttk.LabelFrame(main_frame, text=" 📂 安裝根目錄設定 (預設連動基底) ", padding="6")
+        dir_frame.pack(side=tk.TOP, fill=tk.X, pady=(0, 6))
 
         dir_inner = ttk.Frame(dir_frame)
         dir_inner.pack(fill=tk.X)
@@ -929,9 +970,9 @@ class UpdaterApp:
         self.btn_browse = ttk.Button(dir_inner, text="瀏覽...", command=self._browse_root_dir, width=10)
         self.btn_browse.pack(side=tk.RIGHT)
 
-        # 3. 更新包偵測清單區塊
-        pkg_frame = ttk.LabelFrame(main_frame, text=" 📦 更新包偵測與各模組安裝路徑 ", padding="8")
-        pkg_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 8))
+        # 3. 更新包偵測清單區塊 (side=tk.TOP, 自適應剩餘中央空間)
+        pkg_frame = ttk.LabelFrame(main_frame, text=" 📦 更新包偵測與各模組安裝路徑 ", padding="6")
+        pkg_frame.pack(side=tk.TOP, fill=tk.BOTH, expand=True, pady=(0, 6))
 
         # 表頭提示
         header_hint = ttk.Label(
@@ -1061,46 +1102,6 @@ class UpdaterApp:
             width=18
         )
         self.btn_align_pm2.pack(side=tk.RIGHT)
-
-        # 4. 底部按鈕列（優先向底部 pack，確保在任何解析度或縮放下永遠固定於底端）
-        bottom_frame = ttk.Frame(main_frame)
-        bottom_frame.pack(side=tk.BOTTOM, fill=tk.X, pady=(8, 0))
-
-        self.btn_exit = ttk.Button(bottom_frame, text="關閉離開", command=self._on_close, width=12)
-        self.btn_exit.pack(side=tk.RIGHT, padx=(8, 0))
-
-        self.btn_start = tk.Button(
-            bottom_frame,
-            text="🚀 開始更新",
-            command=self.start_update_thread,
-            font=("Microsoft JhengHei UI", 14, "bold"),
-            bg="#1976d2",
-            fg="#ffffff",
-            activebackground="#1565c0",
-            activeforeground="#ffffff",
-            relief=tk.FLAT,
-            padx=18,
-            pady=4,
-            cursor="hand2"
-        )
-        self.btn_start.pack(side=tk.RIGHT, padx=(8, 0))
-
-        self.btn_view_log = ttk.Button(
-            bottom_frame,
-            text="📊 檢視執行日誌",
-            command=self._open_progress_dialog,
-            width=16
-        )
-        self.btn_view_log.pack(side=tk.RIGHT, padx=(8, 0))
-
-        self.btn_view_notes = ttk.Button(
-            bottom_frame,
-            text="📋 查看更新說明",
-            command=self._show_release_notes_dialog,
-            state="disabled",
-            width=16
-        )
-        self.btn_view_notes.pack(side=tk.RIGHT)
 
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
 

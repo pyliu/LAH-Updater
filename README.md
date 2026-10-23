@@ -10,8 +10,8 @@
 
 | 壓縮包檔名 | 預設相對路徑 | 預設完整目標路徑 | 說明 |
 | :--- | :--- | :--- | :--- |
-| **`www.zip`** | `www` | `C:\AppServ\www` | 傳統後端API 更新包 (舊軌 PHP 7) |
-| **`LAH-API.zip`** | `LAH-API` | `C:\AppServ\LAH-API` | 現代化後端API 更新包 (新軌 PHP 8.5 / v1) |
+| **`www.zip`** | `www` | `C:\AppServ\www` | 後端 PHP7 更新包 (舊軌 PHP 7) |
+| **`LAH-API.zip`** | `LAH-API` | `C:\AppServ\LAH-API` | 後端 PHP8 更新包 (新軌 PHP 8.5 / v1) |
 | **`LAH-NUXTJS.zip`** | `LAH-NUXTJS` | `C:\AppServ\LAH-NUXTJS` | 前端網站 更新包 |
 | **`node_modules.zip`** | `LAH-NUXTJS\node_modules` | `C:\AppServ\LAH-NUXTJS\node_modules` | 前端網站 核心套件 |
 | **`lah-messenger-server.zip`** | `lah-messenger-server` | `C:\AppServ\lah-messenger-server` | 即時通訊推播伺服器 |
