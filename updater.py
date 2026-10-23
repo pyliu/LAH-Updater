@@ -218,7 +218,9 @@ def resolve_pm2_command():
     if found:
         return found
 
-    candidates = []
+    candidates = [
+        r"C:\AppServ\node\pm2.cmd",
+    ]
     appdata = os.environ.get("APPDATA", "")
     if appdata:
         candidates.append(os.path.join(appdata, "npm", "pm2.cmd"))
