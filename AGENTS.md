@@ -92,8 +92,12 @@ PACKAGE_CONFIGS = [
 
 ---
 
-### 2.6 PM2 Node.js 服務重啟機制 (`resolve_pm2_command` / `restart_pm2_services`)
-- **智慧觸發條件**：僅當本次勾選更新的項目包含 `is_nodejs=True` 之模組（`LAH-NUXTJS.zip`、`node_modules.zip`、`lah-messenger-server.zip`）時，於全部壓縮包解壓與 Apache 恢復完成後、彈出刪除壓縮包確認前，主動詢問使用者是否執行 `pm2 restart all`。
+### 2.6 PM2 Node.js 服務重啟與核心守護進程校正機制 (`resolve_pm2_command` / `query_pm2_daemon_info` / `align_pm2_daemon_to_portable`)
+- **智慧觸發條件**：僅當本次勾選更新的項目包含 `is_nodejs=True` 之模組（`LAH-NUXTJS.zip`、`node_modules.zip`、`lah-messenger-server.zip`、`node.zip`）時，於全部壓縮包解壓與 Apache 恢復完成後，自動執行 PM2 重啟作業。
+- **核心守護進程 (Daemon) 實體隔離檢測**：
+  - 在 PM2 的 `cluster` 模式下，子行程強制繼承啟動 PM2 Daemon 自身的 Node.js 執行期。
+  - 透過 `query_pm2_daemon_info()` 探測 `Daemon.js` 行程之 `ExecutablePath`；若發現現有 Daemon 是以全域舊 Node 運行，自動或手動執行 `align_pm2_daemon_to_portable`（`pm2 save` ➔ `pm2 kill` ➔ `<root_dir>\node\pm2.cmd resurrect` ➔ `pm2 save`），確保 100% 綁定專屬綠色 Node。
+  - 介面提供 `self.lbl_pm2_status` 即時燈號與「⚡ 立即校正 PM2 核心」按鈕，並於完成時透過 `check_pm2_autostart_config()` 檢視伺服器開機自啟動設定。
 - **Windows `pm2.cmd` 尋址與執行規範**：
   - 在 Windows 下，`pm2` 為批次檔（`pm2.cmd`），不可直接以 `subprocess.run(["pm2", ...])`（無副檔名）呼叫（會拋出 `FileNotFoundError`）。
   - 透過 `resolve_pm2_command()` 優先以 `shutil.which("pm2.cmd")` / `shutil.which("pm2")` 解析；若因 UAC 管理員提權導致 `PATH` 遺失，自動回退檢查 `%APPDATA%\npm\pm2.cmd`、`%LOCALAPPDATA%\Volta\bin\pm2.cmd`、`%USERPROFILE%\AppData\Roaming\npm\pm2.cmd`、`C:\Program Files\nodejs\pm2.cmd`、`C:\Program Files\Volta\pm2.cmd` 與 `C:\nvm4w\nodejs\pm2.cmd`。

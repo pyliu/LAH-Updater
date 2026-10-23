@@ -13,6 +13,7 @@ import zipfile
 import threading
 import subprocess
 import ctypes
+import json
 from datetime import datetime
 
 import tkinter as tk
@@ -381,6 +382,230 @@ def restart_pm2_services(log_func, root_dir=None):
         return False, msg
 
 
+def query_pm2_daemon_info(root_dir=None):
+    """
+    精準偵測目前運行中的 PM2 God Daemon 核心進程資訊。
+    回傳字典：
+    {
+        "is_running": bool,
+        "pid": int or None,
+        "exe_path": str,
+        "is_target_node": bool,
+        "target_node_path": str
+    }
+    """
+    target_root = root_dir if (root_dir and os.path.exists(root_dir)) else r"C:\AppServ"
+    target_node = os.path.normpath(os.path.join(target_root, "node", "node.exe"))
+
+    res_dict = {
+        "is_running": False,
+        "pid": None,
+        "exe_path": "",
+        "is_target_node": False,
+        "target_node_path": target_node
+    }
+
+    try:
+        ps_cmd = (
+            'Get-CimInstance Win32_Process | '
+            'Where-Object { $_.Name -like "*node*" -and $_.CommandLine -like "*Daemon.js*" } | '
+            'Select-Object -First 1 -Property ProcessId, ExecutablePath | '
+            'ConvertTo-Json'
+        )
+        cmd = ['powershell', '-NoProfile', '-Command', ps_cmd]
+        res = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=8,
+            creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
+        )
+        out = res.stdout.strip()
+        if out:
+            data = json.loads(out)
+            if data and isinstance(data, dict):
+                pid = data.get("ProcessId")
+                exe = data.get("ExecutablePath", "")
+                if pid and exe:
+                    norm_exe = os.path.normpath(exe)
+                    res_dict["is_running"] = True
+                    res_dict["pid"] = pid
+                    res_dict["exe_path"] = norm_exe
+                    res_dict["is_target_node"] = (norm_exe.lower() == target_node.lower())
+    except Exception:
+        pass
+
+    return res_dict
+
+
+def check_pm2_autostart_config():
+    """
+    檢查系統中是否已設定 PM2 開機自啟動（Windows 服務、工作排程器、啟動捷徑）
+    """
+    results = {
+        "services": [],
+        "tasks": [],
+        "startup_shortcuts": []
+    }
+
+    # 1. Windows 服務
+    try:
+        ps_cmd = (
+            'Get-CimInstance Win32_Service | '
+            'Where-Object { $_.Name -like "*pm2*" -or $_.PathName -like "*pm2*" } | '
+            'Select-Object Name, State, StartMode, PathName | '
+            'ConvertTo-Json'
+        )
+        res = subprocess.run(
+            ['powershell', '-NoProfile', '-Command', ps_cmd],
+            capture_output=True, text=True, timeout=8,
+            creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
+        )
+        out = res.stdout.strip()
+        if out:
+            data = json.loads(out)
+            if isinstance(data, dict):
+                results["services"].append(data)
+            elif isinstance(data, list):
+                results["services"].extend(data)
+    except Exception:
+        pass
+
+    # 2. 工作排程器
+    try:
+        ps_cmd = (
+            'Get-ScheduledTask | '
+            'Where-Object { $_.TaskName -like "*pm2*" } | '
+            'Select-Object TaskName, State | '
+            'ConvertTo-Json'
+        )
+        res = subprocess.run(
+            ['powershell', '-NoProfile', '-Command', ps_cmd],
+            capture_output=True, text=True, timeout=8,
+            creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
+        )
+        out = res.stdout.strip()
+        if out:
+            data = json.loads(out)
+            if isinstance(data, dict):
+                results["tasks"].append(data)
+            elif isinstance(data, list):
+                results["tasks"].extend(data)
+    except Exception:
+        pass
+
+    # 3. 啟動資料夾
+    startup_dirs = [
+        os.path.join(os.environ.get("ProgramData", r"C:\ProgramData"), r"Microsoft\Windows\Start Menu\Programs\Startup"),
+        os.path.join(os.environ.get("APPDATA", ""), r"Microsoft\Windows\Start Menu\Programs\Startup")
+    ]
+    for sdir in startup_dirs:
+        if os.path.isdir(sdir):
+            for fname in os.listdir(sdir):
+                if "pm2" in fname.lower():
+                    results["startup_shortcuts"].append(os.path.join(sdir, fname))
+
+    return results
+
+
+def align_pm2_daemon_to_portable(log_func, root_dir=None):
+    r"""
+    將運行中的 PM2 God Daemon 核心進程無痛切換綁定至目標綠色版 Node (如 C:\AppServ\node\node.exe)。
+    標準流程：
+    1. pm2 save (儲存當前受管程序清單)
+    2. pm2 kill (結束目前運行於舊 Node 的 PM2 Daemon)
+    3. 等候 1.5 秒讓 Windows 完全釋放控制代碼
+    4. <root_dir>\node\pm2.cmd resurrect (透過綠色 node 重新喚醒全新 PM2 Daemon 並拉起服務)
+    5. <root_dir>\node\pm2.cmd save (儲存最新狀態)
+    """
+    target_root = root_dir if (root_dir and os.path.exists(root_dir)) else r"C:\AppServ"
+    target_pm2 = os.path.normpath(os.path.join(target_root, "node", "pm2.cmd"))
+    current_pm2 = resolve_pm2_command(target_root) or "pm2.cmd"
+
+    log_func("-" * 50, "info")
+    log_func("🔄 正在執行 PM2 核心守護進程切換流程 (save ➔ kill ➔ resurrect ➔ save)...", "info")
+
+    # 步驟 1: pm2 save
+    log_func("  [1/4] 正在儲存當前 PM2 受控服務清單 (pm2 save)...", "info")
+    try:
+        subprocess.run(
+            [current_pm2, "save", "--force", "--no-color"],
+            capture_output=True,
+            timeout=30,
+            creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
+        )
+    except Exception as e:
+        log_func(f"  ⚠️ pm2 save 執行提示: {e}", "warning")
+
+    # 步驟 2: pm2 kill
+    log_func("  [2/4] 正在終止舊版 PM2 核心守護進程 (pm2 kill)...", "warning")
+    try:
+        subprocess.run(
+            [current_pm2, "kill", "--no-color"],
+            capture_output=True,
+            timeout=30,
+            creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
+        )
+    except Exception as e:
+        log_func(f"  ⚠️ pm2 kill 執行提示: {e}", "warning")
+
+    time.sleep(1.5)
+
+    # 步驟 3: target_pm2 resurrect
+    if os.path.isfile(target_pm2):
+        cmd_resurrect = [target_pm2, "resurrect", "--no-color"]
+    else:
+        cmd_resurrect = ["cmd.exe", "/d", "/s", "/c", "pm2 resurrect --no-color"]
+
+    log_func("  [3/4] 正在以綠色環境喚醒全新 PM2 核心守護進程 (pm2 resurrect)...", "info")
+    try:
+        res = subprocess.run(
+            cmd_resurrect,
+            capture_output=True,
+            timeout=60,
+            creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
+        )
+        out_text = _decode_console_bytes(res.stdout).strip()
+        if out_text:
+            for line in out_text.splitlines():
+                if line.strip():
+                    log_func(f"    {line.rstrip()}", "info")
+    except Exception as e:
+        log_func(f"  ❌ pm2 resurrect 執行失敗: {e}", "error")
+        return False, str(e)
+
+    # 步驟 4: target_pm2 save
+    if os.path.isfile(target_pm2):
+        cmd_save = [target_pm2, "save", "--force", "--no-color"]
+    else:
+        cmd_save = ["cmd.exe", "/d", "/s", "/c", "pm2 save --force --no-color"]
+
+    log_func("  [4/4] 正在儲存新核心狀態 (pm2 save)...", "info")
+    try:
+        subprocess.run(
+            cmd_save,
+            capture_output=True,
+            timeout=30,
+            creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
+        )
+    except Exception:
+        pass
+
+    # 檢測切換後成果
+    info = query_pm2_daemon_info(target_root)
+    if info["is_running"] and info["is_target_node"]:
+        log_func(f"✅ PM2 核心守護進程已成功綁定至：{info['exe_path']} (PID: {info['pid']})！", "success")
+        return True, ""
+    elif info["is_running"]:
+        msg = f"切換後 PM2 核心仍為: {info['exe_path']}"
+        log_func(f"⚠️ {msg}", "warning")
+        return False, msg
+    else:
+        msg = "切換後未偵測到 PM2 Daemon 運行"
+        log_func(f"ℹ️ {msg}", "info")
+        return True, msg
+
+
 def get_zip_member_path(info):
     """
     取得 ZipInfo 成員的檔名，並處理繁體中文 Windows 舊版壓縮常見的編碼問題 (CP437/CP950/UTF-8)
@@ -547,6 +772,7 @@ class UpdaterApp:
 
         # PM2 自動重啟勾選（預設留白，偵測到本機 PM2 套件時自動勾選）
         self.restart_pm2_var = tk.BooleanVar(value=False)
+        self.pm2_daemon_status_var = tk.StringVar(value="⚪ 偵測中...")
 
         # 進度百分比與狀態文字
         self.progress_percent_var = tk.StringVar(value="0%")
@@ -707,12 +933,30 @@ class UpdaterApp:
 
         self.chk_pm2 = ttk.Checkbutton(
             ctrl_row_pm2,
-            text="更新後自動重啟 PM2 服務 (更新後重啟服務)",
+            text="更新後自動重啟 PM2 服務",
             variable=self.restart_pm2_var,
             onvalue=True,
             offvalue=False
         )
         self.chk_pm2.pack(side=tk.LEFT)
+
+        # PM2 核心守護進程綁定狀態標籤
+        self.lbl_pm2_status = tk.Label(
+            ctrl_row_pm2,
+            textvariable=self.pm2_daemon_status_var,
+            font=("Microsoft JhengHei UI", 10, "bold"),
+            fg="#555555"
+        )
+        self.lbl_pm2_status.pack(side=tk.LEFT, padx=(10, 6))
+
+        # 手動一鍵校正 PM2 核心按鈕
+        self.btn_align_pm2 = ttk.Button(
+            ctrl_row_pm2,
+            text="⚡ 立即校正 PM2 核心",
+            command=self.manual_align_pm2_daemon,
+            width=18
+        )
+        self.btn_align_pm2.pack(side=tk.RIGHT)
 
         # 4. 底部按鈕列（優先向底部 pack，確保在任何解析度或縮放下永遠固定於底端）
         bottom_frame = ttk.Frame(main_frame)
@@ -1052,21 +1296,130 @@ class UpdaterApp:
             self.log("未在系統中偵測到常見 Apache 服務 (如 Apache2.4)，若有需求請確認服務名稱。", "warning")
 
     def _detect_pm2_service(self):
-        """偵測本機 PM2 管理套件與指令路徑"""
+        """偵測本機 PM2 管理套件與指令路徑，並同步更新 PM2 Daemon 核心綁定狀態"""
         root_dir = self.root_dir_var.get().strip() if hasattr(self, 'root_dir_var') else None
         self.pm2_path = resolve_pm2_command(root_dir)
         if self.pm2_path:
             self.chk_pm2.configure(
-                text=f"更新後自動重啟 PM2 服務 (已偵測到套件：{os.path.basename(self.pm2_path)}，更新後重啟服務)"
+                text=f"更新後自動重啟 PM2 服務 (套件：{os.path.basename(self.pm2_path)})"
             )
             self.restart_pm2_var.set(True)
             self.log(f"已偵測到本機 PM2 管理套件：[{self.pm2_path}]", "info")
         else:
             self.chk_pm2.configure(
-                text="更新後自動重啟 PM2 服務 (系統未偵測到 PM2 管理套件)"
+                text="更新後自動重啟 PM2 服務 (未偵測到套件)"
             )
             self.restart_pm2_var.set(False)
             self.log("未在系統中偵測到常見 PM2 管理套件 (pm2.cmd)，若有需求請確認安裝與 PATH 環境變數。", "warning")
+
+        self.update_pm2_daemon_status()
+
+    def update_pm2_daemon_status(self):
+        """查詢並更新主介面上 PM2 核心守護進程的即時綁定狀態標籤"""
+        root_dir = self.root_dir_var.get().strip() if hasattr(self, 'root_dir_var') else None
+
+        def _query_and_set():
+            info = query_pm2_daemon_info(root_dir)
+
+            def _apply_ui():
+                if not hasattr(self, 'lbl_pm2_status') or not self.lbl_pm2_status.winfo_exists():
+                    return
+                if info["is_running"]:
+                    if info["is_target_node"]:
+                        self.pm2_daemon_status_var.set(f"🟢 核心：{info['exe_path']} (已綁定綠色版)")
+                        self.lbl_pm2_status.config(fg="#2e7d32")
+                        self.btn_align_pm2.configure(state="normal", text="⚡ 重新校正 PM2 核心")
+                    else:
+                        self.pm2_daemon_status_var.set(f"🟡 核心：{info['exe_path']} (非綠色版，點擊校正)")
+                        self.lbl_pm2_status.config(fg="#e65100")
+                        self.btn_align_pm2.configure(state="normal", text="⚡ 立即校正 PM2 核心")
+                else:
+                    self.pm2_daemon_status_var.set("⚪ 核心：PM2 守護程序未運行 (啟動將以綠色版喚醒)")
+                    self.lbl_pm2_status.config(fg="#666666")
+                    self.btn_align_pm2.configure(state="normal", text="⚡ 喚醒綠色 PM2 核心")
+
+            self.root.after(0, _apply_ui)
+
+        threading.Thread(target=_query_and_set, daemon=True).start()
+
+    def manual_align_pm2_daemon(self):
+        r"""手動觸發一鍵校正切換 PM2 核心至 C:\AppServ\node"""
+        if self.is_updating:
+            messagebox.showwarning("提示", "系統正在執行更新作業，請稍候再進行 PM2 核心校正！")
+            return
+
+        root_dir = self.root_dir_var.get().strip()
+        target_node = os.path.normpath(os.path.join(root_dir, "node", "node.exe"))
+
+        confirm = messagebox.askyesno(
+            "PM2 核心進程校正確認",
+            f"即將切換 PM2 核心守護進程至專屬綠色環境：\n{target_node}\n\n"
+            "操作流程：\n"
+            "1. 儲存當前受控服務清單 (pm2 save)\n"
+            "2. 結束當前運行之 PM2 Daemon (pm2 kill)\n"
+            "3. 調用綠色 Node 重新喚醒守護進程並恢復服務 (pm2 resurrect)\n"
+            "4. 儲存新核心狀態 (pm2 save)\n\n"
+            "是否立即執行校正？"
+        )
+        if not confirm:
+            return
+
+        self._open_progress_dialog()
+        self.set_ui_updating_state(True)
+
+        def _worker():
+            self.log("=" * 60, "info")
+            self.log("⚡ 開始執行 PM2 核心守護進程切換與校正作業...", "info")
+            self.set_progress(15, "正在執行 PM2 核心切換流程...")
+
+            ok, msg = align_pm2_daemon_to_portable(self.log, root_dir)
+
+            self.set_progress(80, "正在檢查伺服器開機自啟動設定...")
+            autostart = check_pm2_autostart_config()
+
+            self.set_progress(100, "PM2 核心校正作業完成！")
+            self.log("=" * 60, "success")
+
+            # 彙整開機自啟動提示
+            svc_info = [s.get("Name", "PM2") for s in autostart["services"]]
+            task_info = [t.get("TaskName", "PM2") for t in autostart["tasks"]]
+            sc_info = [os.path.basename(p) for p in autostart["startup_shortcuts"]]
+
+            auto_lines = []
+            if svc_info:
+                auto_lines.append(f"• 註冊之 Windows 服務：{', '.join(svc_info)}")
+            if task_info:
+                auto_lines.append(f"• 登記之工作排程：{', '.join(task_info)}")
+            if sc_info:
+                auto_lines.append(f"• 啟動資料夾捷徑：{', '.join(sc_info)}")
+
+            if not auto_lines:
+                autostart_hint = "\n\n💡 提示：目前伺服器尚未註冊開機自啟動 Windows 服務或排程。\n若有開機自動啟動需求，可至各專案目錄執行 start.bat 或建立開機捷徑。"
+            else:
+                autostart_hint = "\n\n📌 伺服器開機自啟動設定偵測：\n" + "\n".join(auto_lines)
+
+            def _done():
+                self.set_ui_updating_state(False)
+                self.update_pm2_daemon_status()
+                parent_w = self.progress_dlg if (self.progress_dlg and self.progress_dlg.winfo_exists()) else self.root
+                if ok:
+                    messagebox.showinfo(
+                        "PM2 核心校正成功",
+                        f"🎉 PM2 核心守護進程已順利綁定至綠色便攜環境！\n\n"
+                        f"• 核心執行檔：{target_node}\n"
+                        f"• 所有受管服務已透過 pm2 resurrect 恢復運作。{autostart_hint}",
+                        parent=parent_w
+                    )
+                else:
+                    messagebox.showwarning(
+                        "PM2 核心校正提示",
+                        f"校正過程回傳狀態：\n{msg}{autostart_hint}",
+                        parent=parent_w
+                    )
+
+            self.root.after(0, _done)
+
+        threading.Thread(target=_worker, daemon=True).start()
 
     def rescan(self):
         """重新掃描更新包與更新說明檔案"""
@@ -1156,6 +1509,8 @@ class UpdaterApp:
         self.btn_rescan.configure(state=state)
         self.chk_apache.configure(state=state)
         self.chk_pm2.configure(state=state)
+        if hasattr(self, 'btn_align_pm2'):
+            self.btn_align_pm2.configure(state=state)
 
         for p_id in self.pkg_vars:
             exists = self.pkg_vars[p_id]["exists"]
@@ -1359,29 +1714,45 @@ class UpdaterApp:
             self.log("=" * 60, "success")
             self.log(f"🎉 全部選取的更新包已順利更新完成！(總耗時: {elapsed:.1f} 秒)", "success")
 
-            # 步驟 5：若有勾選「更新後自動重啟 PM2 服務」，自動執行 pm2 restart all
+            # 步驟 5：若有勾選「更新後自動重啟 PM2 服務」，自動執行重啟或核心校正
             if self.restart_pm2_var.get():
-                self.set_progress(98, "正在執行 pm2 restart all 重啟 PM2 服務...")
-                pm2_ok, pm2_err = restart_pm2_services(self.log, root_dir)
-                elapsed = time.time() - start_time
-                self.set_progress(100, f"✅ 全部更新與 PM2 重啟作業完成！(耗時 {elapsed:.1f} 秒)")
-                if not pm2_ok:
-                    warn_event = threading.Event()
+                self.set_progress(97, "正在檢查 PM2 核心守護進程綁定狀態...")
+                daemon_info = query_pm2_daemon_info(root_dir)
+                target_node = os.path.normpath(os.path.join(root_dir, "node", "node.exe"))
 
-                    def _warn_pm2():
-                        try:
-                            parent_w = self.progress_dlg if (self.progress_dlg and self.progress_dlg.winfo_exists()) else self.root
-                            messagebox.showwarning(
-                                "PM2 重啟提醒",
-                                f"執行「pm2 restart all」時回傳非預期結果：\n{pm2_err}\n\n"
-                                "請稍後於終端機手動執行 pm2 restart all 或檢查 PM2 服務狀態。",
-                                parent=parent_w
-                            )
-                        finally:
-                            warn_event.set()
+                if daemon_info["is_running"] and not daemon_info["is_target_node"]:
+                    self.log(f"⚠️ 偵測到現有 PM2 核心由外部 Node 運行 [{daemon_info['exe_path']}]", "warning")
+                    self.log(f"🚀 正在自動執行無痛切換：將 PM2 核心校正綁定至綠色環境 ({target_node})...", "info")
+                    align_ok, align_msg = align_pm2_daemon_to_portable(self.log, root_dir)
+                    elapsed = time.time() - start_time
+                    self.set_progress(100, f"✅ 全部更新與 PM2 核心切換完成！(耗時 {elapsed:.1f} 秒)")
+                    if not align_ok:
+                        self.log(f"⚠️ PM2 核心切換回傳警示: {align_msg}", "warning")
+                else:
+                    self.set_progress(98, "正在執行 pm2 restart all 重啟 PM2 服務...")
+                    pm2_ok, pm2_err = restart_pm2_services(self.log, root_dir)
+                    elapsed = time.time() - start_time
+                    self.set_progress(100, f"✅ 全部更新與 PM2 重啟作業完成！(耗時 {elapsed:.1f} 秒)")
+                    if not pm2_ok:
+                        warn_event = threading.Event()
 
-                    self.root.after(0, _warn_pm2)
-                    warn_event.wait()
+                        def _warn_pm2():
+                            try:
+                                parent_w = self.progress_dlg if (self.progress_dlg and self.progress_dlg.winfo_exists()) else self.root
+                                messagebox.showwarning(
+                                    "PM2 重啟提醒",
+                                    f"執行 PM2 服務重啟時回傳非預期結果：\n{pm2_err}\n\n"
+                                    "請稍後於終端機手動執行 pm2 restart all 或檢查 PM2 服務狀態。",
+                                    parent=parent_w
+                                )
+                            finally:
+                                warn_event.set()
+
+                        self.root.after(0, _warn_pm2)
+                        warn_event.wait()
+
+                # 即時更新主視窗狀態標籤
+                self.root.after(0, self.update_pm2_daemon_status)
             else:
                 self.log("ℹ️ 未勾選「更新後重啟 PM2 服務」，略過 PM2 重啟作業。", "info")
 
