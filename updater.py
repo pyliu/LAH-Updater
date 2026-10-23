@@ -13,7 +13,9 @@ import zipfile
 import threading
 import subprocess
 import ctypes
+from ctypes import wintypes
 import json
+import winreg
 from datetime import datetime
 
 import tkinter as tk
@@ -260,6 +262,71 @@ def resolve_pm2_command(root_dir=None):
     return None
 
 
+def register_path_to_user_environment(target_dir, log_func=None):
+    """
+    將指定目錄自動登錄至 Windows 目前使用者 (HKCU) 的 PATH 環境變數最前端。
+    使用 Python 標準庫 winreg 讀寫註冊表，並透過 ctypes 廣播 WM_SETTINGCHANGE。
+    """
+    if not target_dir or not os.path.isdir(target_dir):
+        return False, f"目錄不存在: {target_dir}"
+
+    target_dir_norm = os.path.normpath(target_dir).rstrip("\\/")
+
+    try:
+        # 開啟 HKCU\\Environment
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, "Environment", 0, winreg.KEY_READ | winreg.KEY_WRITE) as key:
+            try:
+                cur_val, val_type = winreg.QueryValueEx(key, "Path")
+            except FileNotFoundError:
+                cur_val = ""
+                val_type = winreg.REG_EXPAND_SZ
+
+            parts = [p.strip() for p in cur_val.split(";") if p.strip()]
+            parts_norm = [os.path.normpath(p).rstrip("\\/").lower() for p in parts]
+
+            if target_dir_norm.lower() in parts_norm:
+                if log_func:
+                    log_func(f"ℹ️ 使用者環境變數 PATH 已包含 [{target_dir_norm}]，略過重複寫入。", "info")
+                return True, "已存在於 PATH"
+
+            # 插入至最前端以確保優先權
+            new_parts = [target_dir_norm] + parts
+            new_val = ";".join(new_parts)
+
+            winreg.SetValueEx(key, "Path", 0, val_type, new_val)
+
+        # 廣播 WM_SETTINGCHANGE 通知系統環境變數已更新
+        HWND_BROADCAST = 0xFFFF
+        WM_SETTINGCHANGE = 0x001A
+        SMTO_ABORTIFHUNG = 0x0002
+        result = wintypes.DWORD()
+
+        ctypes.windll.user32.SendMessageTimeoutW(
+            HWND_BROADCAST,
+            WM_SETTINGCHANGE,
+            0,
+            "Environment",
+            SMTO_ABORTIFHUNG,
+            3000,
+            ctypes.byref(result)
+        )
+
+        # 同步更新當前行程的 os.environ["PATH"]
+        cur_sys_path = os.environ.get("PATH", "")
+        cur_sys_parts = [os.path.normpath(p).rstrip("\\/").lower() for p in cur_sys_path.split(";") if p.strip()]
+        if target_dir_norm.lower() not in cur_sys_parts:
+            os.environ["PATH"] = target_dir_norm + ";" + cur_sys_path
+
+        if log_func:
+            log_func(f"✅ 已成功將 [{target_dir_norm}] 自動註冊至使用者環境變數 PATH 最前端！", "success")
+        return True, "成功登錄 PATH"
+    except Exception as e:
+        msg = f"寫入使用者環境變數 PATH 失敗: {e}"
+        if log_func:
+            log_func(f"⚠️ {msg}", "warning")
+        return False, msg
+
+
 def stop_pm2_services(log_func, root_dir=None):
     """執行 pm2 stop all 暫停所有由 PM2 託管的 Node.js 服務（釋放 node.exe 檔案鎖定）"""
     log_func("-" * 50, "info")
@@ -298,6 +365,28 @@ def stop_pm2_services(log_func, root_dir=None):
         return False, str(e)
 
 
+def save_pm2_services(log_func, root_dir=None):
+    """執行 pm2 save 保存當前受控服務清單至備份 dump.pm2"""
+    pm2_bin = resolve_pm2_command(root_dir)
+    cmd = [pm2_bin, "save", "--force", "--no-color"] if pm2_bin else ["cmd.exe", "/d", "/s", "/c", "pm2 save --force --no-color"]
+    try:
+        res = subprocess.run(
+            cmd,
+            capture_output=True,
+            timeout=30,
+            creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
+        )
+        out_text = _decode_console_bytes(res.stdout).strip()
+        if res.returncode == 0:
+            log_func("✅ 已成功執行 [pm2 save] 保存當前受控服務清單至備份！", "success")
+            return True, ""
+        else:
+            return False, out_text
+    except Exception as e:
+        log_func(f"ℹ️ pm2 save 執行提示: {e}", "info")
+        return False, str(e)
+
+
 def kill_pm2_daemon(log_func, root_dir=None):
     """執行 pm2 kill 徹底終止 PM2 守護程序以完全釋放 node.exe"""
     log_func("⏳ 正在執行 [pm2 kill] 終止 PM2 守護程序以完全釋放檔案鎖定...", "warning")
@@ -327,6 +416,43 @@ def kill_pm2_daemon(log_func, root_dir=None):
         return False, str(e)
 
 
+def resurrect_pm2_services(log_func, root_dir=None):
+    """執行 pm2 resurrect 自 dump.pm2 喚醒守護程序並還原所有受控服務清單"""
+    log_func("-" * 50, "info")
+    log_func("⏳ 正在執行 [pm2 resurrect] 喚醒 PM2 守護程序並還原受管服務...", "info")
+
+    pm2_bin = resolve_pm2_command(root_dir)
+    cmd = [pm2_bin, "resurrect", "--no-color"] if pm2_bin else ["cmd.exe", "/d", "/s", "/c", "pm2 resurrect --no-color"]
+
+    try:
+        res = subprocess.run(
+            cmd,
+            capture_output=True,
+            timeout=60,
+            creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
+        )
+        out_text = _decode_console_bytes(res.stdout).strip()
+        err_text = _decode_console_bytes(res.stderr).strip()
+
+        if out_text:
+            for line in out_text.splitlines():
+                if line.strip():
+                    log_func(f"  {line.rstrip()}", "info")
+
+        if res.returncode == 0:
+            log_func("✅ 已成功執行 [pm2 resurrect] 喚醒並還原所有 Node.js 專案服務！", "success")
+            save_pm2_services(log_func, root_dir)
+            return True, ""
+        else:
+            err_msg = err_text or out_text or f"返回碼 {res.returncode}"
+            log_func(f"⚠️ [pm2 resurrect] 執行回傳非零狀態 ({res.returncode}): {err_msg}", "warning")
+            return False, err_msg
+    except Exception as e:
+        msg = f"呼叫 pm2 resurrect 時發生異常: {e}"
+        log_func(f"❌ {msg}", "error")
+        return False, msg
+
+
 def is_file_locked(filepath):
     """檢測檔案是否已被其他行程開啟鎖定（例如執行中的 .exe）"""
     if not os.path.exists(filepath):
@@ -340,7 +466,7 @@ def is_file_locked(filepath):
 
 
 def restart_pm2_services(log_func, root_dir=None):
-    """執行 pm2 restart all 重啟所有由 PM2 託管的 Node.js 服務"""
+    """執行 pm2 restart all 重啟所有由 PM2 託管的 Node.js 服務（具備 No process found 自動 resurrect 機制）"""
     log_func("-" * 50, "info")
     log_func("⏳ 正在執行 [pm2 restart all] 重啟 Node.js 相關服務...", "info")
 
@@ -369,6 +495,11 @@ def restart_pm2_services(log_func, root_dir=None):
             log_func("✅ 已成功執行 [pm2 restart all] 重啟所有 Node.js 專案服務！", "success")
             return True, ""
         else:
+            combined_msg = (out_text + " " + err_text).lower()
+            if "no process found" in combined_msg:
+                log_func("ℹ️ 偵測到 PM2 目前無執行中進程清單 (No process found)，自動切換執行 [pm2 resurrect] 進行還原...", "info")
+                return resurrect_pm2_services(log_func, root_dir)
+
             err_msg = err_text or out_text or f"返回碼 {res.returncode}"
             log_func(f"⚠️ [pm2 restart all] 執行回傳非零狀態 ({res.returncode}): {err_msg}", "warning")
             return False, err_msg
@@ -512,84 +643,44 @@ def align_pm2_daemon_to_portable(log_func, root_dir=None):
     r"""
     將運行中的 PM2 God Daemon 核心進程無痛切換綁定至目標綠色版 Node (如 C:\AppServ\node\node.exe)。
     標準流程：
-    1. pm2 save (儲存當前受管程序清單)
+    0. 註冊 <root_dir>\node 至 Windows 使用者環境變數 PATH 最前端
+    1. pm2 save (儲存當前受管程序清單至 dump.pm2)
     2. pm2 kill (結束目前運行於舊 Node 的 PM2 Daemon)
     3. 等候 1.5 秒讓 Windows 完全釋放控制代碼
     4. <root_dir>\node\pm2.cmd resurrect (透過綠色 node 重新喚醒全新 PM2 Daemon 並拉起服務)
     5. <root_dir>\node\pm2.cmd save (儲存最新狀態)
     """
     target_root = root_dir if (root_dir and os.path.exists(root_dir)) else r"C:\AppServ"
-    target_pm2 = os.path.normpath(os.path.join(target_root, "node", "pm2.cmd"))
+    target_node_dir = os.path.normpath(os.path.join(target_root, "node"))
+    target_pm2 = os.path.normpath(os.path.join(target_node_dir, "pm2.cmd"))
     current_pm2 = resolve_pm2_command(target_root) or "pm2.cmd"
+
+    # 先確保綠色 node 目錄登錄於使用者 PATH 最前端
+    register_path_to_user_environment(target_node_dir, log_func)
 
     log_func("-" * 50, "info")
     log_func("🔄 正在執行 PM2 核心守護進程切換流程 (save ➔ kill ➔ resurrect ➔ save)...", "info")
 
     # 步驟 1: pm2 save
     log_func("  [1/4] 正在儲存當前 PM2 受控服務清單 (pm2 save)...", "info")
-    try:
-        subprocess.run(
-            [current_pm2, "save", "--force", "--no-color"],
-            capture_output=True,
-            timeout=30,
-            creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
-        )
-    except Exception as e:
-        log_func(f"  ⚠️ pm2 save 執行提示: {e}", "warning")
+    save_pm2_services(log_func, target_root)
 
     # 步驟 2: pm2 kill
     log_func("  [2/4] 正在終止舊版 PM2 核心守護進程 (pm2 kill)...", "warning")
-    try:
-        subprocess.run(
-            [current_pm2, "kill", "--no-color"],
-            capture_output=True,
-            timeout=30,
-            creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
-        )
-    except Exception as e:
-        log_func(f"  ⚠️ pm2 kill 執行提示: {e}", "warning")
+    kill_pm2_daemon(log_func, target_root)
 
     time.sleep(1.5)
 
     # 步驟 3: target_pm2 resurrect
-    if os.path.isfile(target_pm2):
-        cmd_resurrect = [target_pm2, "resurrect", "--no-color"]
-    else:
-        cmd_resurrect = ["cmd.exe", "/d", "/s", "/c", "pm2 resurrect --no-color"]
-
     log_func("  [3/4] 正在以綠色環境喚醒全新 PM2 核心守護進程 (pm2 resurrect)...", "info")
-    try:
-        res = subprocess.run(
-            cmd_resurrect,
-            capture_output=True,
-            timeout=60,
-            creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
-        )
-        out_text = _decode_console_bytes(res.stdout).strip()
-        if out_text:
-            for line in out_text.splitlines():
-                if line.strip():
-                    log_func(f"    {line.rstrip()}", "info")
-    except Exception as e:
-        log_func(f"  ❌ pm2 resurrect 執行失敗: {e}", "error")
-        return False, str(e)
+    res_ok, res_err = resurrect_pm2_services(log_func, target_root)
+    if not res_ok:
+        log_func(f"  ❌ pm2 resurrect 執行失敗: {res_err}", "error")
+        return False, res_err
 
     # 步驟 4: target_pm2 save
-    if os.path.isfile(target_pm2):
-        cmd_save = [target_pm2, "save", "--force", "--no-color"]
-    else:
-        cmd_save = ["cmd.exe", "/d", "/s", "/c", "pm2 save --force --no-color"]
-
     log_func("  [4/4] 正在儲存新核心狀態 (pm2 save)...", "info")
-    try:
-        subprocess.run(
-            cmd_save,
-            capture_output=True,
-            timeout=30,
-            creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
-        )
-    except Exception:
-        pass
+    save_pm2_services(log_func, target_root)
 
     # 檢測切換後成果
     info = query_pm2_daemon_info(target_root)
@@ -1298,6 +1389,10 @@ class UpdaterApp:
     def _detect_pm2_service(self):
         """偵測本機 PM2 管理套件與指令路徑，並同步更新 PM2 Daemon 核心綁定狀態"""
         root_dir = self.root_dir_var.get().strip() if hasattr(self, 'root_dir_var') else None
+        node_dir = os.path.join(root_dir, "node") if root_dir else r"C:\AppServ\node"
+        if os.path.isdir(node_dir):
+            register_path_to_user_environment(node_dir, None)
+
         self.pm2_path = resolve_pm2_command(root_dir)
         if self.pm2_path:
             self.chk_pm2.configure(
@@ -1587,6 +1682,7 @@ class UpdaterApp:
             # 步驟 1.5：若有更新 node.zip，執行階梯式安全防護釋放 node.exe 鎖定
             root_dir = self.root_dir_var.get().strip()
             is_updating_node = any(p["id"] == "node" for p in selected_pkgs)
+            pm2_was_killed = False
             if is_updating_node:
                 self.set_progress(3, "正在檢查 Node.js 執行狀態並釋放檔案鎖定...")
                 self.log("ℹ️ 偵測到更新項目包含 Node.js 綠色執行環境，執行安全停機防護...", "info")
@@ -1598,8 +1694,10 @@ class UpdaterApp:
 
                 # 檢測 node.exe 是否仍被占用（如 PM2 God 守護進程本身使用該 node.exe）
                 if is_file_locked(target_node_exe):
-                    self.log("⚠️ 偵測到 node.exe 仍被背景守護進程鎖定，執行 [pm2 kill] 徹底釋放...", "warning")
+                    self.log("⚠️ 偵測到 node.exe 仍被背景守護進程鎖定，先保存受控服務 (pm2 save) 後執行 [pm2 kill] 徹底釋放...", "warning")
+                    save_pm2_services(self.log, root_dir)
                     kill_ok, _ = kill_pm2_daemon(self.log, root_dir)
+                    pm2_was_killed = True
                     if is_file_locked(target_node_exe):
                         self.log(f"⚠️ 警告：{target_node_exe} 仍處於鎖定狀態，若解壓存取被拒請手動結束 node.exe 行程。", "warning")
                     else:
@@ -1703,6 +1801,11 @@ class UpdaterApp:
 
                 self.log(f"✅ {p_name} 解壓縮覆蓋完成 (共處理 {pkg_count} 個項目)。", "success")
 
+            # 若本次有更新 node.zip，自動將目標 node 目錄註冊至使用者 PATH 最前端
+            if is_updating_node:
+                self.set_progress(92, "正在註冊綠色 Node.js 環境變數 PATH...")
+                register_path_to_user_environment(node_tgt, self.log)
+
             # 步驟 4：若更新前有停止 Apache，或勾選了重啟，在此重新啟動服務
             if should_restart_apache and svc_name and apache_was_stopped and not apache_restarted:
                 self.set_progress(95, f"正在啟動 Apache 服務 [{svc_name}]...")
@@ -1714,13 +1817,36 @@ class UpdaterApp:
             self.log("=" * 60, "success")
             self.log(f"🎉 全部選取的更新包已順利更新完成！(總耗時: {elapsed:.1f} 秒)", "success")
 
-            # 步驟 5：若有勾選「更新後自動重啟 PM2 服務」，自動執行重啟或核心校正
+            # 步驟 5：若有勾選「更新後自動重啟 PM2 服務」，自動執行重啟、還原或核心校正
             if self.restart_pm2_var.get():
-                self.set_progress(97, "正在檢查 PM2 核心守護進程綁定狀態...")
+                self.set_progress(97, "正在檢查 PM2 核心守護進程狀態...")
                 daemon_info = query_pm2_daemon_info(root_dir)
                 target_node = os.path.normpath(os.path.join(root_dir, "node", "node.exe"))
 
-                if daemon_info["is_running"] and not daemon_info["is_target_node"]:
+                if pm2_was_killed or not daemon_info["is_running"]:
+                    self.set_progress(98, "正在透過綠色環境喚醒 PM2 守護程序並還原服務 (pm2 resurrect)...")
+                    self.log("🚀 偵測到 PM2 守護程序未運行或先前已停止，正在執行 [pm2 resurrect] 自備份還原服務...", "info")
+                    res_ok, res_err = resurrect_pm2_services(self.log, root_dir)
+                    elapsed = time.time() - start_time
+                    self.set_progress(100, f"✅ 全部更新與 PM2 服務還原完成！(耗時 {elapsed:.1f} 秒)")
+                    if not res_ok:
+                        warn_event = threading.Event()
+
+                        def _warn_res():
+                            try:
+                                parent_w = self.progress_dlg if (self.progress_dlg and self.progress_dlg.winfo_exists()) else self.root
+                                messagebox.showwarning(
+                                    "PM2 還原提醒",
+                                    f"執行 PM2 服務還原時回傳非預期結果：\n{res_err}\n\n"
+                                    "請稍後於終端機手動執行 pm2 resurrect 或檢查 PM2 服務狀態。",
+                                    parent=parent_w
+                                )
+                            finally:
+                                warn_event.set()
+
+                        self.root.after(0, _warn_res)
+                        warn_event.wait()
+                elif not daemon_info["is_target_node"]:
                     self.log(f"⚠️ 偵測到現有 PM2 核心由外部 Node 運行 [{daemon_info['exe_path']}]", "warning")
                     self.log(f"🚀 正在自動執行無痛切換：將 PM2 核心校正綁定至綠色環境 ({target_node})...", "info")
                     align_ok, align_msg = align_pm2_daemon_to_portable(self.log, root_dir)
