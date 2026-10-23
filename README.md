@@ -6,11 +6,12 @@
 
 ## 📌 系統需求與更新包規格
 
-本工具主要用於快速佈署與更新伺服器核心模組，預設安裝根目錄為 `C:\AppServ`。程式啟動時會自動偵測「與執行檔同目錄」下的 5 種更新壓縮包：
+本工具主要用於快速佈署與更新伺服器核心模組，預設安裝根目錄為 `C:\AppServ`。程式啟動時會自動偵測「與執行檔同目錄」下的 6 種更新壓縮包：
 
 | 壓縮包檔名 | 預設相對路徑 | 預設完整目標路徑 | 說明 |
 | :--- | :--- | :--- | :--- |
-| **`www.zip`** | `www` | `C:\AppServ\www` | 後端API 更新包 |
+| **`www.zip`** | `www` | `C:\AppServ\www` | 傳統後端API 更新包 (舊軌 PHP 7) |
+| **`LAH-API.zip`** | `LAH-API` | `C:\AppServ\LAH-API` | 現代化後端API 更新包 (新軌 PHP 8.5 / v1) |
 | **`LAH-NUXTJS.zip`** | `LAH-NUXTJS` | `C:\AppServ\LAH-NUXTJS` | 前端網站 更新包 |
 | **`node_modules.zip`** | `LAH-NUXTJS\node_modules` | `C:\AppServ\LAH-NUXTJS\node_modules` | 前端網站 核心套件 |
 | **`lah-messenger-server.zip`** | `lah-messenger-server` | `C:\AppServ\lah-messenger-server` | 即時通訊推播伺服器 |
@@ -31,7 +32,7 @@
    - 介面採用清晰卡片式佈局，每個更新模組均提供獨立路徑輸入框、瀏覽按鈕與重設按鈕，既支援全域根目錄連動，又兼具個別模組自訂彈性。
 3. **【關鍵防呆機制】自動去除雙層同名目錄**：
    - 解壓縮時會先解析 `.zip` 內部結構。
-   - 若壓縮包頂層含有與目標資料夾同名、壓縮檔同名或目標目錄結尾同名的單一資料夾（例如 `www.zip` 內第一層就是 `www/`，或 `node_modules.zip` 內為 `node_modules/`），程式會**自動對齊並剔除外層目錄**，徹底避免產生 `C:\AppServ\www\www` 的雙層目錄錯誤！
+   - 若壓縮包頂層含有與目標資料夾同名、壓縮檔同名或目標目錄結尾同名的單一資料夾（例如 `www.zip` 內第一層就是 `www/`，`LAH-API.zip` 內為 `LAH-API/` 或 `API/`，或 `node_modules.zip` 內為 `node_modules/`），程式會**自動對齊並剔除外層目錄**，徹底避免產生 `C:\AppServ\www\www` 的雙層目錄錯誤！
    - 若頂層直接散落檔案，則直接覆蓋解壓至目標目錄。
 4. **Apache 服務管理與異常容錯**：
    - 勾選「更新前後自動重啟 Apache 服務」後，自動偵測本機 Apache 服務（如 `Apache2.4`、`Apache`）。

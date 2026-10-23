@@ -23,7 +23,7 @@ from tkinter import ttk, filedialog, messagebox
 from tkinter import scrolledtext
 from tkinter import font as tkfont
 
-# 定義 5 種更新包規格
+# 定義 6 種更新包規格
 PACKAGE_CONFIGS = [
     {
         "id": "www",
@@ -31,6 +31,15 @@ PACKAGE_CONFIGS = [
         "rel_target": "www",
         "title": "後端API 更新包 (www.zip)",
         "expected_folder": "www",
+        "is_nodejs": False
+    },
+    {
+        "id": "lah_api",
+        "name": "LAH-API.zip",
+        "rel_target": "LAH-API",
+        "title": "現代化後端API (LAH-API.zip)",
+        "expected_folder": "LAH-API",
+        "alt_folders": ["api"],
         "is_nodejs": False
     },
     {
@@ -715,7 +724,7 @@ def get_zip_member_path(info):
     return info.filename
 
 
-def detect_strip_prefix(zf, expected_folder_name, zip_stem, target_leaf_name=""):
+def detect_strip_prefix(zf, expected_folder_name, zip_stem, target_leaf_name="", alt_folders=None):
     """
     【關鍵防呆機制】：
     檢查 zip 壓縮包內部的頂層結構。
@@ -733,6 +742,10 @@ def detect_strip_prefix(zf, expected_folder_name, zip_stem, target_leaf_name="")
     }
     if target_leaf_name:
         candidates.add(target_leaf_name.strip("/\\").lower())
+    if alt_folders:
+        for af in alt_folders:
+            if af:
+                candidates.add(af.strip("/\\").lower())
 
     for info in zf.infolist():
         fname = get_zip_member_path(info).replace('\\', '/').strip('/')
@@ -1749,7 +1762,7 @@ class UpdaterApp:
                     # 執行【關鍵防呆機制】：檢測頂層結構
                     zip_stem = os.path.splitext(p_name)[0]
                     target_leaf = os.path.basename(target_folder)
-                    strip_prefix = detect_strip_prefix(zf, pkg["expected_folder"], zip_stem, target_leaf)
+                    strip_prefix = detect_strip_prefix(zf, pkg["expected_folder"], zip_stem, target_leaf, pkg.get("alt_folders", []))
 
                     if strip_prefix:
                         self.log(f"🛡️ [防呆機制觸發] 偵測到頂層包含 '{strip_prefix}' 單一目錄，已自動對齊解壓至目標路徑！", "warning")
