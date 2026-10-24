@@ -80,6 +80,10 @@ API8_EXCLUDES = [
     r"include\config\AD.INVALID.php",
     r"include\config\AD.ALL.php",
     r"include\config\AD.LOCKED.php",
+    ".phpunit.cache",
+    "phpunit.xml",
+    "tests",
+    "run_tests.bat"
 ]
 
 # 對應 zip_fe.txt（基底目錄：LAH-FE）
