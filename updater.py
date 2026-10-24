@@ -23,7 +23,7 @@ from tkinter import ttk, filedialog, messagebox
 from tkinter import scrolledtext
 from tkinter import font as tkfont
 
-# 定義 6 種更新包規格
+# 定義 7 種更新包規格
 PACKAGE_CONFIGS = [
     {
         "id": "www",
@@ -51,12 +51,14 @@ PACKAGE_CONFIGS = [
         "is_nodejs": True
     },
     {
-        "id": "node_modules",
-        "name": "node_modules.zip",
+        "id": "lah_nuxtjs_modules",
+        "name": "LAH-NUXTJS-node_modules.zip",
         "rel_target": os.path.join("LAH-NUXTJS", "node_modules"),
-        "title": "前端網站 核心套件 (node_modules.zip)",
+        "title": "└─ 前端網站 核心套件 (LAH-NUXTJS-node_modules.zip)",
         "expected_folder": "node_modules",
-        "is_nodejs": True
+        "alt_folders": ["lah-nuxtjs-node_modules", "LAH-NUXTJS-node_modules"],
+        "is_nodejs": True,
+        "is_sub_package": True
     },
     {
         "id": "messenger",
@@ -65,6 +67,16 @@ PACKAGE_CONFIGS = [
         "title": "即時通訊伺服器 (lah-messenger-server.zip)",
         "expected_folder": "lah-messenger-server",
         "is_nodejs": True
+    },
+    {
+        "id": "messenger_modules",
+        "name": "lah-messenger-server-node_modules.zip",
+        "rel_target": os.path.join("lah-messenger-server", "node_modules"),
+        "title": "└─ 即時通訊 核心套件 (lah-messenger-server-node_modules.zip)",
+        "expected_folder": "node_modules",
+        "alt_folders": ["lah-messenger-server-node_modules", "lah-messenger-server-node-modules"],
+        "is_nodejs": True,
+        "is_sub_package": True
     },
     {
         "id": "node",
@@ -450,8 +462,8 @@ def resurrect_pm2_services(log_func, root_dir=None):
 
         if res.returncode == 0:
             log_func("✅ 已成功執行 [pm2 resurrect] 喚醒並還原所有 Node.js 專案服務！", "success")
-            save_pm2_services(log_func, root_dir)
-            return True, ""
+            # 還原後執行全方位核心巡檢補啟動，確保 LAH-WSS 等服務皆完整在線
+            return audit_and_ensure_pm2_services(log_func, root_dir)
         else:
             err_msg = err_text or out_text or f"返回碼 {res.returncode}"
             log_func(f"⚠️ [pm2 resurrect] 執行回傳非零狀態 ({res.returncode}): {err_msg}", "warning")
@@ -475,7 +487,7 @@ def is_file_locked(filepath):
 
 
 def restart_pm2_services(log_func, root_dir=None):
-    """執行 pm2 restart all 重啟所有由 PM2 託管的 Node.js 服務（具備 No process found 自動 resurrect 機制）"""
+    """執行 pm2 restart all 重啟所有由 PM2 託管的 Node.js 服務（具備 No process found 自動 resurrect 與全方位核心巡檢補啟動機制）"""
     log_func("-" * 50, "info")
     log_func("⏳ 正在執行 [pm2 restart all] 重啟 Node.js 相關服務...", "info")
 
@@ -502,24 +514,168 @@ def restart_pm2_services(log_func, root_dir=None):
 
         if res.returncode == 0:
             log_func("✅ 已成功執行 [pm2 restart all] 重啟所有 Node.js 專案服務！", "success")
-            return True, ""
         else:
             combined_msg = (out_text + " " + err_text).lower()
             if "no process found" in combined_msg:
                 log_func("ℹ️ 偵測到 PM2 目前無執行中進程清單 (No process found)，自動切換執行 [pm2 resurrect] 進行還原...", "info")
-                return resurrect_pm2_services(log_func, root_dir)
-
-            err_msg = err_text or out_text or f"返回碼 {res.returncode}"
-            log_func(f"⚠️ [pm2 restart all] 執行回傳非零狀態 ({res.returncode}): {err_msg}", "warning")
-            return False, err_msg
+                resurrect_pm2_services(log_func, root_dir)
+            else:
+                err_msg = err_text or out_text or f"返回碼 {res.returncode}"
+                log_func(f"⚠️ [pm2 restart all] 執行回傳非零狀態 ({res.returncode}): {err_msg}", "warning")
     except subprocess.TimeoutExpired:
-        msg = "執行 pm2 restart all 超過 60 秒逾時，請於終端機手動確認 pm2 status。"
+        msg = "執行 pm2 restart all 超過 60 秒逾時，請手動確認 PM2 服務狀態。"
         log_func(f"⚠️ {msg}", "warning")
-        return False, msg
     except Exception as e:
         msg = f"呼叫 pm2 restart all 時發生異常: {e}"
         log_func(f"❌ {msg}", "error")
+
+    # 無論重啟結果為何，執行全方位核心巡檢，自動補齊並拉起遺漏之 LAH-WSS、LAH-FE、LAH-SCHEDULER、lah-api-v85
+    audit_ok, audit_msg = audit_and_ensure_pm2_services(log_func, root_dir)
+    return audit_ok, audit_msg
+
+
+def audit_and_ensure_pm2_services(log_func, root_dir=None):
+    """
+    全方位巡檢 PM2 核心服務（LAH-WSS、LAH-FE、LAH-SCHEDULER、lah-api-v85）。
+    1. 自動建立並確保 logs 目錄存在，杜絕日誌路徑缺失導致啟動失敗。
+    2. 透過 pm2 jlist 取得目前所有執行中服務清單。
+    3. 若發現核心服務遺漏或離線，自動由目標目錄 (如 C:\\AppServ) 之 ecosystem.config.js 補啟動 (pm2 start)。
+    4. 若有補啟動任何服務，自動執行 pm2 save 保存快照至 dump.pm2。
+    """
+    target_root = root_dir if (root_dir and os.path.exists(root_dir)) else r"C:\AppServ"
+    logs_dir = os.path.normpath(os.path.join(target_root, "logs"))
+    try:
+        os.makedirs(logs_dir, exist_ok=True)
+    except Exception as e:
+        log_func(f"⚠️ 建立日誌目錄 [{logs_dir}] 時發生警示: {e}", "warning")
+
+    pm2_bin = resolve_pm2_command(target_root)
+    if not pm2_bin:
+        msg = "系統未偵測到有效的 pm2.cmd，跳過 PM2 服務巡檢。"
+        log_func(f"⚠️ {msg}", "warning")
         return False, msg
+
+    log_func("-" * 50, "info")
+    log_func("🔍 正在執行 PM2 核心服務全方位狀態巡檢...", "info")
+
+    # 1. 取得現有 PM2 程序清單
+    managed_apps = {}
+    try:
+        res = subprocess.run(
+            [pm2_bin, "jlist"],
+            capture_output=True,
+            timeout=20,
+            creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
+        )
+        if res.returncode == 0:
+            out_json = _decode_console_bytes(res.stdout).strip()
+            if out_json:
+                data = json.loads(out_json)
+                for item in data:
+                    app_name = item.get("name")
+                    status = item.get("pm2_env", {}).get("status", "unknown")
+                    if app_name not in managed_apps or status == "online":
+                        managed_apps[app_name] = status
+    except Exception as e:
+        log_func(f"⚠️ 查詢 PM2 進程狀態 (pm2 jlist) 發生異常: {e}，將嘗試直接補啟動缺漏設定檔...", "warning")
+
+    # 2. 定義 3 大生態系設定檔與所屬服務
+    core_ecosystems = [
+        {
+            "title": "即時通訊伺服器 (LAH-WSS)",
+            "apps": ["LAH-WSS"],
+            "candidates": [
+                os.path.join(target_root, "lah-messenger-server", "ecosystem.config.js"),
+                r"c:\Temp\DEV\LAH-Workspace\lah-messenger-server\ecosystem.config.js",
+            ]
+        },
+        {
+            "title": "智慧管控前端網站 (LAH-FE / LAH-SCHEDULER)",
+            "apps": ["LAH-FE", "LAH-SCHEDULER"],
+            "candidates": [
+                os.path.join(target_root, "LAH-NUXTJS", "ecosystem.config.js"),
+                r"c:\Temp\DEV\LAH-Workspace\LAH-FE\ecosystem.config.js",
+            ]
+        },
+        {
+            "title": "現代化後端 API (lah-api-v85)",
+            "apps": ["lah-api-v85"],
+            "candidates": [
+                os.path.join(target_root, "LAH-API", "ecosystem.config.js"),
+                r"c:\Temp\DEV\LAH-Workspace\LAH-API\API\ecosystem.config.js",
+            ]
+        }
+    ]
+
+    need_save = False
+
+    for eco in core_ecosystems:
+        eco_path = next((p for p in eco["candidates"] if os.path.isfile(p)), None)
+        if not eco_path:
+            continue
+
+        missing_apps = [a for a in eco["apps"] if managed_apps.get(a) != "online"]
+        if missing_apps:
+            log_func(f"⚡ 偵測到 [{eco['title']}] 之服務 {missing_apps} 尚未在線，正在啟動 [{eco_path}]...", "warning")
+            try:
+                start_res = subprocess.run(
+                    [pm2_bin, "start", eco_path, "--no-color"],
+                    capture_output=True,
+                    timeout=30,
+                    creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
+                )
+                start_out = _decode_console_bytes(start_res.stdout).strip()
+                if start_res.returncode == 0:
+                    log_func(f"  ✅ 成功啟動 [{eco['title']}]！", "success")
+                    need_save = True
+                else:
+                    start_err = _decode_console_bytes(start_res.stderr).strip() or start_out
+                    log_func(f"  ⚠️ 啟動 [{eco_path}] 回傳警示: {start_err}", "warning")
+            except Exception as e:
+                log_func(f"  ❌ 啟動 [{eco_path}] 失敗: {e}", "error")
+
+    # 3. 若有補啟動任何項目，自動持久化保存狀態
+    if need_save:
+        log_func("💾 偵測到服務配置異動，正在執行 [pm2 save] 更新持久化存檔...", "info")
+        save_pm2_services(log_func, target_root)
+
+    # 4. 重新查詢一次最新狀態印出摘要報告
+    final_apps = {}
+    try:
+        res = subprocess.run(
+            [pm2_bin, "jlist"],
+            capture_output=True,
+            timeout=10,
+            creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
+        )
+        if res.returncode == 0:
+            out_json = _decode_console_bytes(res.stdout).strip()
+            if out_json:
+                data = json.loads(out_json)
+                for item in data:
+                    app_name = item.get("name")
+                    status = item.get("pm2_env", {}).get("status", "unknown")
+                    if app_name not in final_apps or status == "online":
+                        final_apps[app_name] = status
+    except Exception:
+        pass
+
+    log_func("📋 PM2 核心服務現況總覽：", "info")
+    all_healthy = True
+    for app_name in ["LAH-WSS", "LAH-FE", "LAH-SCHEDULER", "lah-api-v85"]:
+        st = final_apps.get(app_name, "未註冊 / 離線")
+        if st == "online":
+            log_func(f"  • {app_name:<16} : ✅ {st}", "success")
+        else:
+            all_healthy = False
+            log_func(f"  • {app_name:<16} : ⚠️ {st}", "warning")
+
+    if all_healthy:
+        log_func("🎉 全部 4 大核心服務（含 LAH-WSS）皆已成功在線運作！", "success")
+    else:
+        log_func("⚠️ 部分核心服務未能順利在線，請檢視上方日誌輸出或終端機 pm2 status。", "warning")
+
+    return True, ""
 
 
 def query_pm2_daemon_info(root_dir=None):
@@ -869,7 +1025,7 @@ def test_pm2_autostart_execution(log_func, root_dir=None):
         time.sleep(2)
 
         ports_status = []
-        for port in [8081, 8082, 9085]:
+        for port in [8080, 8081, 8082, 9085]:
             ps_cmd = f"Get-NetTCPConnection -LocalPort {port} -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1"
             res = subprocess.run(
                 ["powershell", "-NoProfile", "-Command", ps_cmd],
@@ -993,7 +1149,7 @@ class UpdaterApp:
     def __init__(self, root):
         self.root = root
         self.root.title("智慧控管與監控系統 - 自動更新工具")
-        self.root.geometry("980x720")
+        self.root.geometry("980x750")
         self.root.minsize(860, 640)
 
         # 基礎路徑
@@ -1165,7 +1321,7 @@ class UpdaterApp:
         )
         header_hint.pack(anchor=tk.W, pady=(0, 4))
 
-        # 建立 4 個更新包項目元件（兩列卡片式佈局，支援個別自訂目標路徑）
+        # 建立 7 個更新包項目元件（兩列卡片式佈局，支援個別自訂目標路徑與附屬套件縮排）
         self.chk_widgets = {}
         self.path_entries = {}
         self.browse_buttons = {}
@@ -1174,8 +1330,11 @@ class UpdaterApp:
         for pkg in PACKAGE_CONFIGS:
             p_id = pkg["id"]
             v = self.pkg_vars[p_id]
+            is_sub = pkg.get("is_sub_package", False)
 
-            item_card = ttk.Frame(pkg_frame, padding="1")
+            # 附屬子套件卡片整體向右縮排 (left=26px)
+            card_padding = (26, 1, 0, 1) if is_sub else (0, 1, 0, 1)
+            item_card = ttk.Frame(pkg_frame, padding=card_padding)
             item_card.pack(fill=tk.X, pady=1)
 
             # 第 1 列：核取方塊 + 狀態標籤
@@ -1546,13 +1705,14 @@ class UpdaterApp:
         v = self.pkg_vars[pkg_id]
         pkg = next((p for p in PACKAGE_CONFIGS if p["id"] == pkg_id), None)
         title = pkg["title"] if pkg else pkg_id
+        display_title = title.replace("└─ ", "")
 
         current = v["target_path_var"].get().strip()
         init_dir = current if (current and os.path.exists(current)) else self.root_dir_var.get().strip()
         if not os.path.exists(init_dir):
             init_dir = "C:\\"
 
-        selected = filedialog.askdirectory(initialdir=init_dir, title=f"請選擇 [{title}] 的目標解壓縮路徑")
+        selected = filedialog.askdirectory(initialdir=init_dir, title=f"請選擇 [{display_title}] 的目標解壓縮路徑")
         if selected:
             norm = os.path.normpath(selected)
             v["target_path_var"].set(norm)
@@ -2044,7 +2204,7 @@ class UpdaterApp:
         summary = "\n".join([f"• {p['name']} ➔ {self.pkg_vars[p['id']]['target_path_var'].get().strip()}" for p in selected_pkgs])
         apache_note = f"\n• 更新前後將自動重啟 Apache 服務 ({self.apache_service_name or '自動搜尋'})" if self.restart_apache_var.get() else ""
         pm2_note = "\n• 更新完成後將自動重啟 PM2 服務 (pm2 restart all)" if self.restart_pm2_var.get() else ""
-        node_note = "\n• 包含 Node.js 綠色執行環境更新，解壓前將安全暫停 Node 服務以釋放檔案鎖定" if any(p["id"] == "node" for p in selected_pkgs) else ""
+        node_note = "\n• 包含 Node.js 綠色執行環境或核心依賴套件更新，解壓前將安全暫停 Node/PM2 服務以釋放檔案鎖定" if any(p["id"] == "node" or p.get("is_sub_package", False) for p in selected_pkgs) else ""
 
         confirm = messagebox.askyesno(
             "確認開始更新",
@@ -2079,13 +2239,18 @@ class UpdaterApp:
                 else:
                     self.log("ℹ️ 勾選了重啟 Apache，但系統未偵測到 Apache 服務，跳過停止步驟。", "warning")
 
-            # 步驟 1.5：若有更新 node.zip，執行階梯式安全防護釋放 node.exe 鎖定
+            # 步驟 1.5：若有更新 node.zip 或 node_modules，執行階梯式安全防護釋放鎖定
             root_dir = self.root_dir_var.get().strip()
-            is_updating_node = any(p["id"] == "node" for p in selected_pkgs)
+            has_node_runtime = any(p["id"] == "node" for p in selected_pkgs)
+            has_node_modules = any(p.get("is_sub_package", False) for p in selected_pkgs)
+            is_updating_node = has_node_runtime or has_node_modules
             pm2_was_killed = False
             if is_updating_node:
                 self.set_progress(3, "正在檢查 Node.js 執行狀態並釋放檔案鎖定...")
-                self.log("ℹ️ 偵測到更新項目包含 Node.js 綠色執行環境，執行安全停機防護...", "info")
+                if has_node_runtime:
+                    self.log("ℹ️ 偵測到更新項目包含 Node.js 綠色執行環境，執行安全停機防護...", "info")
+                else:
+                    self.log("ℹ️ 偵測到更新項目包含 Node.js 核心依賴套件 (node_modules)，暫停 PM2 服務以釋放檔案鎖定...", "info")
                 node_tgt = os.path.normpath(self.pkg_vars["node"]["target_path_var"].get().strip()) if "node" in self.pkg_vars else os.path.join(root_dir, "node")
                 target_node_exe = os.path.join(node_tgt, "node.exe")
 

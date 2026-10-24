@@ -7,7 +7,9 @@ r"""
 2. 依據 zip_api.* 規則，將 LAH-API (www) 打包為 www.zip（後端 PHP7 更新包）。
 3. 將 LAH-API (API) 打包為 LAH-API.zip（後端 PHP8 更新包）。
 4. 依據 zip_fe.* 規則，將 LAH-FE 編譯後檔案打包為 LAH-NUXTJS.zip（前端更新包）。
-5. 產出壓縮檔預設輸出至分享區：d:\DEV\@各所分享區\@智慧管控系統\@更新程式\
+5. 依據參數可選打包即時通訊伺服器 (lah-messenger-server.zip)。
+6. 依據參數可選打包前端與即時通核心依賴套件 (LAH-NUXTJS-node_modules.zip, lah-messenger-server-node_modules.zip)。
+7. 產出壓縮檔預設輸出至分享區：d:\DEV\@各所分享區\@智慧管控系統\@更新程式\
    若該分享區目錄不存在（如於未掛載 D 槽之本機開發環境），自動回退輸出至腳本同層 dist 目錄。
 """
 import argparse
@@ -99,9 +101,51 @@ FE_EXCLUDES = [
     ".env",
 ]
 
+# lah-messenger-server (LAH-WSS) 打包規則（嚴格僅打包指定之 14 個檔案與 1 個資料夾）
+MESSENGER_INCLUDES = [
+    "dimension",
+    ".env.example",
+    "AGENTS.md",
+    "channel-db.js",
+    "ecosystem.config.js",
+    "message-db.js",
+    "message-watcher.js",
+    "package.json",
+    "README.md",
+    "request-handler.js",
+    "server.js",
+    "start_pm2.bat",
+    "start_standalone.bat",
+    "upload-router.js",
+    "utils.js",
+]
+
+MESSENGER_EXCLUDES = [
+    ".env",
+    ".gitignore",
+    "yarn.lock",
+    "node_modules",
+    "db",
+    "uploads",
+    ".git*",
+    ".vscode",
+    "*.log",
+    "*.tmp",
+    "*.bak",
+]
+
+# node_modules 附屬套件打包排除規則
+NODE_MODULES_EXCLUDES = [
+    r"node_modules\.cache",
+    r"*\.cache\*",
+    "*.log",
+    "*.tmp",
+    "*.bak",
+]
+
 
 def resolve_project_dirs(script_dir):
-    """自動探測 LAH-API/www (PHP7)、LAH-API/API (PHP8) 與 LAH-FE 的真實路徑（相容工作區 Junction 與獨立目錄）"""
+    """自動探測 LAH-API/www (PHP7)、LAH-API/API (PHP8)、LAH-FE 與 lah-messenger-server 的真實路徑（相容工作區 Junction 與獨立目錄）"""
     workspace_dir = os.path.dirname(script_dir)
 
     api_candidates = [
@@ -119,11 +163,22 @@ def resolve_project_dirs(script_dir):
         r"d:\DEV\lah-workspace\LAH-FE",
         r"d:\DEV\LAH-NUXTJS",
     ]
+    messenger_candidates = [
+        os.path.join(workspace_dir, "lah-messenger-server"),
+        r"d:\DEV\lah-workspace\lah-messenger-server",
+        r"d:\DEV\lah-messenger-server",
+    ]
 
     api_dir = next((p for p in api_candidates if os.path.isdir(p)), api_candidates[0])
     api8_dir = next((p for p in api8_candidates if os.path.isdir(p)), api8_candidates[0])
     fe_dir = next((p for p in fe_candidates if os.path.isdir(p)), fe_candidates[0])
-    return os.path.realpath(api_dir), os.path.realpath(api8_dir), os.path.realpath(fe_dir)
+    messenger_dir = next((p for p in messenger_candidates if os.path.isdir(p)), messenger_candidates[0])
+    return (
+        os.path.realpath(api_dir),
+        os.path.realpath(api8_dir),
+        os.path.realpath(fe_dir),
+        os.path.realpath(messenger_dir)
+    )
 
 
 def is_excluded(rel_path, exclude_patterns):
@@ -272,12 +327,18 @@ def main():
     parser.add_argument("--api-only", action="store_true", help="僅打包 LAH-API PHP7 (www.zip)")
     parser.add_argument("--api8-only", action="store_true", help="僅打包 LAH-API PHP8 (LAH-API.zip)")
     parser.add_argument("--fe-only", action="store_true", help="僅編譯並打包 LAH-FE (LAH-NUXTJS.zip)")
+    parser.add_argument("--messenger-only", action="store_true", help="僅打包即時通訊伺服器 (lah-messenger-server.zip)")
+    parser.add_argument("--with-messenger", action="store_true", help="常規打包時一併打包即時通訊伺服器 (lah-messenger-server.zip)")
+    parser.add_argument("--fe-modules", action="store_true", help="打包前端核心套件 (LAH-NUXTJS-node_modules.zip)")
+    parser.add_argument("--server-modules", action="store_true", help="打包即時通伺服器核心套件 (lah-messenger-server-node_modules.zip)")
+    parser.add_argument("--with-modules", action="store_true", help="常規打包時一併打包這兩個 node_modules 壓縮包")
+    parser.add_argument("--modules-only", action="store_true", help="僅打包這兩個 node_modules 壓縮包，不打包程式碼")
     parser.add_argument("--output-dir", default=None, help=f"指定輸出目錄（若未指定且預設分享區不存在，將自動輸出至腳本同層 dist 目錄）")
     args = parser.parse_args()
 
     script_dir = os.path.dirname(os.path.abspath(__file__))
     dist_dir = os.path.join(script_dir, "dist")
-    api_dir, api8_dir, fe_dir = resolve_project_dirs(script_dir)
+    api_dir, api8_dir, fe_dir, messenger_dir = resolve_project_dirs(script_dir)
 
     # 決定輸出目錄：未指定且預設分享區不存在時自動回退至 dist
     if args.output_dir:
@@ -292,23 +353,41 @@ def main():
     os.makedirs(output_dir, exist_ok=True)
 
     # 決定打包項目：若未指定特定 only 參數，則預設三者全部打包
-    has_specific_target = args.api_only or args.api8_only or args.fe_only
-    if has_specific_target:
-        do_api = args.api_only
-        do_api8 = args.api8_only
-        do_fe = args.fe_only
+    if args.modules_only:
+        do_api = False
+        do_api8 = False
+        do_fe = False
+        do_messenger = False
+        do_fe_modules = True
+        do_server_modules = True
     else:
-        do_api = True
-        do_api8 = True
-        do_fe = True
+        has_specific_target = (
+            args.api_only or args.api8_only or args.fe_only or
+            args.messenger_only or args.fe_modules or args.server_modules
+        )
+        if has_specific_target:
+            do_api = args.api_only
+            do_api8 = args.api8_only
+            do_fe = args.fe_only
+            do_messenger = args.messenger_only
+            do_fe_modules = args.fe_modules or args.with_modules
+            do_server_modules = args.server_modules or args.with_modules
+        else:
+            do_api = True
+            do_api8 = True
+            do_fe = True
+            do_messenger = True
+            do_fe_modules = args.with_modules
+            do_server_modules = args.with_modules
 
     print("=" * 60)
-    print("智慧控管與監控系統 - 原始碼打包工具 (LAH-API / LAH-FE)")
+    print("智慧控管與監控系統 - 原始碼打包工具 (LAH-API / LAH-FE / lah-messenger-server)")
     print("=" * 60)
-    print(f"LAH-API (PHP7) 來源：{api_dir}")
-    print(f"LAH-API (PHP8) 來源：{api8_dir}")
-    print(f"LAH-FE         來源：{fe_dir}")
-    print(f"ZIP 輸出目錄        ：{output_dir}")
+    print(f"LAH-API (PHP7)         來源：{api_dir}")
+    print(f"LAH-API (PHP8)         來源：{api8_dir}")
+    print(f"LAH-FE                 來源：{fe_dir}")
+    print(f"lah-messenger-server   來源：{messenger_dir}")
+    print(f"ZIP 輸出目錄                ：{output_dir}")
 
     overall_start = time.time()
 
@@ -335,6 +414,32 @@ def main():
         if not build_zip_package("LAH-FE 前端更新包 (LAH-NUXTJS.zip)", fe_dir, fe_zip_path, FE_INCLUDES, FE_EXCLUDES):
             sys.exit(1)
 
+    # 5. 打包 即時通訊伺服器 -> lah-messenger-server.zip
+    if do_messenger:
+        ms_zip_path = os.path.join(output_dir, "lah-messenger-server.zip")
+        if not build_zip_package("即時通訊伺服器 (lah-messenger-server.zip)", messenger_dir, ms_zip_path, MESSENGER_INCLUDES, MESSENGER_EXCLUDES):
+            sys.exit(1)
+
+    # 6. 打包 前端核心套件 -> LAH-NUXTJS-node_modules.zip
+    if do_fe_modules:
+        fe_mod_dir = os.path.join(fe_dir, "node_modules")
+        if not os.path.isdir(fe_mod_dir):
+            print(f"[WARN] 找不到前端 node_modules 目錄：{fe_mod_dir}，跳過打包。")
+        else:
+            fe_mod_zip = os.path.join(output_dir, "LAH-NUXTJS-node_modules.zip")
+            if not build_zip_package("前端核心套件 (LAH-NUXTJS-node_modules.zip)", fe_dir, fe_mod_zip, ["node_modules"], NODE_MODULES_EXCLUDES):
+                sys.exit(1)
+
+    # 7. 打包 即時通伺服器核心套件 -> lah-messenger-server-node_modules.zip
+    if do_server_modules:
+        server_mod_dir = os.path.join(messenger_dir, "node_modules")
+        if not os.path.isdir(server_mod_dir):
+            print(f"[WARN] 找不到即時通伺服器 node_modules 目錄：{server_mod_dir}，跳過打包。")
+        else:
+            server_mod_zip = os.path.join(output_dir, "lah-messenger-server-node_modules.zip")
+            if not build_zip_package("即時通訊核心套件 (lah-messenger-server-node_modules.zip)", messenger_dir, server_mod_zip, ["node_modules"], NODE_MODULES_EXCLUDES):
+                sys.exit(1)
+
     total_elapsed = time.time() - overall_start
     print("=" * 60)
     print(f"[SUCCESS] 全部打包作業順利完成！（總耗時 {total_elapsed:.1f} 秒）")
@@ -345,6 +450,12 @@ def main():
         print(f"  - {os.path.join(output_dir, 'LAH-API.zip')}")
     if do_fe:
         print(f"  - {os.path.join(output_dir, 'LAH-NUXTJS.zip')}")
+    if do_messenger:
+        print(f"  - {os.path.join(output_dir, 'lah-messenger-server.zip')}")
+    if do_fe_modules:
+        print(f"  - {os.path.join(output_dir, 'LAH-NUXTJS-node_modules.zip')}")
+    if do_server_modules:
+        print(f"  - {os.path.join(output_dir, 'lah-messenger-server-node_modules.zip')}")
     print("=" * 60)
 
 
