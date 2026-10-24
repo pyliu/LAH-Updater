@@ -650,8 +650,11 @@ def audit_and_ensure_pm2_services(log_func, root_dir=None):
                 log_func("  ✅ 成功啟動 [pm2-logrotate] 模組！", "success")
                 need_save = True
             else:
+                # 優先使用綠色目錄中之本機套件進行離線安裝，避免公務內網無外網環境無法自 npm 下載
+                local_mod_path = os.path.normpath(os.path.join(target_root, "node", "node_modules", "pm2-logrotate"))
+                target_pkg = local_mod_path if os.path.isdir(local_mod_path) else "pm2-logrotate"
                 ins_res = subprocess.run(
-                    [pm2_bin, "install", "pm2-logrotate", "--no-color"],
+                    [pm2_bin, "install", target_pkg, "--no-color"],
                     capture_output=True,
                     timeout=60,
                     creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
