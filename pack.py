@@ -9,7 +9,8 @@ r"""
 4. 依據 zip_fe.* 規則，將 LAH-FE 編譯後檔案打包為 LAH-NUXTJS.zip（前端更新包）。
 5. 依據參數可選打包即時通訊伺服器 (lah-messenger-server.zip)。
 6. 依據參數可選打包前端與即時通核心依賴套件 (LAH-NUXTJS-node_modules.zip, lah-messenger-server-node_modules.zip)。
-7. 產出壓縮檔預設輸出至分享區：d:\DEV\@各所分享區\@智慧管控系統\@更新程式\
+7. 依據參數可選打包可攜式 Node.js 綠色環境 (node.zip)。
+8. 產出壓縮檔預設輸出至分享區：d:\DEV\@各所分享區\@智慧管控系統\@更新程式\
    若該分享區目錄不存在（如於未掛載 D 槽之本機開發環境），自動回退輸出至腳本同層 dist 目錄。
 """
 import argparse
@@ -22,11 +23,11 @@ import sys
 import time
 import zipfile
 
-# 安全容錯：避免 Windows CMD 在 CP950 編碼下因特殊符號噴 UnicodeEncodeError
+# 安全容錯：確保 Windows 控制台在 UTF-8 下正確輸出進度條圖示與中文，避免 UnicodeEncodeError
 if sys.stdout and hasattr(sys.stdout, "reconfigure"):
-    sys.stdout.reconfigure(errors="replace")
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 if sys.stderr and hasattr(sys.stderr, "reconfigure"):
-    sys.stderr.reconfigure(errors="replace")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
 
 # ==============================================================================
@@ -143,9 +144,18 @@ NODE_MODULES_EXCLUDES = [
     "*.bak",
 ]
 
+# Node.js 綠色環境打包排除規則
+NODE_EXCLUDES = [
+    r"node\node_modules\.cache",
+    r"*\.cache\*",
+    "*.log",
+    "*.tmp",
+    "*.bak",
+]
+
 
 def resolve_project_dirs(script_dir):
-    """自動探測 LAH-API/www (PHP7)、LAH-API/API (PHP8)、LAH-FE 與 lah-messenger-server 的真實路徑（相容工作區 Junction 與獨立目錄）"""
+    """自動探測 LAH-API/www (PHP7)、LAH-API/API (PHP8)、LAH-FE、lah-messenger-server 與 Node.js 綠色環境真實路徑（相容工作區 Junction 與獨立目錄）"""
     workspace_dir = os.path.dirname(script_dir)
 
     api_candidates = [
@@ -168,16 +178,23 @@ def resolve_project_dirs(script_dir):
         r"d:\DEV\lah-workspace\lah-messenger-server",
         r"d:\DEV\lah-messenger-server",
     ]
+    node_candidates = [
+        r"C:\AppServ\node",
+        r"d:\AppServ\node",
+        os.path.join(workspace_dir, "node"),
+    ]
 
     api_dir = next((p for p in api_candidates if os.path.isdir(p)), api_candidates[0])
     api8_dir = next((p for p in api8_candidates if os.path.isdir(p)), api8_candidates[0])
     fe_dir = next((p for p in fe_candidates if os.path.isdir(p)), fe_candidates[0])
     messenger_dir = next((p for p in messenger_candidates if os.path.isdir(p)), messenger_candidates[0])
+    node_dir = next((p for p in node_candidates if os.path.isdir(p)), node_candidates[0])
     return (
         os.path.realpath(api_dir),
         os.path.realpath(api8_dir),
         os.path.realpath(fe_dir),
-        os.path.realpath(messenger_dir)
+        os.path.realpath(messenger_dir),
+        os.path.realpath(node_dir)
     )
 
 
@@ -305,20 +322,175 @@ def build_zip_package(title, base_dir, zip_path, include_patterns, exclude_patte
         return False
 
     total_files = len(files_to_pack)
+    bar_width = 20
+    last_update_time = 0.0
+
     try:
         with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=6) as zf:
             for idx, (full_path, arcname) in enumerate(files_to_pack, 1):
                 zf.write(full_path, arcname)
-                if idx % 300 == 0 or idx == total_files:
-                    print(f"       進度：{idx}/{total_files} 個檔案...")
+
+                now = time.time()
+                # 節流即時動態刷新：第 1 檔、最後一檔或間隔 >= 0.08 秒才輸出，避免終端機 I/O 拖慢壓縮效能
+                if idx == 1 or idx == total_files or (now - last_update_time >= 0.08):
+                    last_update_time = now
+                    percent = (idx / total_files) * 100.0
+                    elapsed = now - start_time
+                    speed = idx / elapsed if elapsed > 0 else 0
+                    eta_sec = (total_files - idx) / speed if speed > 0 else 0
+                    if eta_sec < 3600:
+                        eta_str = f"{int(eta_sec // 60):02d}:{int(eta_sec % 60):02d}"
+                    else:
+                        eta_str = f"{int(eta_sec // 3600)}h{int((eta_sec % 3600) // 60):02d}m"
+
+                    filled = int(bar_width * idx // total_files)
+                    bar = "█" * filled + "░" * (bar_width - filled)
+
+                    # 截斷過長檔名以防終端機自動折行造成殘影
+                    max_name_len = 26
+                    if len(arcname) > max_name_len:
+                        display_name = "..." + arcname[-(max_name_len - 3):]
+                    else:
+                        display_name = arcname
+
+                    line_content = f"\r       [{bar}] {percent:5.1f}% ({idx}/{total_files}) | {int(speed):3d} 檔/秒 | ETA: {eta_str} | {display_name}"
+                    cols = shutil.get_terminal_size(fallback=(100, 24)).columns
+                    sys.stdout.write(line_content.ljust(cols - 1)[:cols - 1])
+                    sys.stdout.flush()
+
+        # 壓縮完成後顯示 100% 狀態並換行
+        filled = bar_width
+        bar = "█" * filled
+        elapsed = time.time() - start_time
+        speed = total_files / elapsed if elapsed > 0 else 0
+        final_line = f"\r       [{bar}] 100.0% ({total_files}/{total_files}) | {int(speed):3d} 檔/秒 | 完成"
+        cols = shutil.get_terminal_size(fallback=(100, 24)).columns
+        sys.stdout.write(final_line.ljust(cols - 1)[:cols - 1] + "\n")
+        sys.stdout.flush()
     except Exception as e:
-        print(f"[ERROR] 壓縮過程發生錯誤：{e}")
+        print(f"\n[ERROR] 壓縮過程發生錯誤：{e}")
         return False
 
     elapsed = time.time() - start_time
     size_mb = os.path.getsize(zip_path) / (1024 * 1024)
     print(f"[OK] {os.path.basename(zip_path)} 打包完成！共 {total_files} 個檔案，大小 {size_mb:.2f} MB（耗時 {elapsed:.1f} 秒）")
     return True
+
+
+def prompt_interactive_targets():
+    """當未傳入任何參數時，顯示互動選單供使用者選擇欲打包的項目"""
+    print("=" * 68)
+    print("  智慧控管與監控系統 - 原始碼打包工具 (pack.bat / pack.py)")
+    print("=" * 68)
+    print()
+    print("  【單項更新包】")
+    print("    1. LAH-API (PHP7)  後端更新包   (www.zip)")
+    print("    2. LAH-API (PHP8)  後端更新包   (LAH-API.zip)")
+    print("    3. LAH-FE 前端網站 (含 yarn build) (LAH-NUXTJS.zip)")
+    print("    4. 即時通訊伺服器               (lah-messenger-server.zip)")
+    print("    5. 前端網站 核心套件 (node_modules) (LAH-NUXTJS-node_modules.zip)")
+    print("    6. 即時通訊 核心套件 (node_modules) (lah-messenger-server-node_modules.zip)")
+    print("    7. Node.js  綠色環境 (含 logrotate) (node.zip)")
+    print()
+    print("  【常用組合快捷】")
+    print("    A. 常規程式碼更新包 (1 + 2 + 3 + 4)")
+    print("    B. 僅大型相依套件包 (5 + 6 + 7)")
+    print("    C. 全套完整大包     (1 至 7 全部打包)")
+    print()
+    print("    Q. 離開程式")
+    print()
+    print("  提示：可輸入單一編號、組合代碼 (A/B/C)，或輸入多個數字以空格或逗號分隔")
+    print("        (例如輸入「1 3 5」可同時打包 PHP7、前端與前端套件)")
+    print("=" * 68)
+
+    while True:
+        try:
+            choice = input("請輸入欲打包的選項 (預設 A，直接按 Enter 執行): ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print("\n已取消作業。")
+            sys.exit(0)
+
+        if not choice:
+            choice = "A"
+
+        if choice.upper() == "Q":
+            print("已取消作業。")
+            sys.exit(0)
+
+        # 解析輸入 token (以空格或逗號分隔)
+        tokens = [t.strip().upper() for t in choice.replace(",", " ").split() if t.strip()]
+
+        do_api = False
+        do_api8 = False
+        do_fe = False
+        do_messenger = False
+        do_fe_modules = False
+        do_server_modules = False
+        do_node = False
+
+        valid = False
+        for tok in tokens:
+            if tok == "1":
+                do_api = True
+                valid = True
+            elif tok == "2":
+                do_api8 = True
+                valid = True
+            elif tok == "3":
+                do_fe = True
+                valid = True
+            elif tok == "4":
+                do_messenger = True
+                valid = True
+            elif tok == "5":
+                do_fe_modules = True
+                valid = True
+            elif tok == "6":
+                do_server_modules = True
+                valid = True
+            elif tok == "7":
+                do_node = True
+                valid = True
+            elif tok == "A":
+                do_api = True
+                do_api8 = True
+                do_fe = True
+                do_messenger = True
+                valid = True
+            elif tok == "B":
+                do_fe_modules = True
+                do_server_modules = True
+                do_node = True
+                valid = True
+            elif tok == "C":
+                do_api = True
+                do_api8 = True
+                do_fe = True
+                do_messenger = True
+                do_fe_modules = True
+                do_server_modules = True
+                do_node = True
+                valid = True
+            elif tok == "Q":
+                print("已取消作業。")
+                sys.exit(0)
+            else:
+                print(f"[提示] 未知的選項「{tok}」，已忽略。")
+
+        if valid:
+            selected_names = []
+            if do_api: selected_names.append("www.zip (PHP7)")
+            if do_api8: selected_names.append("LAH-API.zip (PHP8)")
+            if do_fe: selected_names.append("LAH-NUXTJS.zip (前端)")
+            if do_messenger: selected_names.append("lah-messenger-server.zip (即時通訊)")
+            if do_fe_modules: selected_names.append("LAH-NUXTJS-node_modules.zip (前端套件)")
+            if do_server_modules: selected_names.append("lah-messenger-server-node_modules.zip (即時通套件)")
+            if do_node: selected_names.append("node.zip (綠色環境)")
+
+            print(f"\n已選擇打包項目：{', '.join(selected_names)}\n")
+            return do_api, do_api8, do_fe, do_messenger, do_fe_modules, do_server_modules, do_node
+
+        print("[錯誤] 無任何有效選項，請重新輸入！\n")
 
 
 def main():
@@ -333,12 +505,15 @@ def main():
     parser.add_argument("--server-modules", action="store_true", help="打包即時通伺服器核心套件 (lah-messenger-server-node_modules.zip)")
     parser.add_argument("--with-modules", action="store_true", help="常規打包時一併打包這兩個 node_modules 壓縮包")
     parser.add_argument("--modules-only", action="store_true", help="僅打包這兩個 node_modules 壓縮包，不打包程式碼")
+    parser.add_argument("--node-only", action="store_true", help="僅打包可攜式 Node.js 綠色環境 (node.zip)")
+    parser.add_argument("--with-node", action="store_true", help="常規打包時一併打包可攜式 Node.js 綠色環境 (node.zip)")
+    parser.add_argument("--node", action="store_true", dest="do_node_pkg", help="打包可攜式 Node.js 綠色環境 (node.zip)")
     parser.add_argument("--output-dir", default=None, help=f"指定輸出目錄（若未指定且預設分享區不存在，將自動輸出至腳本同層 dist 目錄）")
     args = parser.parse_args()
 
     script_dir = os.path.dirname(os.path.abspath(__file__))
     dist_dir = os.path.join(script_dir, "dist")
-    api_dir, api8_dir, fe_dir, messenger_dir = resolve_project_dirs(script_dir)
+    api_dir, api8_dir, fe_dir, messenger_dir, node_dir = resolve_project_dirs(script_dir)
 
     # 決定輸出目錄：未指定且預設分享區不存在時自動回退至 dist
     if args.output_dir:
@@ -352,18 +527,32 @@ def main():
 
     os.makedirs(output_dir, exist_ok=True)
 
-    # 決定打包項目：若未指定特定 only 參數，則預設三者全部打包
-    if args.modules_only:
+    # 決定打包項目：
+    # 1. 若無傳入任何命令列參數，進入互動選單模式供使用者自由勾選
+    if len(sys.argv) == 1:
+        do_api, do_api8, do_fe, do_messenger, do_fe_modules, do_server_modules, do_node = prompt_interactive_targets()
+    # 2. 若傳入特定參數，則依參數執行（支援無人值守與腳本調用）
+    elif args.modules_only:
         do_api = False
         do_api8 = False
         do_fe = False
         do_messenger = False
         do_fe_modules = True
         do_server_modules = True
+        do_node = False
+    elif args.node_only:
+        do_api = False
+        do_api8 = False
+        do_fe = False
+        do_messenger = False
+        do_fe_modules = False
+        do_server_modules = False
+        do_node = True
     else:
         has_specific_target = (
             args.api_only or args.api8_only or args.fe_only or
-            args.messenger_only or args.fe_modules or args.server_modules
+            args.messenger_only or args.fe_modules or args.server_modules or
+            args.do_node_pkg
         )
         if has_specific_target:
             do_api = args.api_only
@@ -372,6 +561,7 @@ def main():
             do_messenger = args.messenger_only
             do_fe_modules = args.fe_modules or args.with_modules
             do_server_modules = args.server_modules or args.with_modules
+            do_node = args.do_node_pkg or args.with_node
         else:
             do_api = True
             do_api8 = True
@@ -379,6 +569,7 @@ def main():
             do_messenger = True
             do_fe_modules = args.with_modules
             do_server_modules = args.with_modules
+            do_node = args.with_node
 
     print("=" * 60)
     print("智慧控管與監控系統 - 原始碼打包工具 (LAH-API / LAH-FE / lah-messenger-server)")
@@ -387,6 +578,7 @@ def main():
     print(f"LAH-API (PHP8)         來源：{api8_dir}")
     print(f"LAH-FE                 來源：{fe_dir}")
     print(f"lah-messenger-server   來源：{messenger_dir}")
+    print(f"Node.js (綠色環境)     來源：{node_dir}")
     print(f"ZIP 輸出目錄                ：{output_dir}")
 
     overall_start = time.time()
@@ -420,7 +612,7 @@ def main():
         if not build_zip_package("即時通訊伺服器 (lah-messenger-server.zip)", messenger_dir, ms_zip_path, MESSENGER_INCLUDES, MESSENGER_EXCLUDES):
             sys.exit(1)
 
-    # 6. 打包 前端核心套件 -> LAH-NUXTJS-node_modules.zip
+    # 6. 打包 前端核心套件 -> LAH-NUXTJS-node_modules.zip (與別名 LAH-FE-node_modules.zip)
     if do_fe_modules:
         fe_mod_dir = os.path.join(fe_dir, "node_modules")
         if not os.path.isdir(fe_mod_dir):
@@ -429,6 +621,18 @@ def main():
             fe_mod_zip = os.path.join(output_dir, "LAH-NUXTJS-node_modules.zip")
             if not build_zip_package("前端核心套件 (LAH-NUXTJS-node_modules.zip)", fe_dir, fe_mod_zip, ["node_modules"], NODE_MODULES_EXCLUDES):
                 sys.exit(1)
+            # 同步建立別名 LAH-FE-node_modules.zip，相容直接以 LAH-FE 命名的使用場景
+            fe_alias_zip = os.path.join(output_dir, "LAH-FE-node_modules.zip")
+            try:
+                if os.path.exists(fe_alias_zip):
+                    os.remove(fe_alias_zip)
+                try:
+                    os.link(fe_mod_zip, fe_alias_zip)
+                except OSError:
+                    shutil.copy2(fe_mod_zip, fe_alias_zip)
+                print(f"       已同步建立別名檔案：{os.path.basename(fe_alias_zip)}")
+            except Exception as e:
+                print(f"[WARN] 建立別名檔案失敗：{e}")
 
     # 7. 打包 即時通伺服器核心套件 -> lah-messenger-server-node_modules.zip
     if do_server_modules:
@@ -438,6 +642,17 @@ def main():
         else:
             server_mod_zip = os.path.join(output_dir, "lah-messenger-server-node_modules.zip")
             if not build_zip_package("即時通訊核心套件 (lah-messenger-server-node_modules.zip)", messenger_dir, server_mod_zip, ["node_modules"], NODE_MODULES_EXCLUDES):
+                sys.exit(1)
+
+    # 8. 打包 可攜式 Node.js 綠色環境 -> node.zip
+    if do_node:
+        if not os.path.isdir(node_dir):
+            print(f"[WARN] 找不到 Node.js 綠色環境目錄：{node_dir}，跳過打包。")
+        else:
+            node_zip_path = os.path.join(output_dir, "node.zip")
+            node_parent = os.path.dirname(node_dir)
+            node_folder = os.path.basename(node_dir)
+            if not build_zip_package("可攜式 Node.js 綠色環境 (node.zip)", node_parent, node_zip_path, [node_folder], NODE_EXCLUDES):
                 sys.exit(1)
 
     total_elapsed = time.time() - overall_start
@@ -454,8 +669,11 @@ def main():
         print(f"  - {os.path.join(output_dir, 'lah-messenger-server.zip')}")
     if do_fe_modules:
         print(f"  - {os.path.join(output_dir, 'LAH-NUXTJS-node_modules.zip')}")
+        print(f"  - {os.path.join(output_dir, 'LAH-FE-node_modules.zip')} (別名)")
     if do_server_modules:
         print(f"  - {os.path.join(output_dir, 'lah-messenger-server-node_modules.zip')}")
+    if do_node:
+        print(f"  - {os.path.join(output_dir, 'node.zip')}")
     print("=" * 60)
 
 

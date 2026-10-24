@@ -1,4 +1,5 @@
 @echo off
+title LAH Pack Tool
 chcp 65001 >nul
 python "%~dp0pack.py" %*
-pause
+if errorlevel 1 pause

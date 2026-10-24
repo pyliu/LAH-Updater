@@ -53,10 +53,11 @@ PACKAGE_CONFIGS = [
     {
         "id": "lah_nuxtjs_modules",
         "name": "LAH-NUXTJS-node_modules.zip",
+        "alt_names": ["LAH-FE-node_modules.zip", "lah-fe-node_modules.zip"],
         "rel_target": os.path.join("LAH-NUXTJS", "node_modules"),
         "title": "└─ 前端網站 核心套件 (LAH-NUXTJS-node_modules.zip)",
         "expected_folder": "node_modules",
-        "alt_folders": ["lah-nuxtjs-node_modules", "LAH-NUXTJS-node_modules"],
+        "alt_folders": ["lah-nuxtjs-node_modules", "LAH-NUXTJS-node_modules", "lah-fe-node_modules", "LAH-FE-node_modules"],
         "is_nodejs": True,
         "is_sub_package": True
     },
@@ -462,7 +463,7 @@ def resurrect_pm2_services(log_func, root_dir=None):
 
         if res.returncode == 0:
             log_func("✅ 已成功執行 [pm2 resurrect] 喚醒並還原所有 Node.js 專案服務！", "success")
-            # 還原後執行全方位核心巡檢補啟動，確保 LAH-WSS 等服務皆完整在線
+            # 還原後執行全方位核心巡檢補啟動，確保 LAH-WSS、pm2-logrotate 等服務皆完整在線
             return audit_and_ensure_pm2_services(log_func, root_dir)
         else:
             err_msg = err_text or out_text or f"返回碼 {res.returncode}"
@@ -529,18 +530,19 @@ def restart_pm2_services(log_func, root_dir=None):
         msg = f"呼叫 pm2 restart all 時發生異常: {e}"
         log_func(f"❌ {msg}", "error")
 
-    # 無論重啟結果為何，執行全方位核心巡檢，自動補齊並拉起遺漏之 LAH-WSS、LAH-FE、LAH-SCHEDULER、lah-api-v85
+    # 無論重啟結果為何，執行全方位核心巡檢，自動補齊並拉起遺漏之 LAH-WSS、LAH-FE、LAH-SCHEDULER、lah-api-v85、pm2-logrotate
     audit_ok, audit_msg = audit_and_ensure_pm2_services(log_func, root_dir)
     return audit_ok, audit_msg
 
 
 def audit_and_ensure_pm2_services(log_func, root_dir=None):
     """
-    全方位巡檢 PM2 核心服務（LAH-WSS、LAH-FE、LAH-SCHEDULER、lah-api-v85）。
+    全方位巡檢 PM2 核心服務與模組（LAH-WSS、LAH-FE、LAH-SCHEDULER、lah-api-v85、pm2-logrotate）。
     1. 自動建立並確保 logs 目錄存在，杜絕日誌路徑缺失導致啟動失敗。
     2. 透過 pm2 jlist 取得目前所有執行中服務清單。
     3. 若發現核心服務遺漏或離線，自動由目標目錄 (如 C:\\AppServ) 之 ecosystem.config.js 補啟動 (pm2 start)。
-    4. 若有補啟動任何服務，自動執行 pm2 save 保存快照至 dump.pm2。
+    4. 若發現 pm2-logrotate 日誌輪替模組遺漏或離線，自動執行 restart/install 補啟動。
+    5. 若有補啟動任何服務或模組，自動執行 pm2 save 保存快照至 dump.pm2。
     """
     target_root = root_dir if (root_dir and os.path.exists(root_dir)) else r"C:\AppServ"
     logs_dir = os.path.normpath(os.path.join(target_root, "logs"))
@@ -577,7 +579,7 @@ def audit_and_ensure_pm2_services(log_func, root_dir=None):
                     if app_name not in managed_apps or status == "online":
                         managed_apps[app_name] = status
     except Exception as e:
-        log_func(f"⚠️ 查詢 PM2 進程狀態 (pm2 jlist) 發生異常: {e}，將嘗試直接補啟動缺漏設定檔...", "warning")
+        log_func(f"⚠️ 查詢 PM2 進程狀態發生異常: {e}，將嘗試直接補啟動缺漏設定檔...", "warning")
 
     # 2. 定義 3 大生態系設定檔與所屬服務
     core_ecosystems = [
@@ -634,6 +636,40 @@ def audit_and_ensure_pm2_services(log_func, root_dir=None):
             except Exception as e:
                 log_func(f"  ❌ 啟動 [{eco_path}] 失敗: {e}", "error")
 
+    # 2.1 檢查並確保日誌輪替模組 (pm2-logrotate) 運作
+    if managed_apps.get("pm2-logrotate") != "online":
+        log_func("⚡ 偵測到日誌輪替模組 [pm2-logrotate] 尚未在線，正在嘗試啟動...", "warning")
+        try:
+            start_mod = subprocess.run(
+                [pm2_bin, "restart", "pm2-logrotate", "--no-color"],
+                capture_output=True,
+                timeout=30,
+                creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
+            )
+            if start_mod.returncode == 0:
+                log_func("  ✅ 成功啟動 [pm2-logrotate] 模組！", "success")
+                need_save = True
+            else:
+                ins_res = subprocess.run(
+                    [pm2_bin, "install", "pm2-logrotate", "--no-color"],
+                    capture_output=True,
+                    timeout=60,
+                    creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
+                )
+                if ins_res.returncode == 0:
+                    log_func("  ✅ 成功註冊並啟動 [pm2-logrotate] 模組！", "success")
+                    subprocess.run(
+                        [pm2_bin, "set", "pm2-logrotate:compress", "true"],
+                        capture_output=True,
+                        creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
+                    )
+                    need_save = True
+                else:
+                    mod_err = _decode_console_bytes(ins_res.stderr).strip() or _decode_console_bytes(ins_res.stdout).strip()
+                    log_func(f"  ⚠️ 啟動 [pm2-logrotate] 模組回傳警示: {mod_err}", "warning")
+        except Exception as e:
+            log_func(f"  ❌ 啟動 [pm2-logrotate] 失敗: {e}", "error")
+
     # 3. 若有補啟動任何項目，自動持久化保存狀態
     if need_save:
         log_func("💾 偵測到服務配置異動，正在執行 [pm2 save] 更新持久化存檔...", "info")
@@ -662,7 +698,7 @@ def audit_and_ensure_pm2_services(log_func, root_dir=None):
 
     log_func("📋 PM2 核心服務現況總覽：", "info")
     all_healthy = True
-    for app_name in ["LAH-WSS", "LAH-FE", "LAH-SCHEDULER", "lah-api-v85"]:
+    for app_name in ["LAH-WSS", "LAH-FE", "LAH-SCHEDULER", "lah-api-v85", "pm2-logrotate"]:
         st = final_apps.get(app_name, "未註冊 / 離線")
         if st == "online":
             log_func(f"  • {app_name:<16} : ✅ {st}", "success")
@@ -671,7 +707,7 @@ def audit_and_ensure_pm2_services(log_func, root_dir=None):
             log_func(f"  • {app_name:<16} : ⚠️ {st}", "warning")
 
     if all_healthy:
-        log_func("🎉 全部 4 大核心服務（含 LAH-WSS）皆已成功在線運作！", "success")
+        log_func("🎉 全部 5 大核心服務與模組皆已成功在線運作！", "success")
     else:
         log_func("⚠️ 部分核心服務未能順利在線，請檢視上方日誌輸出或終端機 pm2 status。", "warning")
 
@@ -2088,7 +2124,9 @@ class UpdaterApp:
             p_id = pkg["id"]
             p_name = pkg["name"]
             v = self.pkg_vars[p_id]
-            zip_path = os.path.join(self.app_dir, p_name)
+            candidates = [p_name] + pkg.get("alt_names", [])
+            found_path = next((os.path.join(self.app_dir, name) for name in candidates if os.path.isfile(os.path.join(self.app_dir, name))), None)
+            zip_path = found_path if found_path else os.path.join(self.app_dir, p_name)
 
             if os.path.isfile(zip_path):
                 v["exists"] = True
