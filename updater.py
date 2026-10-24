@@ -1025,7 +1025,7 @@ def test_pm2_autostart_execution(log_func, root_dir=None):
         time.sleep(2)
 
         ports_status = []
-        for port in [8080, 8081, 8082, 9085]:
+        for port in [8080, 8081, 8082, 8085]:
             ps_cmd = f"Get-NetTCPConnection -LocalPort {port} -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1"
             res = subprocess.run(
                 ["powershell", "-NoProfile", "-Command", ps_cmd],
@@ -1859,7 +1859,7 @@ class UpdaterApp:
             "• 在 Windows 環境下，PM2 預設不會在重新開機後自動啟動背景守護進程。\n"
             "• 啟用開機自啟動後，系統登入時會自動透過便攜版 Node 執行 pm2 resurrect 喚醒服務。\n"
             "• 採用專屬 VBScript 隱藏視窗技術，背景靜默啟動，保證不彈出任何黑色 CMD 視窗。\n"
-            "• 開機自啟動將自動恢復即時通 WSS (8081/8082) 與 PHP8 API (9085) 等所有受管服務。"
+            "• 開機自啟動將自動恢復即時通 WSS (8081/8082) 與 PHP8 API (8085) 等所有受管服務。"
         )
         ttk.Label(
             hint_frame,
