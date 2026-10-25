@@ -7,6 +7,12 @@ Automated Update Utility for System Services
 import os
 import re
 import sys
+
+if sys.stdout and hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(errors="replace")
+if sys.stderr and hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(errors="replace")
+
 import time
 import shutil
 import socket
@@ -265,11 +271,14 @@ def start_apache_service(svc_name, log_func):
     return False
 
 
-def apply_apache_security_hardening(conf_path, log_func=None):
+def apply_apache_security_hardening(conf_path, log_func=None, root_dir=None):
     """
-    資安弱點防護：隱藏 Apache 伺服器版本資訊
+    資安弱點防護與 PHP2Shell (CVE-2024-4577 / WebShell) 緩解設定：
     1. ServerTokens Prod: 隱藏詳細版本與模組清單，HTTP Server 標頭僅回應 'Server: Apache'
     2. ServerSignature Off: 關閉伺服器產生的錯誤頁面（如 404, 500）底部的 Apache 版本資訊註記
+    3. 啟用 rewrite_module 並停用非必要之 ScriptAlias /cgi-bin/
+    4. 注入 CVE-2024-4577 (PHP-CGI 軟連字號 %AD 參數注入) 攔截規則 (RewriteCond %{QUERY_STRING} (?:^|&)%ad [NC] -> 403)
+    5. 針對靜態資源與匯出目錄 (www/assets、www/export) 明確禁止執行 PHP / WebShell 腳本 (<FilesMatch "\\.(php|phtml|phar)..."> Require all denied)
     """
     if not os.path.isfile(conf_path):
         if log_func:
@@ -282,7 +291,27 @@ def apply_apache_security_hardening(conf_path, log_func=None):
 
         orig_content = content
 
-        # 1. 處理 ServerTokens
+        # 推導安裝根目錄 (預設為 Apache24 的上層目錄)
+        if not root_dir:
+            apache_dir_guess = os.path.dirname(os.path.dirname(os.path.abspath(conf_path)))
+            root_dir = os.path.dirname(apache_dir_guess) if os.path.basename(apache_dir_guess).lower().startswith("apache") else r"C:\AppServ"
+        root_fwd = root_dir.replace("\\", "/").rstrip("/")
+
+        # 1. 確保啟用 rewrite_module (供 PHP2Shell RewriteCond 防護使用)
+        content = re.sub(
+            r'(?m)^\s*#\s*(LoadModule\s+rewrite_module\s+modules/mod_rewrite\.so)',
+            r'\1',
+            content
+        )
+
+        # 2. 停用非必要之 ScriptAlias /cgi-bin/ (防止透過 CGI 別名執行腳本)
+        content = re.sub(
+            r'(?m)^(\s*)(ScriptAlias\s+/cgi-bin/\s+.*)$',
+            r'\1# [PHP2Shell 資安防護停用] \2',
+            content
+        )
+
+        # 3. 處理 ServerTokens
         if re.search(r"(?m)^\s*#?\s*ServerTokens\b", content):
             content = re.sub(
                 r"(?m)^\s*#?\s*ServerTokens\s+.*$",
@@ -292,7 +321,7 @@ def apply_apache_security_hardening(conf_path, log_func=None):
         else:
             content += "\n# 資安弱點防護：隱藏 Apache 版本\nServerTokens Prod\n"
 
-        # 2. 處理 ServerSignature
+        # 4. 處理 ServerSignature
         if re.search(r"(?m)^\s*#?\s*ServerSignature\b", content):
             content = re.sub(
                 r"(?m)^\s*#?\s*ServerSignature\s+.*$",
@@ -301,6 +330,38 @@ def apply_apache_security_hardening(conf_path, log_func=None):
             )
         else:
             content += "\n# 資安弱點防護：關閉錯誤頁面版本簽名\nServerSignature Off\n"
+
+        # 5. 注入或更新 PHP2Shell (CVE-2024-4577 & 靜態/上傳目錄禁執行腳本) 緩解設定區塊
+        php2shell_block = (
+            f'# =====================================================================\n'
+            f'# PHP2Shell (CVE-2024-4577 PHP-CGI Argument Injection & WebShell) Mitigation\n'
+            f'# =====================================================================\n'
+            f'<IfModule rewrite_module>\n'
+            f'    RewriteEngine On\n'
+            f'    RewriteCond %{{QUERY_STRING}} (?:^|&)%ad [NC,OR]\n'
+            f'    RewriteCond %{{THE_REQUEST}} \\s/+(?:cgi-bin|php-cgi)/ [NC]\n'
+            f'    RewriteRule ^ - [F,L]\n'
+            f'</IfModule>\n\n'
+            f'<Directory "{root_fwd}/www/assets">\n'
+            f'    <FilesMatch "\\.(php|php5|php7|php8|phtml|phar|cgi|pl|asp|aspx|jsp)$">\n'
+            f'        Require all denied\n'
+            f'    </FilesMatch>\n'
+            f'</Directory>\n\n'
+            f'<Directory "{root_fwd}/www/export">\n'
+            f'    <FilesMatch "\\.(php|php5|php7|php8|phtml|phar|cgi|pl|asp|aspx|jsp)$">\n'
+            f'        Require all denied\n'
+            f'    </FilesMatch>\n'
+            f'</Directory>'
+        )
+
+        existing_p2s_pat = r'(?s)# =+\s*# PHP2Shell \(CVE-2024-4577.*?</Directory>'
+        if re.search(existing_p2s_pat, content):
+            # 替換既有 PHP2Shell 區塊至最新設定（注意贪婪匹配至最後一個 www/export 的 </Directory>）
+            p2s_full_pat = r'(?s)# =+\s*# PHP2Shell \(CVE-2024-4577.*?<Directory "[^"]*?/www/export">[\s\S]*?</Directory>'
+            if re.search(p2s_full_pat, content):
+                content = re.sub(p2s_full_pat, php2shell_block, content, count=1)
+        else:
+            content = content.rstrip() + "\n\n" + php2shell_block + "\n"
 
         if content != orig_content:
             bak_path = conf_path + f".bak_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
@@ -311,11 +372,11 @@ def apply_apache_security_hardening(conf_path, log_func=None):
             with open(conf_path, "w", encoding="utf-8") as f:
                 f.write(content)
             if log_func:
-                log_func("  ✓ Apache httpd.conf 已套用資安強化 (ServerTokens Prod, ServerSignature Off)", "success")
-            return True, "已成功套用 Apache 資安防護"
+                log_func("  ✓ Apache httpd.conf 已套用資安強化与 PHP2Shell 緩解設定 (ServerTokens Prod, CVE-2024-4577 RewriteRule, 禁止 assets/export 執行腳本)", "success")
+            return True, "已成功套用 Apache 資安防護與 PHP2Shell 緩解設定"
         else:
             if log_func:
-                log_func("  ℹ️ Apache httpd.conf 已具備資安防護設定 (ServerTokens Prod, ServerSignature Off)，無需變更", "info")
+                log_func("  ℹ️ Apache httpd.conf 已具備資安防護與 PHP2Shell 緩解設定，無需變更", "info")
             return True, "設定已是最新狀態"
     except Exception as e:
         msg = f"套用 Apache 資安防護發生異常: {e}"
@@ -326,8 +387,11 @@ def apply_apache_security_hardening(conf_path, log_func=None):
 
 def apply_php_security_hardening(ini_path, log_func=None):
     """
-    資安弱點防護：隱藏 PHP 版本資訊 (expose_php = Off)
-    移除 HTTP 回應標頭中的 X-Powered-By: PHP/... 洩漏
+    資安弱點防護與 PHP2Shell 緩解設定：
+    1. expose_php = Off (移除 HTTP 回應標頭中的 X-Powered-By: PHP/... 洩漏)
+    2. allow_url_include = Off (防止遠端檔案引入 RFI / WebShell 注入)
+    3. cgi.force_redirect = 1 (防止直接透過 CGI 方式繞過伺服器安全規則呼叫 PHP)
+    4. enable_dl = Off (禁止執行期動態載入未知的外部擴充 DLL)
     """
     if not os.path.isfile(ini_path):
         if log_func:
@@ -340,17 +404,25 @@ def apply_php_security_hardening(ini_path, log_func=None):
 
         orig_content = content
 
-        if re.search(r"(?m)^\s*#?\s*;?\s*expose_php\b", content):
-            content = re.sub(
-                r"(?m)^\s*#?\s*;?\s*expose_php\s*=.*$",
-                "expose_php = Off",
-                content
-            )
-        else:
-            if "[PHP]" in content:
-                content = content.replace("[PHP]\n", "[PHP]\n# 資安弱點防護：隱藏 PHP 版本\nexpose_php = Off\n", 1)
+        directives = [
+            ("expose_php", "Off", "隱藏 PHP 版本"),
+            ("allow_url_include", "Off", "PHP2Shell 防護：禁止遠端檔案引入"),
+            ("cgi.force_redirect", "1", "PHP2Shell 防護：強制 CGI 安全重新導向檢查"),
+            ("enable_dl", "Off", "PHP2Shell 防護：禁止執行期動態載入 DLL"),
+        ]
+
+        for key, val, comment in directives:
+            pat_active = rf"(?m)^\s*{re.escape(key)}\s*=.*$"
+            pat_commented = rf"(?m)^\s*[;#]\s*{re.escape(key)}\s*=.*$"
+            if re.search(pat_active, content):
+                content = re.sub(pat_active, f"{key} = {val}", content, count=1)
+            elif re.search(pat_commented, content):
+                content = re.sub(pat_commented, f"{key} = {val}", content, count=1)
             else:
-                content += "\n# 資安弱點防護：隱藏 PHP 版本\nexpose_php = Off\n"
+                if "[PHP]" in content:
+                    content = content.replace("[PHP]\n", f"[PHP]\n; {comment}\n{key} = {val}\n", 1)
+                else:
+                    content += f"\n; {comment}\n{key} = {val}\n"
 
         if content != orig_content:
             bak_path = ini_path + f".bak_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
@@ -361,11 +433,11 @@ def apply_php_security_hardening(ini_path, log_func=None):
             with open(ini_path, "w", encoding="utf-8") as f:
                 f.write(content)
             if log_func:
-                log_func(f"  ✓ {os.path.basename(os.path.dirname(ini_path))}/php.ini 已套用資安強化 (expose_php = Off)", "success")
-            return True, "已成功套用 PHP 資安防護"
+                log_func(f"  ✓ {os.path.basename(os.path.dirname(ini_path))}/php.ini 已套用資安強化與 PHP2Shell 緩解設定 (expose_php=Off, allow_url_include=Off, cgi.force_redirect=1, enable_dl=Off)", "success")
+            return True, "已成功套用 PHP 資安防護與 PHP2Shell 緩解設定"
         else:
             if log_func:
-                log_func(f"  ℹ️ {os.path.basename(os.path.dirname(ini_path))}/php.ini 已設定 expose_php = Off，無需變更", "info")
+                log_func(f"  ℹ️ {os.path.basename(os.path.dirname(ini_path))}/php.ini 已具備資安防護與 PHP2Shell 緩解設定，無需變更", "info")
             return True, "設定已是最新狀態"
     except Exception as e:
         msg = f"套用 PHP 資安防護發生異常: {e}"
@@ -519,28 +591,41 @@ def ensure_php_ini_configured(php_dir, is_php85=False, log_func=None):
             content += f'\nextension_dir = "{ext_fwd}"\n'
 
         # 2. 啟用核心擴充套件 (僅啟用 ext 目錄下實際存在 DLL 的項目)
+        # 強制確保必開擴充：gd2(PHP7.4)/gd(PHP8.5), ldap, imap, pdo_sqlite, sqlite3
         if is_php85:
-            target_exts = ["curl", "fileinfo", "gd", "intl", "mbstring", "odbc", "openssl", "pdo_odbc", "pdo_sqlite", "sockets", "sqlite3", "zip"]
+            target_exts = ["curl", "fileinfo", "gd", "imap", "intl", "ldap", "mbstring", "odbc", "openssl", "pdo_odbc", "pdo_sqlite", "sockets", "sqlite3", "zip"]
+            mandatory_exts = ["gd", "ldap", "imap", "pdo_sqlite", "sqlite3"]
         else:
-            target_exts = ["curl", "fileinfo", "gd2", "mbstring", "openssl", "pdo_sqlite", "sqlite3"]
+            target_exts = ["curl", "fileinfo", "gd2", "imap", "ldap", "mbstring", "openssl", "pdo_sqlite", "sqlite3"]
+            mandatory_exts = ["gd2", "ldap", "imap", "pdo_sqlite", "sqlite3"]
 
         enabled_exts = []
+        active_mandatory = []
+        missing_dll_mandatory = []
         for ext in target_exts:
             dll_file = os.path.join(php_dir, "ext", f"php_{ext}.dll")
             if not os.path.isfile(dll_file):
+                if ext in mandatory_exts:
+                    missing_dll_mandatory.append(ext)
                 continue
             # 檢查是否已經啟用
             active_pat = rf'(?m)^\s*extension\s*=\s*(?:php_)?{re.escape(ext)}(?:\.dll)?\b'
             if re.search(active_pat, content):
+                if ext in mandatory_exts:
+                    active_mandatory.append(ext)
                 continue
             # 嘗試取消分號註解
             commented_pat = rf'(?m)^\s*;\s*extension\s*=\s*(?:php_)?{re.escape(ext)}(?:\.dll)?\s*(?:;.*)?$'
             if re.search(commented_pat, content):
                 content = re.sub(commented_pat, f"extension={ext}", content, count=1)
                 enabled_exts.append(ext)
+                if ext in mandatory_exts:
+                    active_mandatory.append(ext)
             else:
                 content += f"\nextension={ext}\n"
                 enabled_exts.append(ext)
+                if ext in mandatory_exts:
+                    active_mandatory.append(ext)
 
         # 3. 確保 date.timezone
         if not re.search(r'(?m)^\s*date\.timezone\s*=\s*\S+', content):
@@ -563,6 +648,11 @@ def ensure_php_ini_configured(php_dir, is_php85=False, log_func=None):
         else:
             if log_func:
                 log_func(f"  ℹ️ {ver_label} 設定檔 ({os.path.basename(php_dir)}/php.ini) 擴充與路徑設定已就緒", "info")
+
+        if log_func:
+            log_func(f"  ✓ {ver_label} 關鍵擴充確認已啟用: {', '.join(active_mandatory)}", "info")
+            if missing_dll_mandatory and is_php85 and "imap" in missing_dll_mandatory:
+                log_func("  ℹ️ PHP 8.5 官方核心已移除內建 php_imap.dll (系統已由 PHP 8.5 相容層與 PHP 7.4 雙軌支援)", "info")
         return True
     except Exception as e:
         if log_func:
@@ -665,7 +755,8 @@ def configure_apache_mod_php7(apache_dir, root_dir, php7_dir=None, log_func=None
                     "libssh2.dll",
                     "nghttp2.dll",
                     "libsqlite3.dll",
-                    "libsodium.dll"
+                    "libsodium.dll",
+                    "libsasl.dll"
                 ]
                 load_lines = []
                 for dll_name in preload_dlls:
@@ -686,7 +777,7 @@ def configure_apache_mod_php7(apache_dir, root_dir, php7_dir=None, log_func=None
                 )
 
                 # 若已存在舊的 PHP 7.4 區塊，整塊更新對齊路徑與完整 LoadFile；否則追加至末尾
-                existing_p7_pat = r'(?s)# =+\s*# PHP 7\.4 \(mod_php7\).*?</FilesMatch>'
+                existing_p7_pat = r'(?s)# =+\s*# PHP 7\.4 \(mod_php7?\).*?</FilesMatch>'
                 if re.search(existing_p7_pat, content):
                     content = re.sub(existing_p7_pat, php7_block, content, count=1)
                 elif re.search(r'(?m)^\s*LoadModule\s+php7_module\b', content):
@@ -925,7 +1016,7 @@ def configure_apache_environment(apache_dir, root_dir, php7_dir=None, php85_dir=
     if enable_security:
         conf_path = os.path.join(apache_dir, "conf", "httpd.conf")
         if os.path.isfile(conf_path):
-            apply_apache_security_hardening(conf_path, log_func)
+            apply_apache_security_hardening(conf_path, log_func, root_dir=root_dir)
         if php7_dir and os.path.isfile(os.path.join(php7_dir, "php.ini")):
             apply_php_security_hardening(os.path.join(php7_dir, "php.ini"), log_func)
         if php85_dir and os.path.isfile(os.path.join(php85_dir, "php.ini")):
@@ -1480,7 +1571,19 @@ def is_file_locked(filepath):
 def restart_pm2_services(log_func, root_dir=None):
     """執行 pm2 restart all 重啟所有由 PM2 託管的 Node.js 服務（具備 No process found 自動 resurrect 與全方位核心巡檢補啟動機制）"""
     log_func("-" * 50, "info")
-    log_func("⏳ 正在執行 [pm2 restart all] 重啟 Node.js 相關服務...", "info")
+    log_func("⏳ 正在執行 [pm2 restart all] 重啟 Node.js 與 FastCGI 相關服務...", "info")
+
+    # 預先清理 Windows 下 php-cgi.exe 衍生之 PHP_FCGI_CHILDREN 子工作程序，確保重啟後完整載入最新 php85/php.ini
+    if os.name == "nt":
+        try:
+            subprocess.run(
+                ["taskkill", "/F", "/IM", "php-cgi.exe", "/T"],
+                capture_output=True,
+                timeout=10,
+                creationflags=subprocess.CREATE_NO_WINDOW
+            )
+        except Exception:
+            pass
 
     pm2_bin = resolve_pm2_command(root_dir)
     if pm2_bin:
@@ -2543,6 +2646,37 @@ def verify_all_services_health(root_dir, apache_dir=None, log_func=None):
             if log_func:
                 log_func(f"  {msg}", "info")
             report_lines.append(msg)
+
+    # 3. 驗證 PHP 7.4 與 PHP 8.5 核心擴充模組 (PHP 7.4 於 php.ini 為 gd2，載入後內部模組名為 gd)
+    for p_sub, ver_lbl, req_pairs in (
+        ("php7", "PHP 7.4", [("gd2", "gd"), ("ldap", "ldap"), ("imap", "imap"), ("pdo_sqlite", "pdo_sqlite"), ("sqlite3", "sqlite3")]),
+        ("php85", "PHP 8.5", [("gd", "gd"), ("ldap", "ldap"), ("pdo_sqlite", "pdo_sqlite"), ("sqlite3", "sqlite3")]),
+    ):
+        php_exe = os.path.join(target_root, p_sub, "php.exe")
+        if os.path.isfile(php_exe):
+            try:
+                m_res = subprocess.run(
+                    [php_exe, "-m"],
+                    capture_output=True,
+                    text=True,
+                    timeout=8,
+                    creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
+                )
+                loaded_mods = {line.strip().lower() for line in m_res.stdout.splitlines() if line.strip()}
+                missing = [ini_name for ini_name, mod_name in req_pairs if mod_name.lower() not in loaded_mods]
+                disp_names = [ini_name for ini_name, _ in req_pairs]
+                if not missing:
+                    msg = f"✅ {ver_lbl} 必備擴充模組 : 已全數載入 ({', '.join(disp_names)})"
+                    if log_func:
+                        log_func(f"  {msg}", "success")
+                    report_lines.append(msg)
+                else:
+                    msg = f"⚠️ {ver_lbl} 缺少擴充模組 : {', '.join(missing)}"
+                    if log_func:
+                        log_func(f"  {msg}", "warning")
+                    report_lines.append(msg)
+            except Exception:
+                pass
 
     return all_healthy, report_lines
 
@@ -4081,12 +4215,14 @@ class UpdaterApp:
 
         results = []
 
-        # 1. 處理 Apache httpd.conf
+        # 1. 處理 Apache httpd.conf (含 mod_php7 相依 DLL 與 PHP2Shell 緩解設定)
         if os.path.isfile(httpd_conf):
             self.log(f"正在檢查並設定 Apache: {httpd_conf}", "info")
-            ok, msg = apply_apache_security_hardening(httpd_conf, self.log)
+            if os.path.isdir(php7_dir):
+                configure_apache_mod_php7(apache_dir, root_dir, php7_dir=php7_dir, log_func=self.log)
+            ok, msg = apply_apache_security_hardening(httpd_conf, self.log, root_dir=root_dir)
             if ok:
-                results.append("• Apache httpd.conf: 已設定 ServerTokens Prod 與 ServerSignature Off")
+                results.append("• Apache httpd.conf: 已套用 ServerTokens Prod、CVE-2024-4577 (PHP2Shell) 攔截與禁執行腳本防護")
                 check_apache_syntax(apache_dir, self.log)
             else:
                 results.append(f"• Apache httpd.conf: 套用失敗 ({msg})")
@@ -4096,20 +4232,22 @@ class UpdaterApp:
         # 2. 處理 PHP 7 php.ini
         if os.path.isfile(php7_ini):
             self.log(f"正在檢查並設定 PHP 7: {php7_ini}", "info")
+            ensure_php_ini_configured(php7_dir, is_php85=False, log_func=self.log)
             ok, msg = apply_php_security_hardening(php7_ini, self.log)
             if ok:
-                results.append("• PHP 7 php.ini: 已設定 expose_php = Off")
+                results.append("• PHP 7.4 php.ini: 已啟用必備擴充 (gd2, ldap, imap, pdo_sqlite, sqlite3) 並套用 PHP2Shell 防護")
             else:
-                results.append(f"• PHP 7 php.ini: 套用失敗 ({msg})")
+                results.append(f"• PHP 7.4 php.ini: 套用失敗 ({msg})")
         else:
             self.log(f"ℹ️ 未偵測到 PHP 7 設定檔: {php7_ini}（略過）", "info")
 
         # 3. 處理 PHP 8.5 php.ini
         if os.path.isfile(php85_ini):
             self.log(f"正在檢查並設定 PHP 8.5: {php85_ini}", "info")
+            ensure_php_ini_configured(php85_dir, is_php85=True, log_func=self.log)
             ok, msg = apply_php_security_hardening(php85_ini, self.log)
             if ok:
-                results.append("• PHP 8.5 php.ini: 已設定 expose_php = Off")
+                results.append("• PHP 8.5 php.ini: 已啟用必備擴充 (gd, ldap, pdo_sqlite, sqlite3) 並套用 PHP2Shell 防護")
             else:
                 results.append(f"• PHP 8.5 php.ini: 套用失敗 ({msg})")
         else:
@@ -4124,17 +4262,38 @@ class UpdaterApp:
         if svc_name and is_service_running(svc_name):
             do_restart = messagebox.askyesno(
                 "重啟服務以套用新設定",
-                f"資安弱點防護設定已更新完成！\n\n"
+                f"資安弱點防護與 PHP 擴充模組設定已更新完成！\n\n"
                 f"偵測到 Apache 服務 [{svc_name}] 正在運行中。\n"
-                f"是否立即重新啟動 Apache 服務，使隱藏版本設定立即生效？",
+                f"是否立即重新啟動 Apache 與 PHP 8.5 FastCGI 服務，使新設定立即生效？",
                 parent=self.root
             )
             if do_restart:
-                self.log(f"正在重啟 Apache 服務 [{svc_name}]...", "info")
+                self.log(f"正在重啟 Apache 服務 [{svc_name}] 與 PHP 8.5 FastCGI...", "info")
+                if os.name == "nt":
+                    try:
+                        subprocess.run(
+                            ["taskkill", "/F", "/IM", "php-cgi.exe", "/T"],
+                            capture_output=True,
+                            timeout=10,
+                            creationflags=subprocess.CREATE_NO_WINDOW
+                        )
+                    except Exception:
+                        pass
+                pm2_bin = resolve_pm2_command(root_dir)
+                if pm2_bin:
+                    try:
+                        subprocess.run(
+                            [pm2_bin, "restart", "lah-api-v85", "--no-color"],
+                            capture_output=True,
+                            timeout=20,
+                            creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
+                        )
+                    except Exception:
+                        pass
                 stop_apache_service(svc_name, self.log)
                 start_apache_service(svc_name, self.log)
                 restarted_svc = True
-                self.log(f"✅ Apache 服務 [{svc_name}] 已成功重啟並套用資安設定！", "success")
+                self.log(f"✅ Apache 服務 [{svc_name}] 與 PHP 8.5 FastCGI 已成功重啟並套用設定！", "success")
 
         res_text = "\n".join(results)
         restart_hint = f"\n\n已成功重啟 Apache 服務 [{svc_name}]！" if restarted_svc else ("\n\n提示：若服務正在運行，請重啟 Apache 與 PM2 使設定生效。" if svc_name else "")
@@ -4619,16 +4778,16 @@ class UpdaterApp:
                     ensure_lah_api_ecosystem_config(root_dir, php85_tgt if os.path.isdir(php85_tgt) else None, self.log)
 
             # =========================================================================
-            # 【階段 3/5】套用資安設定 (不吐伺服器與 PHP 版本資訊) 並檢驗語法
+            # 【階段 3/5】套用資安設定 (不吐伺服器與 PHP 版本資訊、PHP2Shell 緩解防護) 並檢驗語法
             # =========================================================================
             if self.auto_security_hardening_var.get():
-                self.set_progress(93, "[階段 3/5] 正在套用資安弱點防護 (隱藏伺服器與 PHP 版本資訊)...")
+                self.set_progress(93, "[階段 3/5] 正在套用資安弱點防護與 PHP2Shell 緩解設定...")
                 self.log("-" * 50, "info")
-                self.log("🛡️ [階段 3/5] 正在套用資安弱點防護設定 (ServerTokens Prod / expose_php = Off)...", "info")
+                self.log("🛡️ [階段 3/5] 正在套用資安弱點防護與 PHP2Shell (CVE-2024-4577) 緩解設定...", "info")
                 if os.path.isdir(apache_tgt):
                     conf_file = os.path.join(apache_tgt, "conf", "httpd.conf")
                     if os.path.isfile(conf_file):
-                        sec_ok, sec_msg = apply_apache_security_hardening(conf_file, self.log)
+                        sec_ok, sec_msg = apply_apache_security_hardening(conf_file, self.log, root_dir=root_dir)
                         if sec_ok and "已成功套用" in sec_msg:
                             apache_conf_changed = True
                 if os.path.isdir(php7_tgt) and os.path.isfile(os.path.join(php7_tgt, "php.ini")):

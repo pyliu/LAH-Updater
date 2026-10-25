@@ -4,6 +4,23 @@
 
 ---
 
+## [v1.6.6] - 2026-10-25
+
+### 🛡️ PHP2Shell (CVE-2024-4577) 緩解設定自動套用與 5 大必備 PHP Extension 強制啟用驗證
+- **Apache (`httpd.conf`) PHP2Shell 緩解與上傳目錄禁執行防護 (`apply_apache_security_hardening`)**：
+  - 自動確保 `LoadModule rewrite_module modules/mod_rewrite.so` 啟用，並註解停用非必要的 `ScriptAlias /cgi-bin/`。
+  - 自動冪等注入 CVE-2024-4577 (PHP-CGI 軟連字號 `%AD` 參數注入漏洞) 攔截規則（`RewriteCond %{QUERY_STRING} (?:^|&)%ad [NC,OR]` 及 `RewriteCond %{THE_REQUEST} \s/+(?:cgi-bin|php-cgi)/ [NC]` ➔ `RewriteRule ^ - [F,L]` 回傳 `HTTP 403 Forbidden`）。
+  - 針對靜態與匯出目錄（`<root_dir>/www/assets`、`<root_dir>/www/export`）自動配置 `<FilesMatch "\.(php|php5|php7|php8|phtml|phar|cgi|pl|asp|aspx|jsp)$"> Require all denied </FilesMatch>`，防止上傳目錄遭植入並執行 WebShell。
+- **PHP (`php7/php.ini` 與 `php85/php.ini`) PHP2Shell 安全強化 (`apply_php_security_hardening`)**：
+  - 除既有 `expose_php = Off` 外，自動強制寫入 `allow_url_include = Off`、`cgi.force_redirect = 1`、`enable_dl = Off`（同時保留業務 Ping/Oracle CLI 所需之系統指令執行能力）。
+- **5 大必備 PHP Extension 強制啟用與 `libsasl.dll` 依賴掛載 (`ensure_php_ini_configured` / `configure_apache_mod_php7`)**：
+  - 確保 PHP 7.4 (`gd2`, `ldap`, `imap`, `pdo_sqlite`, `sqlite3`) 與 PHP 8.5 (`gd`, `ldap`, `imap`, `pdo_sqlite`, `sqlite3`) 於安裝及資安強化時自動解除註解並啟用。
+  - 解決 `php7/ext/php_ldap.dll` 在 Apache `mod_php7` 模式下因缺少 `libsasl.dll` 預先載入而無法啟用的問題，於 `configure_apache_mod_php7` 自動加入 `LoadFile "<php7_dir>/libsasl.dll"`（共 8 個核心依賴 DLL）。
+  - 強化 `restart_pm2_services` 與手動資安套用重啟邏輯，於重啟 `lah-api-v85` 前自動清理舊有 `php-cgi.exe` 子工作程序 (`PHP_FCGI_CHILDREN`)，確保最新 `php85/php.ini` 擴充與安全設定立即生效。
+  - 於階段 5 (`verify_all_services_health`) 新增 PHP 7.4 與 PHP 8.5 必備擴充模組實際載入狀態 (`php.exe -m`) 最終驗證。
+
+---
+
 ## [v1.6.5] - 2026-10-25
 
 ### 📦 移除工具 (`uninstaller.py`) 獨立備份按鈕與 `www/assets/*`、`.pm2` 備份範圍擴充
