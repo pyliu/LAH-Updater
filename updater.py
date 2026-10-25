@@ -3429,8 +3429,31 @@ class UpdaterApp:
 
         dlg = tk.Toplevel(self.root)
         dlg.title(f"📋 版本更新說明 - {self.release_note_name}")
-        dlg.geometry("720x560")
-        dlg.minsize(600, 420)
+
+        # 計算最適視窗尺寸（確保長行文字不折行，預設至少 1080x700，並依螢幕大小自動微調置中）
+        try:
+            txt_font = tkfont.Font(family="Microsoft JhengHei UI", size=12)
+            lines = self.release_note_content.splitlines()
+            max_line_w = max(txt_font.measure(line) for line in lines) if lines else 800
+            # 加上 content_frame padding (28px)、垂直捲軸與邊框餘量 (~50px) 與安全邊距 (30px)
+            needed_w = max_line_w + 110
+        except Exception:
+            needed_w = 1080
+
+        target_w = max(1080, needed_w)
+        target_h = 700
+
+        try:
+            sw = self.root.winfo_screenwidth()
+            sh = self.root.winfo_screenheight()
+            dlg_w = min(target_w, max(850, sw - 80))
+            dlg_h = min(target_h, max(540, sh - 100))
+        except Exception:
+            dlg_w = 1080
+            dlg_h = 700
+
+        dlg.geometry(f"{dlg_w}x{dlg_h}")
+        dlg.minsize(850, 520)
         dlg.transient(self.root)
 
         # 嘗試置中於主視窗上方
@@ -3440,9 +3463,9 @@ class UpdaterApp:
             ry = self.root.winfo_rooty()
             rw = self.root.winfo_width()
             rh = self.root.winfo_height()
-            dx = max(30, rx + (rw - 720) // 2)
-            dy = max(30, ry + (rh - 560) // 2)
-            dlg.geometry(f"720x560+{dx}+{dy}")
+            dx = max(20, rx + (rw - dlg_w) // 2)
+            dy = max(20, ry + (rh - dlg_h) // 2)
+            dlg.geometry(f"{dlg_w}x{dlg_h}+{dx}+{dy}")
         except Exception:
             pass
 
