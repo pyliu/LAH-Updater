@@ -45,14 +45,16 @@ function log(msg, level) {
   } catch (e) {}
 }
 
-// 1. 環境變數鎖定（確保便攜 Node.js 與 Oracle Instant Client 優先於外部環境變數）
+// 1. 環境變數鎖定（確保便攜 Node.js 與 Oracle Instant Client 優先於外部環境變數，並統一 PM2_HOME 至 <TARGET_ROOT>\.pm2）
 const OCI_DIR = path.join(TARGET_ROOT, 'instantclient_11_2');
 const ociPath = fs.existsSync(OCI_DIR) ? `${OCI_DIR};` : (fs.existsSync('C:\\Tools\\instantclient_11_2') ? 'C:\\Tools\\instantclient_11_2;' : '');
 process.env.PATH = `${NODE_DIR};${ociPath}${process.env.PATH || ''}`;
+const UNIFIED_PM2_HOME = path.join(TARGET_ROOT, '.pm2');
+process.env.PM2_HOME = UNIFIED_PM2_HOME;
 
 // 2. 處理 PM2_HOME 與 dump.pm2 跨使用者同步
 function syncPm2Home() {
-  const defaultPm2 = path.join(os.homedir(), '.pm2');
+  const defaultPm2 = UNIFIED_PM2_HOME;
   const targetDump = path.join(defaultPm2, 'dump.pm2');
 
   if (!fs.existsSync(targetDump)) {

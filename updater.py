@@ -1119,8 +1119,263 @@ def save_pm2_services(log_func, root_dir=None):
         return False, str(e)
 
 
+def ensure_portable_pm2_patched(root_dir=None, log_func=None):
+    r"""
+    確保綠色版 Node (<root_dir>\node) 內之 PM2 模組具備以下企業級相容強化：
+    1. 統一 PM2_HOME 至 <root_dir>\.pm2（如 C:\AppServ\.pm2），並自動遷移舊有使用者目錄之 dump.pm2，
+       消除 Windows 系統服務 (SYSTEM)、管理員 (Admin) 與一般 CMD 視窗之間狀態目錄分歧。
+    2. 將 Windows IPC 通訊由 Named Pipe (\\.\pipe\rpc.sock) 改為本機 Loopback TCP (127.0.0.1:42681/42682)，
+       徹底根除一般未提權 CMD 視窗執行 pm2 ls 時發生 connect EPERM \\.\pipe\rpc.sock 之權限錯誤。
+    3. 修補 Utility.js 與 NPM.js，使 pm2 install 支援 Windows 本機路徑並直接自 node\node_modules\pm2-logrotate
+       離線複製啟用，不依賴外網或外部 npm/bun。
+    4. 確保 pm2.cmd 執行時自動將綠色版 node 目錄置於該程序 PATH 最前端，不影響系統層級其他 Node 環境。
+    """
+    target_root = root_dir if (root_dir and os.path.exists(root_dir)) else r"C:\AppServ"
+    node_dir = os.path.normpath(os.path.join(target_root, "node"))
+    if not os.path.isdir(node_dir):
+        return False
+
+    patched_any = False
+    ipc_upgraded = False
+
+    # 0. 確保統一的 <target_root>\.pm2 目錄存在，若尚無 dump.pm2 則自動自現有使用者 .pm2 遷移
+    unified_pm2_home = os.path.normpath(os.path.join(target_root, ".pm2"))
+    try:
+        os.makedirs(unified_pm2_home, exist_ok=True)
+        os.environ["PM2_HOME"] = unified_pm2_home
+        target_dump = os.path.join(unified_pm2_home, "dump.pm2")
+        if not os.path.isfile(target_dump):
+            user_pm2 = os.path.join(os.environ.get("USERPROFILE", ""), ".pm2")
+            for fname in ("dump.pm2", "module_conf.json"):
+                src_f = os.path.join(user_pm2, fname)
+                dst_f = os.path.join(unified_pm2_home, fname)
+                if os.path.isfile(src_f) and not os.path.isfile(dst_f):
+                    shutil.copyfile(src_f, dst_f)
+    except Exception:
+        pass
+
+    # 1. 確保 pm2.cmd 自動將 %dp0% 注入該子程序 PATH 最前端
+    pm2_cmd_path = os.path.join(node_dir, "pm2.cmd")
+    if os.path.isfile(pm2_cmd_path):
+        try:
+            with open(pm2_cmd_path, "r", encoding="utf-8", errors="replace") as f:
+                cmd_txt = f.read()
+            if 'SET "PATH=%dp0%;%PATH%"' not in cmd_txt:
+                new_cmd_txt = (
+                    "@ECHO off\n"
+                    "GOTO start\n"
+                    ":find_dp0\n"
+                    "SET dp0=%~dp0\n"
+                    "EXIT /b\n"
+                    ":start\n"
+                    "SETLOCAL\n"
+                    "CALL :find_dp0\n\n"
+                    "IF EXIST \"%dp0%\\node.exe\" (\n"
+                    "  SET \"_prog=%dp0%\\node.exe\"\n"
+                    ") ELSE (\n"
+                    "  SET \"_prog=node\"\n"
+                    "  SET PATHEXT=%PATHEXT:;.JS;=;%\n"
+                    ")\n\n"
+                    "SET \"PATH=%dp0%;%PATH%\"\n"
+                    "endLocal & goto #_undefined_# 2>NUL || title %COMSPEC% & SET \"PATH=%dp0%;%PATH%\" & \"%_prog%\"  \"%dp0%\\node_modules\\pm2\\bin\\pm2\" %*\n"
+                )
+                with open(pm2_cmd_path, "w", encoding="utf-8") as f:
+                    f.write(new_cmd_txt)
+                patched_any = True
+        except Exception:
+            pass
+
+    # 2. 修補 paths.js (主 pm2 與 pm2-logrotate 內嵌之 pm2)
+    paths_candidates = [
+        (os.path.join(node_dir, "node_modules", "pm2", "paths.js"), "../.."),
+        (os.path.join(node_dir, "node_modules", "pm2-logrotate", "node_modules", "pm2", "paths.js"), "../../../.."),
+    ]
+    for p_file, rel_up in paths_candidates:
+        if not os.path.isfile(p_file):
+            continue
+        try:
+            with open(p_file, "r", encoding="utf-8", errors="replace") as f:
+                p_txt = f.read()
+            orig_p_txt = p_txt
+
+            if "tcp://127.0.0.1:42681" not in p_txt:
+                p_txt = re.sub(
+                    r"pm2_file_stucture\.DAEMON_RPC_PORT\s*=\s*'\\\\\\\\\.\\\\pipe\\\\rpc\.sock';\s*"
+                    r"pm2_file_stucture\.DAEMON_PUB_PORT\s*=\s*'\\\\\\\\\.\\\\pipe\\\\pub\.sock';\s*"
+                    r"pm2_file_stucture\.INTERACTOR_RPC_PORT\s*=\s*'\\\\\\\\\.\\\\pipe\\\\interactor\.sock';",
+                    "pm2_file_stucture.DAEMON_RPC_PORT = process.env.PM2_DAEMON_RPC_PORT || 'tcp://127.0.0.1:42681';\n"
+                    "    pm2_file_stucture.DAEMON_PUB_PORT = process.env.PM2_DAEMON_PUB_PORT || 'tcp://127.0.0.1:42682';\n"
+                    "    pm2_file_stucture.INTERACTOR_RPC_PORT = process.env.PM2_INTERACTOR_RPC_PORT || 'tcp://127.0.0.1:42683';",
+                    p_txt
+                )
+                ipc_upgraded = True
+
+            if "p.basename(execDir).toLowerCase() === 'node'" not in p_txt:
+                home_hook = (
+                    "  if (process.env.PM2_HOME)\n"
+                    "    return process.env.PM2_HOME;\n\n"
+                    "  try {\n"
+                    "    var execDir = p.dirname(process.execPath || '');\n"
+                    "    if (p.basename(execDir).toLowerCase() === 'node') {\n"
+                    "      return p.resolve(execDir, '..', '.pm2');\n"
+                    "    }\n"
+                    f"    var modNodeDir = p.resolve(__dirname, '{rel_up}');\n"
+                    "    if (p.basename(modNodeDir).toLowerCase() === 'node') {\n"
+                    "      return p.resolve(modNodeDir, '..', '.pm2');\n"
+                    "    }\n"
+                    "  } catch (e) {}"
+                )
+                p_txt = re.sub(
+                    r"if\s*\(process\.env\.PM2_HOME\)\s*return\s+process\.env\.PM2_HOME;",
+                    home_hook,
+                    p_txt,
+                    count=1
+                )
+
+            if p_txt != orig_p_txt:
+                with open(p_file, "w", encoding="utf-8") as f:
+                    f.write(p_txt)
+                patched_any = True
+        except Exception:
+            pass
+
+    # 3. 修補 Daemon.js (避免在 Windows 對 tcp:// 或 pipe 執行 fs.chmod 報錯)
+    daemon_file = os.path.join(node_dir, "node_modules", "pm2", "lib", "Daemon.js")
+    if os.path.isfile(daemon_file):
+        try:
+            with open(daemon_file, "r", encoding="utf-8", errors="replace") as f:
+                d_txt = f.read()
+            if "!/^(tcp:|" not in d_txt:
+                d_txt_new = d_txt.replace(
+                    "  this.pub_socket.once('bind', function() {\n    fs.chmod(that.pub_socket_file, '775', function(e) {",
+                    "  this.pub_socket.once('bind', function() {\n    if (!/^(tcp:|\\\\\\\\\\.\\\\pipe\\\\)/i.test(String(that.pub_socket_file))) fs.chmod(that.pub_socket_file, '775', function(e) {"
+                ).replace(
+                    "  this.rpc_socket.once('bind', function() {\n    fs.chmod(that.rpc_socket_file, '775', function(e) {",
+                    "  this.rpc_socket.once('bind', function() {\n    if (!/^(tcp:|\\\\\\\\\\.\\\\pipe\\\\)/i.test(String(that.rpc_socket_file))) fs.chmod(that.rpc_socket_file, '775', function(e) {"
+                )
+                if d_txt_new != d_txt:
+                    with open(daemon_file, "w", encoding="utf-8") as f:
+                        f.write(d_txt_new)
+                    patched_any = True
+        except Exception:
+            pass
+
+    # 4. 修補 Utility.js (支援 Windows 本機路徑解析 getCanonicModuleName)
+    util_file = os.path.join(node_dir, "node_modules", "pm2", "lib", "Utility.js")
+    if os.path.isfile(util_file):
+        try:
+            with open(util_file, "r", encoding="utf-8", errors="replace") as f:
+                u_txt = f.read()
+            if "canonic_module_name.indexOf('\\\\') !== -1" not in u_txt:
+                target_snip = (
+                    "    else if(canonic_module_name.indexOf('file://') === 0) {\n"
+                    "      canonic_module_name = canonic_module_name.replace(/\\/$/, '').split('/').pop();\n"
+                    "    }"
+                )
+                replacement_snip = (
+                    target_snip + "\n\n"
+                    "    else if(canonic_module_name.indexOf('\\\\') !== -1 || /^[a-zA-Z]:/.test(canonic_module_name)) {\n"
+                    "      canonic_module_name = canonic_module_name.replace(/[\\\\\\/]+$/, '').split(/[\\\\\\/]/).pop();\n"
+                    "    }"
+                )
+                if target_snip in u_txt:
+                    with open(util_file, "w", encoding="utf-8") as f:
+                        f.write(u_txt.replace(target_snip, replacement_snip, 1))
+                    patched_any = True
+        except Exception:
+            pass
+
+    # 5. 修補 NPM.js (支援直接自 node\node_modules\<module> 離線複製安裝模組)
+    npm_file = os.path.join(node_dir, "node_modules", "pm2", "lib", "API", "Modules", "NPM.js")
+    if os.path.isfile(npm_file):
+        try:
+            with open(npm_file, "r", encoding="utf-8", errors="replace") as f:
+                n_txt = f.read()
+            if "var local_src = null;" not in n_txt:
+                target_npm = (
+                    "  var canonic_module_name = Utility.getCanonicModuleName(module_name);\n"
+                    "  var install_path = path.join(cst.DEFAULT_MODULE_PATH, canonic_module_name);\n\n"
+                    "  fs.promises.mkdir(install_path, { recursive: true })"
+                )
+                replacement_npm = (
+                    "  var canonic_module_name = Utility.getCanonicModuleName(module_name);\n"
+                    "  var install_path = path.join(cst.DEFAULT_MODULE_PATH, canonic_module_name);\n\n"
+                    "  var local_src = null;\n"
+                    "  try {\n"
+                    "    if (fs.existsSync(module_name) && fs.statSync(module_name).isDirectory() && fs.existsSync(path.join(module_name, 'package.json'))) {\n"
+                    "      local_src = path.resolve(module_name);\n"
+                    "    } else {\n"
+                    "      var bundled_cand = path.resolve(__dirname, '../../../../', canonic_module_name);\n"
+                    "      if (fs.existsSync(path.join(bundled_cand, 'package.json'))) {\n"
+                    "        local_src = bundled_cand;\n"
+                    "      }\n"
+                    "    }\n"
+                    "  } catch (e) {}\n\n"
+                    "  if (local_src) {\n"
+                    "    var target_mod_dir = path.join(install_path, 'node_modules', canonic_module_name);\n"
+                    "    fs.promises.mkdir(target_mod_dir, { recursive: true })\n"
+                    "      .then(function() {\n"
+                    "        Common.printOut(cst.PREFIX_MSG_MOD + 'Installing bundled local module from ' + local_src + ' ...');\n"
+                    "        var src_pkg_path = path.join(local_src, 'package.json');\n"
+                    "        var dst_pkg_path = path.join(target_mod_dir, 'package.json');\n"
+                    "        fs.copyFileSync(src_pkg_path, dst_pkg_path);\n"
+                    "        var pkg_obj = JSON.parse(fs.readFileSync(src_pkg_path, 'utf8'));\n"
+                    "        var entry_rel = (pkg_obj.apps && pkg_obj.apps[0] && pkg_obj.apps[0].script) || pkg_obj.main || 'app.js';\n"
+                    "        var src_entry = path.join(local_src, entry_rel);\n"
+                    "        var dst_entry = path.join(target_mod_dir, entry_rel);\n"
+                    "        fs.mkdirSync(path.dirname(dst_entry), { recursive: true });\n"
+                    "        fs.writeFileSync(dst_entry, 'require(' + JSON.stringify(src_entry) + ');\\n', 'utf8');\n"
+                    "        finalizeInstall(0);\n"
+                    "      })\n"
+                    "      .catch(function(err) {\n"
+                    "        console.error(err.stack || err);\n"
+                    "        finalizeInstall(1);\n"
+                    "      });\n"
+                    "    return;\n"
+                    "  }\n\n"
+                    "  fs.promises.mkdir(install_path, { recursive: true })"
+                )
+                if target_npm in n_txt:
+                    n_txt = n_txt.replace(target_npm, replacement_npm, 1)
+                old_backup = "    var module_path = path.join(cst.DEFAULT_MODULE_PATH, canonic_module_name);\n    copydirSync(module_path, path.join(tmpdir, canonic_module_name));"
+                new_backup = "    var module_path = path.join(cst.DEFAULT_MODULE_PATH, canonic_module_name);\n    try { if (fs.existsSync(module_path)) copydirSync(module_path, path.join(tmpdir, canonic_module_name)); } catch (e) {}"
+                if old_backup in n_txt:
+                    n_txt = n_txt.replace(old_backup, new_backup, 1)
+                with open(npm_file, "w", encoding="utf-8") as f:
+                    f.write(n_txt)
+                patched_any = True
+        except Exception:
+            pass
+
+    # 6. 修補 pm2-logrotate/app.js 確保預設指向 <root_dir>\.pm2
+    logrotate_app = os.path.join(node_dir, "node_modules", "pm2-logrotate", "app.js")
+    if os.path.isfile(logrotate_app):
+        try:
+            with open(logrotate_app, "r", encoding="utf-8", errors="replace") as f:
+                 lr_txt = f.read()
+            if "path.basename(path.dirname(process.execPath" not in lr_txt:
+                target_lr = "if (process.env.PM2_HOME)\n  PM2_ROOT_PATH = process.env.PM2_HOME;"
+                replacement_lr = (
+                    "if (process.env.PM2_HOME)\n"
+                    "  PM2_ROOT_PATH = process.env.PM2_HOME;\n"
+                    "else if (path.basename(path.dirname(process.execPath || '')).toLowerCase() === 'node')\n"
+                    "  PM2_ROOT_PATH = path.resolve(path.dirname(process.execPath), '..', '.pm2');"
+                )
+                if target_lr in lr_txt:
+                    with open(logrotate_app, "w", encoding="utf-8") as f:
+                        f.write(lr_txt.replace(target_lr, replacement_lr, 1))
+                    patched_any = True
+        except Exception:
+            pass
+
+    if patched_any and log_func:
+        log_func(f"  ✓ 已完成綠色版 PM2 模組強化 (統一 PM2_HOME={unified_pm2_home}、Loopback TCP IPC 與離線模組支援)", "success")
+
+    return ipc_upgraded
+
+
 def kill_pm2_daemon(log_func, root_dir=None):
-    """執行 pm2 kill 徹底終止 PM2 守護程序以完全釋放 node.exe"""
+    """執行 pm2 kill 徹底終止 PM2 守護程序以完全釋放 node.exe（含清理舊有殘留 Daemon.js 行程）"""
     log_func("⏳ 正在執行 [pm2 kill] 終止 PM2 守護程序以完全釋放檔案鎖定...", "warning")
 
     pm2_bin = resolve_pm2_command(root_dir)
@@ -1137,6 +1392,31 @@ def kill_pm2_daemon(log_func, root_dir=None):
             creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
         )
         out_text = _decode_console_bytes(res.stdout).strip()
+        # 額外針對舊版 Named Pipe (\\.\pipe\rpc.sock) 發送一次 kill，並清理任何殘留之 Daemon.js 行程
+        try:
+            legacy_env = os.environ.copy()
+            legacy_env["PM2_DAEMON_RPC_PORT"] = r"\\.\pipe\rpc.sock"
+            legacy_env["PM2_DAEMON_PUB_PORT"] = r"\\.\pipe\pub.sock"
+            subprocess.run(
+                cmd,
+                env=legacy_env,
+                capture_output=True,
+                timeout=10,
+                creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
+            )
+        except Exception:
+            pass
+
+        ps_kill_old = (
+            'Get-CimInstance Win32_Process | '
+            'Where-Object { $_.Name -like "*node*" -and $_.CommandLine -like "*Daemon.js*" } | '
+            'ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }'
+        )
+        subprocess.run(
+            ['powershell', '-NoProfile', '-Command', ps_kill_old],
+            capture_output=True, timeout=8,
+            creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
+        )
         if res.returncode == 0:
             log_func("✅ 已成功執行 [pm2 kill] 完全釋放 PM2 行程！", "success")
             time.sleep(1)
@@ -1255,6 +1535,7 @@ def audit_and_ensure_pm2_services(log_func, root_dir=None):
     5. 若有補啟動任何服務或模組，自動執行 pm2 save 保存快照至 dump.pm2。
     """
     target_root = root_dir if (root_dir and os.path.exists(root_dir)) else r"C:\AppServ"
+    ensure_portable_pm2_patched(target_root, log_func)
     logs_dir = os.path.normpath(os.path.join(target_root, "logs"))
     try:
         os.makedirs(logs_dir, exist_ok=True)
@@ -1569,8 +1850,9 @@ def align_pm2_daemon_to_portable(log_func, root_dir=None):
     target_pm2 = os.path.normpath(os.path.join(target_node_dir, "pm2.cmd"))
     current_pm2 = resolve_pm2_command(target_root) or "pm2.cmd"
 
-    # 先確保綠色 node 目錄登錄於使用者 PATH 最前端
+    # 先確保綠色 node 目錄登錄於使用者 PATH 最前端，並完成 PM2 離線與 TCP IPC 相容修補
     register_path_to_user_environment(target_node_dir, log_func)
+    ensure_portable_pm2_patched(target_root, log_func)
 
     log_func("-" * 50, "info")
     log_func("🔄 正在執行 PM2 核心守護進程切換流程 (save ➔ kill ➔ resurrect ➔ save)...", "info")
@@ -1621,6 +1903,7 @@ def ensure_winsw_service_xml(target_root, xml_path):
     oci_dir = os.path.normpath(os.path.join(target_root, "instantclient_11_2"))
     log_path = os.path.normpath(os.path.join(target_root, "logs", "service"))
     norm_root = os.path.normpath(target_root)
+    pm2_home_dir = os.path.normpath(os.path.join(target_root, ".pm2"))
 
     path_value = f"{node_dir};{oci_dir};%PATH%" if os.path.isdir(oci_dir) else f"{node_dir};%PATH%"
 
@@ -1633,6 +1916,7 @@ def ensure_winsw_service_xml(target_root, xml_path):
   <workingdirectory>{norm_root}</workingdirectory>
 
   <env name="PATH" value="{path_value}" />
+  <env name="PM2_HOME" value="{pm2_home_dir}" />
 
   <logmode>roll-by-size</logmode>
   <logpath>{log_path}</logpath>
@@ -1649,7 +1933,7 @@ def ensure_winsw_service_xml(target_root, xml_path):
         try:
             with open(xml_path, "r", encoding="utf-8") as f:
                 cur_text = f.read()
-            if node_exe.lower() in cur_text.lower() and norm_root.lower() in cur_text.lower():
+            if node_exe.lower() in cur_text.lower() and norm_root.lower() in cur_text.lower() and "PM2_HOME" in cur_text:
                 need_write = False
         except Exception:
             need_write = True
@@ -1727,8 +2011,14 @@ def resolve_winsw_service_files(target_root):
     xml_path = os.path.join(service_dir, "lah-service.xml")
     js_path = os.path.join(service_dir, "service_runner.js")
 
-    # 確保 template 目錄來源
-    template_dir = os.path.join(os.path.dirname(__file__), "service")
+    # 確保 template 目錄來源 (相容 PyInstaller _MEIPASS 與 dist 上層目錄)
+    app_dir = get_app_dir()
+    template_candidates = [
+        os.path.join(os.path.dirname(__file__), "service"),
+        os.path.join(app_dir, "service"),
+        os.path.join(os.path.dirname(app_dir), "service"),
+    ]
+    template_dir = next((d for d in template_candidates if os.path.isdir(d)), template_candidates[0])
 
     # 嘗試尋找並補全 lah-service.exe
     if not os.path.isfile(exe_path):
@@ -1745,11 +2035,12 @@ def resolve_winsw_service_files(target_root):
             except Exception:
                 pass
 
-    # 確保 js 腳本存在
+    # 確保 js 腳本存在且與最新模板同步
     try:
         os.makedirs(service_dir, exist_ok=True)
-        if not os.path.isfile(js_path) and os.path.isfile(os.path.join(template_dir, "service_runner.js")):
-            shutil.copyfile(os.path.join(template_dir, "service_runner.js"), js_path)
+        tpl_js = os.path.join(template_dir, "service_runner.js")
+        if os.path.isfile(tpl_js):
+            shutil.copyfile(tpl_js, js_path)
     except Exception:
         pass
 
@@ -2396,7 +2687,7 @@ def find_latest_backup_zip(search_dirs):
 
 def restore_from_backup_zip(zip_path, root_dir, log_func=None):
     """
-    自 _LAH_Backup_*.zip 備份壓縮包還原原始設定檔與資料庫 (.env, AD.php, db/, uploads/, php.ini, httpd.conf)。
+    自 _LAH_Backup_*.zip 備份壓縮包還原原始設定檔與資料庫 (.env, AD.php, db/, uploads/, www/assets/, .pm2/, php.ini, httpd.conf, logs/)。
     還原後若包含 Apache24/conf/httpd.conf 或 php.ini，會確保路徑與目標 root_dir 對齊。
     """
     if not zip_path or not os.path.isfile(zip_path):
@@ -2443,6 +2734,10 @@ def restore_from_backup_zip(zip_path, root_dir, log_func=None):
                 top_part = raw_name.split("/")[0]
                 if raw_name.endswith(".env") or raw_name.endswith("AD.php") or raw_name.endswith("php.ini") or raw_name.endswith("httpd.conf"):
                     restored_categories.add(raw_name)
+                elif raw_name.startswith("www/assets/"):
+                    restored_categories.add("www/assets/...")
+                elif raw_name.startswith(".pm2/"):
+                    restored_categories.add(".pm2/...")
                 else:
                     restored_categories.add(f"{top_part}/...")
 
@@ -3282,6 +3577,8 @@ class UpdaterApp:
             f"📂 目標根目錄：{root_dir}\n\n"
             f"還原範圍包含：\n"
             f"• 各專案環境設定檔 (.env / AD.php)\n"
+            f"• 網站靜態與自訂資源 (www/assets/*)\n"
+            f"• PM2 服務與模組設定檔 (.pm2/dump.pm2, module_conf.json, modules/)\n"
             f"• 即時通資料庫與上傳附件 (lah-messenger-server/db & uploads)\n"
             f"• 伺服器設定檔 (Apache httpd.conf / PHP php.ini)\n"
             f"• 並自動校正設定檔路徑與資安防護\n\n"
@@ -4345,11 +4642,13 @@ class UpdaterApp:
             # =========================================================================
             # 【階段 4/5】綠色 Node 設定與啟動 PM2 自動啟動
             # =========================================================================
+            ipc_was_upgraded = False
             if os.path.isdir(node_tgt):
                 self.set_progress(95, "[階段 4/5] 正在設定綠色版 Node 環境與 PM2 自動化服務...")
                 self.log("-" * 50, "info")
                 self.log("🟢 [階段 4/5] 正在設定綠色版 Node 環境、綁定 PM2 核心並配置自動啟動...", "info")
                 register_path_to_user_environment(node_tgt, self.log)
+                ipc_was_upgraded = ensure_portable_pm2_patched(root_dir, self.log)
 
             oci_dir = os.path.join(root_dir, "instantclient_11_2")
             if os.path.isdir(oci_dir):
@@ -4358,6 +4657,9 @@ class UpdaterApp:
             target_pm2_cmd = resolve_pm2_command(root_dir)
             if target_pm2_cmd:
                 self.root.after(0, self._detect_pm2_service)
+                if ipc_was_upgraded:
+                    kill_pm2_daemon(self.log, root_dir)
+                    pm2_was_killed = True
                 daemon_info = query_pm2_daemon_info(root_dir)
                 target_node = os.path.normpath(os.path.join(root_dir, "node", "node.exe"))
                 need_pm2_restart = (

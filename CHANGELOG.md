@@ -4,6 +4,35 @@
 
 ---
 
+## [v1.6.5] - 2026-10-25
+
+### 📦 移除工具 (`uninstaller.py`) 獨立備份按鈕與 `www/assets/*`、`.pm2` 備份範圍擴充
+- **擴充系統重要資料備份範圍 (`www/assets/*` 與 `.pm2` 設定檔)**：
+  - 於 `uninstaller.py` 的 `backup_critical_data` 新增備份 `<安裝根目錄>\www\assets` 下所有檔案（`www/assets/*`）以及 `<安裝根目錄>\.pm2` 內的設定與狀態檔（`dump.pm2`、`dump.pm2.bak`、`module_conf.json`、`conf.js`、`modules/`，排除 `.pm2/logs/` 日誌檔；若根目錄尚無 `.pm2` 則自動向下相容備份 `%USERPROFILE%\.pm2`）。
+  - 同步強化 `updater.py` 的 `restore_from_backup_zip` 還原摘要與說明，支援一鍵完整還原 `www/assets/*` 與 `.pm2` 設定檔。
+- **新增「📦 立即備份重要資料」獨立按鈕與自動取消勾選連動**：
+  - 於 `uninstaller.py` 主視窗下方「🚨 開始執行移除作業」按鈕左側新增醒目深藍色「📦 立即備份重要資料」按鈕。
+  - 點擊後彈出「另存新檔」對話框（預設檔名 `_LAH_Backup_YYYYMMDD_HHMMSS.zip`），讓使用者自由選擇儲存位置與自訂檔名，並透過獨立進度日誌視窗顯示打包進度。
+  - 當手動備份順利完成後，系統**自動取消勾選**主畫面的「📦 執行前自動備份重要資料」核取方塊，避免後續執行移除時重複備份，同時於移除確認視窗與根目錄清理階段智慧識別並保護該手動備份檔。
+
+---
+
+## [v1.6.4] - 2026-10-25
+
+### 🛠️ 綠色版 Node (PM2) 模組相容強化與跨權限 IPC / 離線安裝修復
+- **徹底修復 `pm2-logrotate` 安裝失敗 (`ENOENT: mkdir ...`) 與離線秒級啟用**：
+  - 根因：`PM2` 原廠 `Utility.js` (`getCanonicModuleName`) 未處理含磁碟機代號與反斜線之 Windows 本機路徑（`C:\AppServ\node\node_modules\pm2-logrotate`），導致將整串路徑拼入 `mkdir` 引發 `ENOENT`；且 `NPM.js` 預設呼叫外部 `npm`/`bun` 連網下載或全量複製數千個小檔案導致逾時。
+  - 解法：修補綠色版 `node` 內之 `pm2/lib/Utility.js` 與 `pm2/lib/API/Modules/NPM.js`（並於 `updater.py` 內建 `ensure_portable_pm2_patched` 自動冪等修補），支援 Windows 路徑解析與輕量代理載入 `node\node_modules\pm2-logrotate`，100% 離線免外網且於數秒內完成註冊與啟動。
+- **徹底解決一般 CMD 視窗執行 `pm2 ls` 出現 `connect EPERM \\.\pipe\rpc.sock` 錯誤**：
+  - 根因：Windows Named Pipe (`\\.\pipe\rpc.sock`) 由系統服務 (`SYSTEM`) 或管理員權限 (`updater.exe`) 建立時，Windows 預設安全描述符 (DACL) 拒絕一般未提權 CMD 視窗寫入；且系統服務與一般使用者分屬不同 `.pm2` 目錄。
+  - 解法：將綠色版 `pm2/paths.js`（含 `pm2-logrotate` 內嵌之 `pm2`）之 Windows 內部通訊改為本機 Loopback TCP 埠（`127.0.0.1:42681` RPC / `127.0.0.1:42682` PUB），並將預設 `PM2_HOME` 統一固定於 `<安裝根目錄>\.pm2`（如 `C:\AppServ\.pm2`），使系統服務 (`LAH_PM2_Service`)、管理員與任何一般 CMD 視窗無縫共用同一個 PM2 守護核心。
+- **綠色版 Node 執行期路徑隔離**：
+  - 於 `node\pm2.cmd` 內部自動將 `%dp0%` 置於子程序 `PATH` 最前端，確保 PM2 及其啟動之所有服務 100% 使用綠色版 Node，同時不干擾主機系統層級 (HKLM) 之其他 Node.js 環境。
+- **重新打包 `dist\node.zip` 與內嵌 `WinSW` 服務包裝器**：
+  - 將修補完成之 `pm2` 模組與 `service\lah-service.exe`、`service_runner.js` 同步打包更新至 `dist\node.zip`。
+
+---
+
 ## [v1.6.3] - 2026-10-25
 
 ### 🚀 5 階段基礎環境自動化管線與「從 0 到 1 / 部分更新」雙向相容
