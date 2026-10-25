@@ -1,0 +1,19 @@
+<service>
+  <id>LAH_PM2_Service</id>
+  <name>LAH 智慧管控 - PM2 背景服務與守護進程</name>
+  <description>開機自動以 C:\AppServ\node\node.exe 喚醒並守護 LAH 5 大核心服務（LAH-FE、LAH-SCHEDULER、LAH-WSS、lah-api-v85、pm2-logrotate），具備開機免登入自啟與健康巡檢能力。</description>
+  <executable>C:\AppServ\node\node.exe</executable>
+  <arguments>C:\AppServ\node\service\service_runner.js</arguments>
+  <workingdirectory>C:\AppServ</workingdirectory>
+
+  <env name="PATH" value="C:\AppServ\node;%PATH%" />
+
+  <logmode>roll-by-size</logmode>
+  <logpath>C:\AppServ\logs\service</logpath>
+  <sizeThreshold>10240</sizeThreshold>
+  <keepFiles>10</keepFiles>
+
+  <onfailure action="restart" delay="10 sec"/>
+  <onfailure action="restart" delay="30 sec"/>
+  <resetfailure>1 hour</resetfailure>
+</service>

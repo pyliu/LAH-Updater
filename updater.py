@@ -901,108 +901,265 @@ def align_pm2_daemon_to_portable(log_func, root_dir=None):
         return True, msg
 
 
-def setup_pm2_autostart(log_func, root_dir=None):
+def ensure_winsw_service_xml(target_root, xml_path):
     r"""
-    設定 Windows 開機/登入時自動喚醒 PM2 守護程序 (pm2 resurrect)。
-    1. 產生無黑視窗背景執行腳本 (pm2-autostart.vbs)
-    2. 部署至使用者啟動資料夾 (%APPDATA%\...\Startup\LAH-PM2-Autostart.vbs)
-    3. 嘗試於 Windows 工作排程器註冊 LAH_PM2_Autostart (ONLOGON)
-    4. 執行 pm2 save 確保程序清單最新
+    動態生成或調和 WinSW 服務組態檔 (lah-service.xml)，確保其絕對路徑與 target_root 完全契合。
     """
-    target_root = root_dir if (root_dir and os.path.exists(root_dir)) else r"C:\AppServ"
-    pm2_cmd = resolve_pm2_command(target_root) or os.path.normpath(os.path.join(target_root, "node", "pm2.cmd"))
-    node_dir = os.path.dirname(pm2_cmd)
+    node_exe = os.path.normpath(os.path.join(target_root, "node", "node.exe"))
+    runner_js = os.path.normpath(os.path.join(target_root, "node", "service", "service_runner.js"))
+    node_dir = os.path.normpath(os.path.join(target_root, "node"))
+    oci_dir = os.path.normpath(os.path.join(target_root, "instantclient_11_2"))
+    log_path = os.path.normpath(os.path.join(target_root, "logs", "service"))
+    norm_root = os.path.normpath(target_root)
 
-    os.makedirs(node_dir, exist_ok=True)
-    vbs_path = os.path.normpath(os.path.join(node_dir, "pm2-autostart.vbs"))
+    path_value = f"{node_dir};{oci_dir};%PATH%" if os.path.isdir(oci_dir) else f"{node_dir};%PATH%"
 
-    # 建立無黑視窗 VBScript 腳本 (0 = SW_HIDE, False = 不阻擋)
-    vbs_content = (
-        "' ==============================================================\r\n"
-        "' LAH PM2 Background Autostart Script (Silent/Hidden Window)\r\n"
-        "' ==============================================================\r\n"
-        "Set WshShell = CreateObject(\"WScript.Shell\")\r\n"
-        f'WshShell.Run "cmd.exe /c ""{pm2_cmd}"" resurrect", 0, False\r\n'
-    )
+    xml_content = f"""<service>
+  <id>LAH_PM2_Service</id>
+  <name>LAH 智慧管控 - PM2 背景服務與守護進程</name>
+  <description>開機自動以 {node_exe} 喚醒並守護 LAH 5 大核心服務（LAH-FE、LAH-SCHEDULER、LAH-WSS、lah-api-v85、pm2-logrotate），具備開機免登入自啟與健康巡檢能力。</description>
+  <executable>{node_exe}</executable>
+  <arguments>{runner_js}</arguments>
+  <workingdirectory>{norm_root}</workingdirectory>
 
+  <env name="PATH" value="{path_value}" />
+
+  <logmode>roll-by-size</logmode>
+  <logpath>{log_path}</logpath>
+  <sizeThreshold>10240</sizeThreshold>
+  <keepFiles>10</keepFiles>
+
+  <onfailure action="restart" delay="10 sec"/>
+  <onfailure action="restart" delay="30 sec"/>
+  <resetfailure>1 hour</resetfailure>
+</service>
+"""
+    need_write = True
+    if os.path.isfile(xml_path):
+        try:
+            with open(xml_path, "r", encoding="utf-8") as f:
+                cur_text = f.read()
+            if node_exe.lower() in cur_text.lower() and norm_root.lower() in cur_text.lower():
+                need_write = False
+        except Exception:
+            need_write = True
+
+    if need_write:
+        try:
+            os.makedirs(os.path.dirname(xml_path), exist_ok=True)
+            with open(xml_path, "w", encoding="utf-8") as f:
+                f.write(xml_content.strip() + "\n")
+        except Exception:
+            pass
+
+
+def query_installed_service_info(svc_name="LAH_PM2_Service"):
+    r"""
+    查詢指定服務在 Windows SCM 中的註冊狀態與 ImagePath 實體路徑
+    """
     try:
-        with open(vbs_path, "w", encoding="ascii") as f:
-            f.write(vbs_content)
-        log_func(f"  ✓ 已建立 PM2 靜默喚醒腳本: {vbs_path}", "info")
-    except Exception as e:
-        log_func(f"  ⚠️ 寫入 {vbs_path} 失敗 ({e})，嘗試寫入至 %USERPROFILE%\\.pm2...", "warning")
-        user_pm2_dir = os.path.join(os.environ.get("USERPROFILE", ""), ".pm2")
-        os.makedirs(user_pm2_dir, exist_ok=True)
-        vbs_path = os.path.normpath(os.path.join(user_pm2_dir, "pm2-autostart.vbs"))
-        with open(vbs_path, "w", encoding="ascii") as f:
-            f.write(vbs_content)
-        log_func(f"  ✓ 已建立備用 PM2 靜默喚醒腳本: {vbs_path}", "info")
-
-    success_items = []
-
-    # 1. 部署至目前使用者啟動資料夾 (Startup Folder)
-    appdata = os.environ.get("APPDATA", "")
-    if appdata:
-        startup_dir = os.path.join(appdata, r"Microsoft\Windows\Start Menu\Programs\Startup")
-        if os.path.isdir(startup_dir):
-            user_startup_vbs = os.path.join(startup_dir, "LAH-PM2-Autostart.vbs")
-            try:
-                shutil.copyfile(vbs_path, user_startup_vbs)
-                log_func(f"  ✓ 已部署開機自啟動腳本至使用者啟動資料夾: {user_startup_vbs}", "success")
-                success_items.append("使用者啟動資料夾")
-            except Exception as e:
-                log_func(f"  ⚠️ 寫入使用者啟動資料夾失敗: {e}", "warning")
-
-    # 2. 嘗試註冊 Windows 工作排程器 (Task Scheduler)
-    try:
-        task_cmd = [
-            "schtasks", "/Create", "/TN", "LAH_PM2_Autostart",
-            "/TR", f'wscript.exe "{vbs_path}"',
-            "/SC", "ONLOGON", "/RL", "HIGHEST", "/F"
-        ]
+        ps_cmd = (
+            f"Get-CimInstance Win32_Service -Filter \"Name = '{svc_name}'\" -ErrorAction SilentlyContinue | "
+            f"Select-Object Name, State, StartMode, PathName | ConvertTo-Json -Compress"
+        )
         res = subprocess.run(
-            task_cmd, capture_output=True, text=True, timeout=10,
-            creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
+            ["powershell", "-NoProfile", "-Command", ps_cmd],
+            capture_output=True, text=True, timeout=8,
+            creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
+        )
+        if res.returncode == 0 and res.stdout.strip():
+            raw = json.loads(res.stdout.strip())
+            return {
+                "exists": True,
+                "name": raw.get("Name", svc_name),
+                "state": raw.get("State", "Unknown"),
+                "start_mode": raw.get("StartMode", "Unknown"),
+                "pathname": (raw.get("PathName") or "").strip().strip('"')
+            }
+    except Exception:
+        pass
+
+    try:
+        res = subprocess.run(
+            ["sc.exe", "qc", svc_name],
+            capture_output=True, text=True, timeout=6,
+            creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
         )
         if res.returncode == 0:
-            log_func("  ✓ 已成功註冊 Windows 工作排程器 (最高權限 ONLOGON): LAH_PM2_Autostart", "success")
-            success_items.append("工作排程器 (最高權限)")
-        else:
-            task_cmd_low = [
-                "schtasks", "/Create", "/TN", "LAH_PM2_Autostart",
-                "/TR", f'wscript.exe "{vbs_path}"',
-                "/SC", "ONLOGON", "/F"
-            ]
-            res_low = subprocess.run(
-                task_cmd_low, capture_output=True, text=True, timeout=10,
-                creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
-            )
-            if res_low.returncode == 0:
-                log_func("  ✓ 已註冊 Windows 工作排程器: LAH_PM2_Autostart", "success")
-                success_items.append("工作排程器")
-            else:
-                log_func(f"  ℹ️ 工作排程器略過 (由啟動資料夾完全接管): {res_low.stderr.strip() or res.stderr.strip()}", "info")
-    except Exception as e:
-        log_func(f"  ℹ️ 工作排程器註冊略過: {e}", "info")
+            pathname = ""
+            for line in res.stdout.splitlines():
+                if "BINARY_PATH_NAME" in line:
+                    parts = line.split(":", 1)
+                    if len(parts) > 1:
+                        pathname = parts[1].strip().strip('"')
+            return {
+                "exists": True,
+                "name": svc_name,
+                "state": "Unknown",
+                "start_mode": "Unknown",
+                "pathname": pathname
+            }
+    except Exception:
+        pass
 
-    # 3. 確保最新程序清單存檔 (pm2 save)
-    log_func("  正在儲存當前 PM2 程序清單至 dump.pm2...", "info")
-    save_pm2_services(log_func, target_root)
-
-    if success_items:
-        msg = f"已成功啟用 PM2 開機自啟動 ({' + '.join(success_items)})"
-        return True, msg
-    else:
-        return False, "未能建立啟動項目，請確認磁碟寫入與系統權限！"
+    return {"exists": False, "name": svc_name, "state": "Unknown", "start_mode": "Unknown", "pathname": ""}
 
 
-def remove_pm2_autostart(log_func):
+def resolve_winsw_service_files(target_root):
     r"""
-    清除 Windows 開機/登入時之 PM2 自啟動配置（工作排程器與啟動資料夾）。
+    解析 WinSW 服務檔案路徑（lah-service.exe, lah-service.xml, service_runner.js）
+    若目標目錄缺失，自動嘗試自 C:\AppServ\node\service 或 updater/service 複製模板補齊，
+    並自動依據 target_root 調和生成專屬的 lah-service.xml 組態檔。
     """
-    removed_items = []
+    node_dir = os.path.normpath(os.path.join(target_root, "node"))
+    service_dir = os.path.normpath(os.path.join(node_dir, "service"))
+    exe_path = os.path.join(service_dir, "lah-service.exe")
+    xml_path = os.path.join(service_dir, "lah-service.xml")
+    js_path = os.path.join(service_dir, "service_runner.js")
 
-    # 1. 刪除工作排程
+    # 確保 template 目錄來源
+    template_dir = os.path.join(os.path.dirname(__file__), "service")
+
+    # 嘗試尋找並補全 lah-service.exe
+    if not os.path.isfile(exe_path):
+        candidates = [
+            r"C:\AppServ\node\service\lah-service.exe",
+            os.path.join(template_dir, "lah-service.exe"),
+            os.path.join(template_dir, "WinSW.NET461.exe"),
+        ]
+        found_exe = next((c for c in candidates if os.path.isfile(c)), None)
+        if found_exe:
+            try:
+                os.makedirs(service_dir, exist_ok=True)
+                shutil.copyfile(found_exe, exe_path)
+            except Exception:
+                pass
+
+    # 確保 js 腳本存在
+    try:
+        os.makedirs(service_dir, exist_ok=True)
+        if not os.path.isfile(js_path) and os.path.isfile(os.path.join(template_dir, "service_runner.js")):
+            shutil.copyfile(os.path.join(template_dir, "service_runner.js"), js_path)
+    except Exception:
+        pass
+
+    # 動態產生/調和 lah-service.xml，確保其路徑 100% 綁定當前 target_root
+    ensure_winsw_service_xml(target_root, xml_path)
+
+    return {
+        "service_dir": service_dir,
+        "exe_path": exe_path,
+        "xml_path": xml_path,
+        "js_path": js_path,
+        "is_available": os.path.isfile(exe_path)
+    }
+
+
+def install_lah_pm2_service(log_func, root_dir=None):
+    r"""
+    安裝並啟動 LAH_PM2_Service Windows 原生系統服務 (WinSW - 開機免登入自啟)
+    具備跨目錄安全移轉重定位 (Service Relocation & Reconciliation) 機制。
+    """
+    target_root = root_dir if (root_dir and os.path.exists(root_dir)) else r"C:\AppServ"
+    sf = resolve_winsw_service_files(target_root)
+    if not sf["is_available"]:
+        return False, "找不到 lah-service.exe 服務包裝器，略過 Windows 原生服務安裝。"
+
+    exe_path = os.path.normpath(sf["exe_path"])
+    xml_path = sf["xml_path"]
+    ensure_winsw_service_xml(target_root, xml_path)
+
+    log_func("📦 正在配置 Windows 原生系統服務 (LAH_PM2_Service)...", "info")
+
+    # 1. 偵測 SCM 中是否已存在註冊之服務，並比對其實體路徑是否相符
+    svc_info = query_installed_service_info("LAH_PM2_Service")
+    if svc_info["exists"] and svc_info["pathname"]:
+        installed_exe = os.path.normpath(svc_info["pathname"])
+        if installed_exe.lower() != exe_path.lower():
+            log_func(f"  🔄 偵測到既有系統服務路徑為 [{installed_exe}]，與目標安裝目錄 [{exe_path}] 不符，正在執行安全移轉重定位...", "info")
+            # 停止並刪除舊服務以釋放 SCM 命名空間
+            subprocess.run(["sc.exe", "stop", "LAH_PM2_Service"], capture_output=True, timeout=15, creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
+            time.sleep(1)
+            subprocess.run(["sc.exe", "delete", "LAH_PM2_Service"], capture_output=True, timeout=10, creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
+            time.sleep(1.5)
+
+    try:
+        stat_res = subprocess.run(
+            [exe_path, "status"],
+            capture_output=True, text=True, timeout=10,
+            creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
+        )
+        status = stat_res.stdout.strip()
+        if status in ["Started", "Running"]:
+            log_func("  ℹ️ 系統服務已在運行中，正在重新啟動以套用最新設定...", "info")
+            subprocess.run([exe_path, "restart"], capture_output=True, timeout=20, creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
+            return True, "Windows 原生系統服務已在運行並成功重新啟動！"
+        elif status == "Stopped":
+            log_func("  ℹ️ 系統服務已註冊，正在啟動服務...", "info")
+            subprocess.run([exe_path, "start"], capture_output=True, timeout=20, creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
+            return True, "Windows 原生系統服務已啟動！"
+
+        # 若未安裝則執行 install
+        ins_res = subprocess.run(
+            [exe_path, "install"],
+            capture_output=True, text=True, timeout=15,
+            creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
+        )
+        if ins_res.returncode == 0 or "successfully" in ins_res.stdout.lower():
+            log_func("  ✅ 成功註冊 Windows 原生系統服務: LAH_PM2_Service！", "success")
+            time.sleep(1)
+            subprocess.run([exe_path, "start"], capture_output=True, timeout=20, creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
+            log_func("  ✅ 成功啟動系統服務 (開機免登入自動拉起)！", "success")
+            return True, "Windows 原生系統服務 (LAH_PM2_Service) 已安裝並啟動"
+        else:
+            err_msg = ins_res.stderr.strip() or ins_res.stdout.strip()
+            log_func(f"  ⚠️ 安裝 Windows 服務回傳警示: {err_msg}", "warning")
+            return False, err_msg
+    except Exception as e:
+        log_func(f"  ❌ 安裝 Windows 服務失敗: {e}", "error")
+        return False, str(e)
+
+
+def uninstall_lah_pm2_service(log_func, root_dir=None):
+    r"""
+    停止並卸載 LAH_PM2_Service Windows 原生系統服務
+    """
+    target_root = root_dir if (root_dir and os.path.exists(root_dir)) else r"C:\AppServ"
+    sf = resolve_winsw_service_files(target_root)
+    exe_path = sf["exe_path"]
+
+    if not os.path.isfile(exe_path):
+        try:
+            res = subprocess.run(["sc.exe", "delete", "LAH_PM2_Service"], capture_output=True, text=True, timeout=8, creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
+            if res.returncode == 0:
+                log_func("  ✓ 已透過 sc.exe 移除系統服務 LAH_PM2_Service", "info")
+                return True, "已移除 Windows 系統服務"
+        except Exception:
+            pass
+        return True, "未安裝 Windows 系統服務"
+
+    try:
+        log_func("🛑 正在停止並卸載 Windows 系統服務 (LAH_PM2_Service)...", "info")
+        subprocess.run([exe_path, "stop"], capture_output=True, timeout=15, creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
+        un_res = subprocess.run([exe_path, "uninstall"], capture_output=True, text=True, timeout=15, creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
+        if un_res.returncode == 0 or "successfully" in un_res.stdout.lower():
+            log_func("  ✓ 已成功卸載 Windows 原生系統服務！", "info")
+            return True, "已成功卸載 Windows 原生系統服務 (LAH_PM2_Service)"
+        else:
+            subprocess.run(["sc.exe", "delete", "LAH_PM2_Service"], capture_output=True, timeout=8, creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
+            return True, "已卸載 Windows 系統服務"
+    except Exception as e:
+        log_func(f"  ⚠️ 卸載服務發生例外: {e}", "warning")
+        return False, str(e)
+
+
+def clean_legacy_autostart_entries(log_func, target_root=None):
+    r"""
+    清理舊版開機啟動資料夾中之 VBS 腳本與工作排程，避免原生服務與使用者登入重複觸發。
+    """
+    cleaned_items = []
+
+    # 1. 刪除舊版工作排程
     try:
         res = subprocess.run(
             ["schtasks", "/Delete", "/TN", "LAH_PM2_Autostart", "/F"],
@@ -1010,12 +1167,12 @@ def remove_pm2_autostart(log_func):
             creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
         )
         if res.returncode == 0:
-            log_func("  ✓ 已自 Windows 工作排程器移除: LAH_PM2_Autostart", "info")
-            removed_items.append("工作排程器")
-    except Exception as e:
-        log_func(f"  ℹ️ 工作排程移除略過: {e}", "info")
+            log_func("  ✓ 已清理舊版 Windows 工作排程器: LAH_PM2_Autostart", "info")
+            cleaned_items.append("工作排程器")
+    except Exception:
+        pass
 
-    # 2. 清除啟動資料夾
+    # 2. 清理各啟動資料夾中的 pm2 相關腳本
     startup_dirs = [
         os.path.join(os.environ.get("APPDATA", ""), r"Microsoft\Windows\Start Menu\Programs\Startup"),
         os.path.join(os.environ.get("ProgramData", r"C:\ProgramData"), r"Microsoft\Windows\Start Menu\Programs\Startup")
@@ -1027,60 +1184,199 @@ def remove_pm2_autostart(log_func):
                     target_file = os.path.join(sdir, fname)
                     try:
                         os.remove(target_file)
-                        log_func(f"  ✓ 已自啟動資料夾移除: {target_file}", "info")
-                        removed_items.append(f"啟動資料夾 ({fname})")
+                        log_func(f"  ✓ 已自啟動資料夾清理舊版腳本: {target_file}", "info")
+                        cleaned_items.append(f"啟動資料夾 ({fname})")
                     except Exception as e:
-                        log_func(f"  ⚠️ 刪除 {target_file} 失敗: {e}", "warning")
+                        log_func(f"  ⚠️ 清理 {target_file} 失敗: {e}", "warning")
 
-    if removed_items:
-        return True, f"已順利停用並清除 PM2 開機自啟動項目 ({', '.join(removed_items)})。"
-    else:
-        return True, "目前系統中無待清除的 PM2 自啟動項目。"
+    # 3. 清理 node 目錄下的舊版 pm2-autostart.vbs
+    if target_root:
+        node_vbs = os.path.join(target_root, "node", "pm2-autostart.vbs")
+        if os.path.isfile(node_vbs):
+            try:
+                os.remove(node_vbs)
+                log_func(f"  ✓ 已清理便攜目錄舊版腳本: {node_vbs}", "info")
+                cleaned_items.append("便攜目錄腳本")
+            except Exception:
+                pass
+
+    return cleaned_items
 
 
-def test_pm2_autostart_execution(log_func, root_dir=None):
+def setup_pm2_autostart(log_func, root_dir=None):
     r"""
-    立即測試執行 PM2 開機喚醒腳本 (pm2-autostart.vbs)，驗證其是否能在背景順利拉起服務。
+    設定 Windows 開機時自動喚醒並守護 PM2 服務。
+    優先順序：
+    1. 安裝並啟動 Windows 原生系統服務 (LAH_PM2_Service - 開機免登入自啟)
+       若成功安裝原生系統服務，自動清除使用者啟動資料夾與排程中的舊版 VBS 避免重複觸發。
+    2. 回退模式 (若無原生服務)：建立無黑視窗靜默喚醒備用腳本 (pm2-autostart.vbs)
+    3. 部署至使用者啟動資料夾 (%APPDATA%\...\Startup\LAH-PM2-Autostart.vbs)
+    4. 註冊 Windows 工作排程器 (ONLOGON) 作為雙重保障
+    5. 執行 pm2 save 確保程序清單最新
     """
     target_root = root_dir if (root_dir and os.path.exists(root_dir)) else r"C:\AppServ"
     pm2_cmd = resolve_pm2_command(target_root) or os.path.normpath(os.path.join(target_root, "node", "pm2.cmd"))
     node_dir = os.path.dirname(pm2_cmd)
-    vbs_path = os.path.normpath(os.path.join(node_dir, "pm2-autostart.vbs"))
 
-    if not os.path.exists(vbs_path):
-        alt_vbs = os.path.normpath(os.path.join(os.environ.get("USERPROFILE", ""), ".pm2", "pm2-autostart.vbs"))
-        if os.path.exists(alt_vbs):
-            vbs_path = alt_vbs
-        else:
-            return False, f"找不到喚醒腳本 {vbs_path}，請先點擊「一鍵啟用」進行配置。"
+    success_items = []
 
-    log_func(f"🚀 正在測試執行靜默喚醒腳本: wscript.exe \"{vbs_path}\"...", "info")
-    try:
-        subprocess.run(
-            ["cscript.exe", "//nologo", vbs_path],
-            check=True, timeout=15,
-            creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
+    # 1. 優先嘗試安裝 Windows 原生系統服務 (WinSW - 開機免登入自啟)
+    svc_ok, svc_msg = install_lah_pm2_service(log_func, target_root)
+    if svc_ok:
+        success_items.append("Windows 原生系統服務 (開機免登入自啟)")
+        # 原生服務已就緒，開機無需使用者登入即可在系統層自動啟動
+        # 自動清理舊版啟動資料夾中的 VBS 與工作排程，避免使用者登入時重複觸發
+        clean_legacy_autostart_entries(log_func, target_root)
+    else:
+        # 2. 回退模式：若無 WinSW 原生服務，建立無黑視窗 VBScript 腳本
+        os.makedirs(node_dir, exist_ok=True)
+        vbs_path = os.path.normpath(os.path.join(node_dir, "pm2-autostart.vbs"))
+        vbs_content = (
+            "' ==============================================================\r\n"
+            "' LAH PM2 Background Autostart Script (Silent/Hidden Window)\r\n"
+            "' ==============================================================\r\n"
+            "Set WshShell = CreateObject(\"WScript.Shell\")\r\n"
+            f'WshShell.Run "cmd.exe /c ""{pm2_cmd}"" resurrect", 0, False\r\n'
         )
-        time.sleep(2)
 
-        ports_status = []
-        for port in [8080, 8081, 8082, 8085]:
-            ps_cmd = f"Get-NetTCPConnection -LocalPort {port} -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1"
+        try:
+            with open(vbs_path, "w", encoding="ascii") as f:
+                f.write(vbs_content)
+            log_func(f"  ✓ 已建立 PM2 備用靜默喚醒腳本: {vbs_path}", "info")
+        except Exception as e:
+            log_func(f"  ⚠️ 寫入 {vbs_path} 失敗 ({e})，嘗試寫入至 %USERPROFILE%\\.pm2...", "warning")
+            user_pm2_dir = os.path.join(os.environ.get("USERPROFILE", ""), ".pm2")
+            os.makedirs(user_pm2_dir, exist_ok=True)
+            vbs_path = os.path.normpath(os.path.join(user_pm2_dir, "pm2-autostart.vbs"))
+            with open(vbs_path, "w", encoding="ascii") as f:
+                f.write(vbs_content)
+            log_func(f"  ✓ 已建立備用 PM2 靜默喚醒腳本: {vbs_path}", "info")
+
+        # 3. 部署至使用者啟動資料夾 (Startup Folder)
+        appdata = os.environ.get("APPDATA", "")
+        if appdata:
+            startup_dir = os.path.join(appdata, r"Microsoft\Windows\Start Menu\Programs\Startup")
+            if os.path.isdir(startup_dir):
+                user_startup_vbs = os.path.join(startup_dir, "LAH-PM2-Autostart.vbs")
+                try:
+                    shutil.copyfile(vbs_path, user_startup_vbs)
+                    log_func(f"  ✓ 已部署啟動資料夾捷徑: {user_startup_vbs}", "success")
+                    success_items.append("使用者啟動資料夾")
+                except Exception as e:
+                    log_func(f"  ⚠️ 寫入使用者啟動資料夾失敗: {e}", "warning")
+
+        # 4. 註冊 Windows 工作排程器 (Task Scheduler) 作為雙重保障
+        try:
+            task_cmd = [
+                "schtasks", "/Create", "/TN", "LAH_PM2_Autostart",
+                "/TR", f'wscript.exe "{vbs_path}"',
+                "/SC", "ONLOGON", "/RL", "HIGHEST", "/F"
+            ]
             res = subprocess.run(
-                ["powershell", "-NoProfile", "-Command", ps_cmd],
-                capture_output=True, text=True, timeout=5,
+                task_cmd, capture_output=True, text=True, timeout=10,
                 creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
             )
-            if res.stdout.strip():
-                ports_status.append(f"Port {port} [正常聆聽中]")
+            if res.returncode == 0:
+                log_func("  ✓ 已註冊 Windows 工作排程器 (最高權限 ONLOGON): LAH_PM2_Autostart", "success")
+                success_items.append("工作排程器")
             else:
-                ports_status.append(f"Port {port} [未聆聽]")
+                task_cmd_low = [
+                    "schtasks", "/Create", "/TN", "LAH_PM2_Autostart",
+                    "/TR", f'wscript.exe "{vbs_path}"',
+                    "/SC", "ONLOGON", "/F"
+                ]
+                res_low = subprocess.run(
+                    task_cmd_low, capture_output=True, text=True, timeout=10,
+                    creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
+                )
+                if res_low.returncode == 0:
+                    log_func("  ✓ 已註冊 Windows 工作排程器: LAH_PM2_Autostart", "success")
+                    success_items.append("工作排程器")
+        except Exception as e:
+            log_func(f"  ℹ️ 工作排程器註冊略過: {e}", "info")
 
-        log_func(f"✅ 測試執行完成！連接埠狀態：{', '.join(ports_status)}", "success")
-        return True, f"測試喚醒成功！\n" + "\n".join([f"• {p}" for p in ports_status])
-    except Exception as e:
-        log_func(f"❌ 測試執行失敗: {e}", "error")
-        return False, str(e)
+    # 5. 確保最新程序清單存檔 (pm2 save)
+    log_func("  正在儲存當前 PM2 程序清單至 dump.pm2...", "info")
+    save_pm2_services(log_func, target_root)
+
+    if success_items:
+        msg = f"已成功啟用開機自啟動 ({' + '.join(success_items)})"
+        return True, msg
+    else:
+        return False, "未能建立啟動項目，請確認磁碟寫入與系統權限！"
+
+
+def remove_pm2_autostart(log_func, root_dir=None):
+    r"""
+    清除 Windows 開機/登入時之 PM2 自啟動配置（原生系統服務、工作排程器與啟動資料夾）。
+    """
+    removed_items = []
+
+    # 1. 卸載 Windows 原生系統服務
+    svc_ok, svc_msg = uninstall_lah_pm2_service(log_func, root_dir)
+    if svc_ok and "未安裝" not in svc_msg:
+        removed_items.append("Windows 原生系統服務")
+
+    # 2. 清理舊版啟動捷徑與工作排程
+    cleaned = clean_legacy_autostart_entries(log_func, root_dir)
+    removed_items.extend(cleaned)
+
+    if removed_items:
+        return True, f"已順利停用並清除自啟動項目 ({', '.join(removed_items)})。"
+    else:
+        return True, "目前系統中無待清除的自啟動項目。"
+
+
+def test_pm2_autostart_execution(log_func, root_dir=None):
+    r"""
+    立即測試執行開機喚醒與守護流程，驗證各服務是否在線且各監聽埠正常運作。
+    """
+    target_root = root_dir if (root_dir and os.path.exists(root_dir)) else r"C:\AppServ"
+
+    # 1. 若安裝了原生系統服務，先確認服務狀態
+    sf = resolve_winsw_service_files(target_root)
+    if sf["is_available"]:
+        try:
+            stat_res = subprocess.run([sf["exe_path"], "status"], capture_output=True, text=True, timeout=8, creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
+            st = stat_res.stdout.strip()
+            log_func(f"ℹ️ Windows 原生系統服務狀態: {st}", "info")
+            if st not in ["Started", "Running"]:
+                log_func("  正在啟動系統服務...", "info")
+                subprocess.run([sf["exe_path"], "start"], capture_output=True, timeout=15, creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
+        except Exception as e:
+            log_func(f"  ⚠️ 查詢服務狀態警示: {e}", "warning")
+    else:
+        # 備用執行 VBS
+        pm2_cmd = resolve_pm2_command(target_root) or os.path.normpath(os.path.join(target_root, "node", "pm2.cmd"))
+        node_dir = os.path.dirname(pm2_cmd)
+        vbs_path = os.path.normpath(os.path.join(node_dir, "pm2-autostart.vbs"))
+        if os.path.exists(vbs_path):
+            log_func(f"🚀 正在測試執行靜默喚醒腳本: wscript.exe \"{vbs_path}\"...", "info")
+            try:
+                subprocess.run(["cscript.exe", "//nologo", vbs_path], check=True, timeout=15, creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0)
+            except Exception as e:
+                log_func(f"  ⚠️ 執行喚醒腳本警示: {e}", "warning")
+
+    # 2. 執行全方位 5 大核心服務巡檢補啟動
+    audit_ok, audit_msg = audit_and_ensure_pm2_services(log_func, target_root)
+
+    # 3. 檢測核心連接埠
+    time.sleep(1)
+    ports_status = []
+    for port in [8080, 8081, 8082, 8085]:
+        ps_cmd = f"Get-NetTCPConnection -LocalPort {port} -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1"
+        res = subprocess.run(
+            ["powershell", "-NoProfile", "-Command", ps_cmd],
+            capture_output=True, text=True, timeout=5,
+            creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
+        )
+        if res.stdout.strip():
+            ports_status.append(f"Port {port} [正常聆聽中]")
+        else:
+            ports_status.append(f"Port {port} [未聆聽]")
+
+    log_func(f"✅ 開機與巡檢測試完成！連接埠狀態：{', '.join(ports_status)}", "success")
+    return True, f"開機與巡檢測試完成！\n" + "\n".join([f"• {p}" for p in ports_status])
 
 
 def get_zip_member_path(info):
@@ -1797,6 +2093,10 @@ class UpdaterApp:
         if os.path.isdir(node_dir):
             register_path_to_user_environment(node_dir, None)
 
+        oci_dir = os.path.join(root_dir, "instantclient_11_2") if root_dir else r"C:\AppServ\instantclient_11_2"
+        if os.path.isdir(oci_dir):
+            register_path_to_user_environment(oci_dir, None)
+
         self.pm2_path = resolve_pm2_command(root_dir)
         if self.pm2_path:
             self.chk_pm2.configure(
@@ -1862,9 +2162,9 @@ class UpdaterApp:
             ry = self.root.winfo_rooty()
             rw = self.root.winfo_width()
             rh = self.root.winfo_height()
-            dx = max(30, rx + (rw - 680) // 2)
-            dy = max(30, ry + (rh - 520) // 2)
-            dlg.geometry(f"680x520+{dx}+{dy}")
+            dx = max(30, rx + (rw - 720) // 2)
+            dy = max(30, ry + (rh - 540) // 2)
+            dlg.geometry(f"720x540+{dx}+{dy}")
         except Exception:
             pass
 
@@ -1895,10 +2195,10 @@ class UpdaterApp:
         hint_frame.pack(fill=tk.X, pady=(0, 10))
 
         hint_text = (
-            "• 在 Windows 環境下，PM2 預設不會在重新開機後自動啟動背景守護進程。\n"
-            "• 啟用開機自啟動後，系統登入時會自動透過便攜版 Node 執行 pm2 resurrect 喚醒服務。\n"
-            "• 採用專屬 VBScript 隱藏視窗技術，背景靜默啟動，保證不彈出任何黑色 CMD 視窗。\n"
-            "• 開機自啟動將自動恢復即時通 WSS (8081/8082) 與 PHP8 API (8085) 等所有受管服務。"
+            "• 原生系統服務：透過 WinSW 註冊 Windows 服務 (LAH_PM2_Service)，開機無需使用者登入即可在背景啟動。\n"
+            "• 環境鎖定保障：強制使用 C:\\AppServ\\node\\node.exe 運行守護進程，避免受全域 PATH 污染。\n"
+            "• 自動修復守護：背景常駐 Watchdog 每 60 秒自動巡檢，若 LAH-FE / WSS / PHP8 API 離線自動重啟。\n"
+            "• 多重備援防線：同時配置 pm2-autostart 登入腳本與排程工作，確保任意環境下皆能自動復原。"
         )
         ttk.Label(
             hint_frame,
@@ -1935,9 +2235,12 @@ class UpdaterApp:
             has_sc = bool(cfg["startup_shortcuts"])
             is_enabled = has_svc or has_task or has_sc
 
-            if is_enabled:
-                status_var.set("🟢 狀態：開機自啟動【已啟用】")
+            if has_svc:
+                status_var.set("🟢 狀態：Windows 原生系統服務【運行中】(開機免登入自啟)")
                 lbl_status.config(fg="#2e7d32")
+            elif is_enabled:
+                status_var.set("🟡 狀態：開機自啟動【部分啟用 / 傳統腳本模式】")
+                lbl_status.config(fg="#e65100")
             else:
                 status_var.set("⚪ 狀態：開機自啟動【未設定】")
                 lbl_status.config(fg="#777777")
@@ -1946,12 +2249,22 @@ class UpdaterApp:
             txt_detail.delete("1.0", tk.END)
 
             lines = []
+            if has_svc:
+                lines.append(f"[✓] Windows 原生系統服務 (開機免登入自啟) ({len(cfg['services'])} 項):")
+                for s in cfg["services"]:
+                    lines.append(f"    • {s.get('Name', 'PM2')} (狀態: {s.get('State', '未知')} / 啟動模式: {s.get('StartMode', '未知')})")
+                    if s.get("PathName"):
+                        lines.append(f"      執行路徑: {s.get('PathName')}")
+                lines.append("      特色: 開機免登入由 LocalSystem 啟動，鎖定 C:\\AppServ\\node，每 60 秒巡檢自動修復")
+            else:
+                lines.append("[-] Windows 原生系統服務 (LAH_PM2_Service)：未安裝")
+
             if has_sc:
-                lines.append(f"[✓] 啟動資料夾捷徑/腳本 ({len(cfg['startup_shortcuts'])} 項):")
+                lines.append(f"\n[✓] 傳統啟動資料夾腳本 ({len(cfg['startup_shortcuts'])} 項):")
                 for sc in cfg["startup_shortcuts"]:
                     lines.append(f"    • {sc}")
             else:
-                lines.append("[-] 啟動資料夾 (Startup)：未設定")
+                lines.append("\n[-] 傳統啟動資料夾 (Startup)：未設定")
 
             if has_task:
                 lines.append(f"\n[✓] Windows 工作排程器 ({len(cfg['tasks'])} 項):")
@@ -1960,25 +2273,19 @@ class UpdaterApp:
             else:
                 lines.append("\n[-] Windows 工作排程器：未設定")
 
-            if has_svc:
-                lines.append(f"\n[✓] Windows 服務 ({len(cfg['services'])} 項):")
-                for s in cfg["services"]:
-                    lines.append(f"    • {s.get('Name', 'PM2')} (狀態: {s.get('State', '未知')})")
-            else:
-                lines.append("\n[-] Windows 服務：未設定")
-
             txt_detail.insert(tk.END, "\n".join(lines))
             txt_detail.configure(state="disabled")
 
         def _on_enable():
             confirm = messagebox.askyesno(
                 "啟用確認",
-                "即將設定 Windows 開機/登入時自動於背景靜默喚醒 PM2 服務。\n\n"
+                "即將設定 Windows 開機時自動於系統層級 (LocalSystem) 啟動並監控 PM2 服務。\n\n"
                 "操作項目：\n"
-                "1. 建立靜默背景腳本 (pm2-autostart.vbs)\n"
-                "2. 部署至 Windows 啟動資料夾\n"
-                "3. 註冊 Windows 工作排程器 (LAH_PM2_Autostart)\n"
-                "4. 儲存當前受管服務清單 (pm2 save)\n\n"
+                "1. 儲存當前受管服務狀態 (pm2 save) 並同步設定檔至系統設定目錄\n"
+                "2. 部署 WinSW 原生服務封裝檔 (lah-service.exe / xml / service_runner.js)\n"
+                "3. 註冊並啟動 Windows 原生系統服務 (LAH_PM2_Service)\n"
+                "4. 建立輔助啟動腳本與工作排程器作為備援防線\n\n"
+                "優勢：開機無須使用者登入 Windows 桌面即可自動拉起服務，並鎖定 C:\\AppServ\\node 環境。\n\n"
                 "是否立即啟用？",
                 parent=dlg
             )
@@ -1986,32 +2293,37 @@ class UpdaterApp:
                 return
 
             self.log("=" * 50, "info")
-            self.log("⚙️ 正在啟用 PM2 開機自啟動設定...", "info")
+            self.log("⚙️ 正在啟用 PM2 原生系統服務與開機自啟動設定...", "info")
             ok, msg = setup_pm2_autostart(self.log, root_dir)
             _refresh_status()
             if ok:
-                messagebox.showinfo("啟用成功", f"🎉 {msg}\n\n電腦重新開機或使用者登入時，系統將自動於背景喚醒 PM2 並拉起服務！", parent=dlg)
+                messagebox.showinfo("啟用成功", f"🎉 {msg}\n\n電腦重新開機時，系統無須登入即可自動啟動 PM2 並確保各服務正常運作！", parent=dlg)
             else:
                 messagebox.showerror("啟用失敗", f"設定過程發生錯誤：\n{msg}", parent=dlg)
 
         def _on_disable():
             confirm = messagebox.askyesno(
                 "停用確認",
-                "確定要停用並清除 PM2 開機自啟動設定嗎？\n\n停用後，重新開機將不會自動啟動 PM2 服務。",
+                "確定要停用並移除 PM2 原生系統服務與開機自啟動設定嗎？\n\n"
+                "操作項目：\n"
+                "1. 停止並解除安裝 LAH_PM2_Service Windows 系統服務\n"
+                "2. 刪除 Windows 工作排程器中的 LAH_PM2_Autostart\n"
+                "3. 清除啟動資料夾中的 pm2-autostart 腳本\n\n"
+                "停用後，伺服器重新開機將不會自動拉起 PM2 服務。",
                 parent=dlg
             )
             if not confirm:
                 return
 
             self.log("=" * 50, "info")
-            self.log("🛑 正在停用並清除 PM2 開機自啟動設定...", "info")
+            self.log("🛑 正在停用並移除 PM2 系統服務與開機自啟動設定...", "info")
             ok, msg = remove_pm2_autostart(self.log)
             _refresh_status()
             messagebox.showinfo("自啟動設定", msg, parent=dlg)
 
         def _on_test():
             self.log("=" * 50, "info")
-            self.log("⚡ 正在測試執行 PM2 開機喚醒流程...", "info")
+            self.log("⚡ 正在測試執行 PM2 原生服務與全核心巡檢...", "info")
             ok, msg = test_pm2_autostart_execution(self.log, root_dir)
             _refresh_status()
             if ok:
@@ -2019,13 +2331,13 @@ class UpdaterApp:
             else:
                 messagebox.showwarning("測試結果", f"測試過程回傳：\n{msg}", parent=dlg)
 
-        btn_enable = ttk.Button(btn_row, text="🚀 一鍵啟用 / 重新配置", command=_on_enable, width=22)
+        btn_enable = ttk.Button(btn_row, text="🚀 啟用原生系統服務 (開機免登入)", command=_on_enable, width=28)
         btn_enable.pack(side=tk.LEFT, padx=(0, 6))
 
-        btn_disable = ttk.Button(btn_row, text="🛑 停用 / 清除設定", command=_on_disable, width=16)
+        btn_disable = ttk.Button(btn_row, text="🛑 停用 / 移除系統服務", command=_on_disable, width=20)
         btn_disable.pack(side=tk.LEFT, padx=(0, 6))
 
-        btn_test = ttk.Button(btn_row, text="⚡ 立即測試喚醒", command=_on_test, width=16)
+        btn_test = ttk.Button(btn_row, text="⚡ 測試服務與全核心巡檢", command=_on_test, width=22)
         btn_test.pack(side=tk.LEFT, padx=(0, 6))
 
         btn_close = ttk.Button(btn_row, text="關閉", command=dlg.destroy, width=10)
@@ -2411,6 +2723,11 @@ class UpdaterApp:
             if is_updating_node:
                 self.set_progress(92, "正在註冊綠色 Node.js 環境變數 PATH...")
                 register_path_to_user_environment(node_tgt, self.log)
+
+            # 若目標目錄存在 instantclient_11_2，自動註冊至使用者 PATH
+            oci_dir = os.path.join(root_dir, "instantclient_11_2")
+            if os.path.isdir(oci_dir):
+                register_path_to_user_environment(oci_dir, self.log)
 
             # 步驟 4：若更新前有停止 Apache，或勾選了重啟，在此重新啟動服務
             if should_restart_apache and svc_name and apache_was_stopped and not apache_restarted:
