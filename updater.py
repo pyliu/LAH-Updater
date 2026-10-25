@@ -1910,6 +1910,9 @@ class UpdaterApp:
         self.restart_pm2_var = tk.BooleanVar(value=False)
         self.pm2_daemon_status_var = tk.StringVar(value="⚪ 偵測中...")
 
+        # 顯示全部安裝包（含未偵測到項目）核取變數（預設 False：未偵測到則隱藏選項）
+        self.show_all_packages_var = tk.BooleanVar(value=False)
+
         # 進度百分比與狀態文字
         self.progress_percent_var = tk.StringVar(value="0%")
         self.progress_status_var = tk.StringVar(value="準備就緒，請確認更新項目後點選「開始更新」")
@@ -1951,6 +1954,15 @@ class UpdaterApp:
         # 如此無論視窗解析度或 DPI 縮放為何，底部控制按鈕永遠 100% 完整保留，絕對不會被擠壓或裁切！
         bottom_frame = ttk.Frame(main_frame)
         bottom_frame.pack(side=tk.BOTTOM, fill=tk.X, pady=(6, 0))
+
+        # 顯示全部安裝包（含未偵測到項目）選項
+        self.chk_show_all = ttk.Checkbutton(
+            bottom_frame,
+            text="👁️ 顯示全部安裝包 (含未偵測到項目)",
+            variable=self.show_all_packages_var,
+            command=self._update_package_cards_visibility
+        )
+        self.chk_show_all.pack(side=tk.LEFT, padx=(4, 0))
 
         self.btn_exit = ttk.Button(bottom_frame, text="關閉離開", command=self._on_close, width=12)
         self.btn_exit.pack(side=tk.RIGHT, padx=(8, 0))
@@ -2025,10 +2037,7 @@ class UpdaterApp:
         )
         left_hint.pack(anchor=tk.W, pady=(0, 2))
 
-        for pkg in BASE_ENV_CONFIGS:
-            self._create_pkg_card(left_col, pkg)
-
-        # 左欄底部控制選項
+        # 左欄底部控制選項 (優先 pack 於 BOTTOM，確保固定於最下方)
         left_ctrl_frame = ttk.Frame(left_col, padding="2")
         left_ctrl_frame.pack(side=tk.BOTTOM, fill=tk.X, pady=(4, 0))
 
@@ -2070,6 +2079,21 @@ class UpdaterApp:
         )
         self.btn_sec_harden.pack(fill=tk.X, pady=(3, 2))
 
+        # 左欄卡片容器與未偵測到提示
+        self.left_cards_frame = ttk.Frame(left_col)
+        self.left_cards_frame.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
+
+        self.lbl_no_pkg_left = tk.Label(
+            self.left_cards_frame,
+            text="ℹ️ 目前目錄未偵測到基礎環境安裝包\n(如需檢視請勾選下方「👁️ 顯示全部安裝包」)",
+            font=("Microsoft JhengHei UI", 10),
+            fg="#777777",
+            justify=tk.CENTER
+        )
+
+        for pkg in BASE_ENV_CONFIGS:
+            self._create_pkg_card(self.left_cards_frame, pkg)
+
         # =============================================================
         # 右側欄位：智慧控管系統模組更新 (LAH 應用與套件)
         # =============================================================
@@ -2084,10 +2108,7 @@ class UpdaterApp:
         )
         right_hint.pack(anchor=tk.W, pady=(0, 2))
 
-        for pkg in APP_PACKAGE_CONFIGS:
-            self._create_pkg_card(right_col, pkg)
-
-        # 右欄底部控制選項
+        # 右欄底部控制選項 (優先 pack 於 BOTTOM)
         right_ctrl_frame = ttk.Frame(right_col, padding="2")
         right_ctrl_frame.pack(side=tk.BOTTOM, fill=tk.X, pady=(4, 0))
 
@@ -2132,6 +2153,24 @@ class UpdaterApp:
         )
         self.btn_align_pm2.pack(side=tk.RIGHT)
 
+        # 右欄卡片容器與未偵測到提示
+        self.right_cards_frame = ttk.Frame(right_col)
+        self.right_cards_frame.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
+
+        self.lbl_no_pkg_right = tk.Label(
+            self.right_cards_frame,
+            text="ℹ️ 目前目錄未偵測到系統模組更新包\n(如需檢視請勾選下方「👁️ 顯示全部安裝包」)",
+            font=("Microsoft JhengHei UI", 10),
+            fg="#777777",
+            justify=tk.CENTER
+        )
+
+        for pkg in APP_PACKAGE_CONFIGS:
+            self._create_pkg_card(self.right_cards_frame, pkg)
+
+        # 初始依狀態切換卡片可見度
+        self._update_package_cards_visibility()
+
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
 
     def _create_pkg_card(self, parent_frame, pkg):
@@ -2142,7 +2181,7 @@ class UpdaterApp:
 
         card_padding = (22, 0, 0, 1) if is_sub else (0, 0, 0, 1)
         item_card = ttk.Frame(parent_frame, padding=card_padding)
-        item_card.pack(fill=tk.X, pady=(0, 1))
+        v["card_frame"] = item_card
 
         top_line = ttk.Frame(item_card)
         top_line.pack(fill=tk.X)
@@ -2200,6 +2239,50 @@ class UpdaterApp:
         )
         btn_reset_pkg.pack(side=tk.LEFT)
         self.reset_buttons[p_id] = btn_reset_pkg
+
+    def _update_package_cards_visibility(self):
+        """根據 show_all_packages_var 與各模組 exists 狀態切換更新卡片顯示/隱藏"""
+        show_all = self.show_all_packages_var.get()
+
+        # 處理左欄 (基礎環境)
+        for pkg in BASE_ENV_CONFIGS:
+            v = self.pkg_vars.get(pkg["id"])
+            if v and "card_frame" in v:
+                v["card_frame"].pack_forget()
+
+        left_visible_count = 0
+        for pkg in BASE_ENV_CONFIGS:
+            v = self.pkg_vars.get(pkg["id"])
+            if v and "card_frame" in v:
+                if show_all or v.get("exists", False):
+                    v["card_frame"].pack(fill=tk.X, pady=(0, 1))
+                    left_visible_count += 1
+
+        if hasattr(self, 'lbl_no_pkg_left'):
+            if left_visible_count == 0:
+                self.lbl_no_pkg_left.pack(fill=tk.X, expand=True, pady=40)
+            else:
+                self.lbl_no_pkg_left.pack_forget()
+
+        # 處理右欄 (系統模組)
+        for pkg in APP_PACKAGE_CONFIGS:
+            v = self.pkg_vars.get(pkg["id"])
+            if v and "card_frame" in v:
+                v["card_frame"].pack_forget()
+
+        right_visible_count = 0
+        for pkg in APP_PACKAGE_CONFIGS:
+            v = self.pkg_vars.get(pkg["id"])
+            if v and "card_frame" in v:
+                if show_all or v.get("exists", False):
+                    v["card_frame"].pack(fill=tk.X, pady=(0, 1))
+                    right_visible_count += 1
+
+        if hasattr(self, 'lbl_no_pkg_right'):
+            if right_visible_count == 0:
+                self.lbl_no_pkg_right.pack(fill=tk.X, expand=True, pady=40)
+            else:
+                self.lbl_no_pkg_right.pack_forget()
 
     def _show_release_notes_dialog(self):
         """彈出獨立視窗顯示版本更新說明內容"""
@@ -2996,6 +3079,9 @@ class UpdaterApp:
         else:
             self.btn_view_notes.configure(state="disabled", text="📋 無更新說明")
 
+        # 依目前偵測結果與顯示設定即時更新卡片可見度
+        self._update_package_cards_visibility()
+
     def log(self, message, level="info"):
         """執行緒安全的日誌輸出與歷史記錄"""
         now_str = datetime.now().strftime("[%H:%M:%S] ")
@@ -3040,6 +3126,10 @@ class UpdaterApp:
             self.btn_align_pm2.configure(state=state)
         if hasattr(self, 'btn_autostart_pm2'):
             self.btn_autostart_pm2.configure(state=state)
+        if hasattr(self, 'btn_sec_harden'):
+            self.btn_sec_harden.configure(state=state)
+        if hasattr(self, 'chk_show_all'):
+            self.chk_show_all.configure(state=state)
 
         for p_id in self.pkg_vars:
             exists = self.pkg_vars[p_id]["exists"]
