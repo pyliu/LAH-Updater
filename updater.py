@@ -1970,8 +1970,8 @@ class UpdaterApp:
     def __init__(self, root):
         self.root = root
         self.root.title("智慧控管與監控系統 - 自動更新工具")
-        self.root.geometry("1260x740")
-        self.root.minsize(1100, 720)
+        self.root.geometry("1260x760")
+        self.root.minsize(1100, 740)
 
         # 基礎路徑
         self.app_dir = get_app_dir()
@@ -2087,56 +2087,6 @@ class UpdaterApp:
         )
         admin_label.pack(side=tk.RIGHT, padx=5)
 
-        # 【關鍵佈局順序修復】：底部按鈕列必須在中央展開區塊之前優先向 side=tk.BOTTOM pack！
-        # 如此無論視窗解析度或 DPI 縮放為何，底部控制按鈕永遠 100% 完整保留，絕對不會被擠壓或裁切！
-        bottom_frame = ttk.Frame(main_frame)
-        bottom_frame.pack(side=tk.BOTTOM, fill=tk.X, pady=(6, 0))
-
-        # 顯示全部安裝包（含未偵測到項目）選項
-        self.chk_show_all = ttk.Checkbutton(
-            bottom_frame,
-            text="👁️ 顯示全部安裝包 (含未偵測到項目)",
-            variable=self.show_all_packages_var,
-            command=self._update_package_cards_visibility
-        )
-        self.chk_show_all.pack(side=tk.LEFT, padx=(4, 0))
-
-        self.btn_exit = ttk.Button(bottom_frame, text="關閉離開", command=self._on_close, width=12)
-        self.btn_exit.pack(side=tk.RIGHT, padx=(8, 0))
-
-        self.btn_start = tk.Button(
-            bottom_frame,
-            text="🚀 開始更新",
-            command=self.start_update_thread,
-            font=("Microsoft JhengHei UI", 14, "bold"),
-            bg="#1976d2",
-            fg="#ffffff",
-            activebackground="#1565c0",
-            activeforeground="#ffffff",
-            relief=tk.FLAT,
-            padx=18,
-            pady=4,
-            cursor="hand2"
-        )
-        self.btn_start.pack(side=tk.RIGHT, padx=(8, 0))
-
-        self.btn_view_log = ttk.Button(
-            bottom_frame,
-            text="📊 檢視執行日誌",
-            command=self._open_progress_dialog,
-            width=16
-        )
-        self.btn_view_log.pack(side=tk.RIGHT, padx=(8, 0))
-
-        self.btn_view_notes = ttk.Button(
-            bottom_frame,
-            text="📋 查看更新說明",
-            command=self._show_release_notes_dialog,
-            state="disabled",
-            width=16
-        )
-        self.btn_view_notes.pack(side=tk.RIGHT)
-
         # 2. 安裝根目錄與備份設定還原區塊 (side=tk.TOP)
         dir_frame = ttk.LabelFrame(main_frame, text=" 📂 安裝根目錄與備份設定還原 ", padding="6")
         dir_frame.pack(side=tk.TOP, fill=tk.X, pady=(0, 4))
@@ -2204,12 +2154,89 @@ class UpdaterApp:
         )
         left_hint.pack(anchor=tk.W, pady=(0, 2))
 
-        # 左欄底部控制選項 (優先 pack 於 BOTTOM，確保固定於最下方)
-        left_ctrl_frame = ttk.Frame(left_col, padding="2")
-        left_ctrl_frame.pack(side=tk.BOTTOM, fill=tk.X, pady=(4, 0))
+        # 1. 左欄底部全域控制列 (優先 pack 於 BOTTOM，固定於左欄最底端)
+        # 採用雙列平衡佈局，垂直高度與右欄 PM2 控制項完美對齊
+        left_action_frame = ttk.Frame(left_col, padding="2")
+        left_action_frame.pack(side=tk.BOTTOM, fill=tk.X, pady=(4, 0))
+
+        # 輔助列 (上列)：顯示全部安裝包核取框 (靠左) + 檢視日誌與查看說明按鈕 (靠右)
+        action_row_top = ttk.Frame(left_action_frame)
+        action_row_top.pack(fill=tk.X, pady=(1, 2))
+
+        self.chk_show_all = ttk.Checkbutton(
+            action_row_top,
+            text="👁️ 顯示全部安裝包 (含未偵測到)",
+            variable=self.show_all_packages_var,
+            command=self._update_package_cards_visibility
+        )
+        self.chk_show_all.pack(side=tk.LEFT, padx=(2, 0))
+
+        self.btn_view_log = ttk.Button(
+            action_row_top,
+            text="📊 檢視執行日誌",
+            command=self._open_progress_dialog,
+            width=14
+        )
+        self.btn_view_log.pack(side=tk.RIGHT, padx=(4, 0))
+
+        self.btn_view_notes = ttk.Button(
+            action_row_top,
+            text="📋 查看更新說明",
+            command=self._show_release_notes_dialog,
+            state="disabled",
+            width=14
+        )
+        self.btn_view_notes.pack(side=tk.RIGHT)
+
+        # 主行動列 (下列)：關閉離開按鈕 (靠左) + 🚀 開始更新主按鈕 (靠右)
+        action_row_bottom = ttk.Frame(left_action_frame)
+        action_row_bottom.pack(fill=tk.X, pady=(2, 0))
+
+        self.btn_exit = ttk.Button(
+            action_row_bottom,
+            text="關閉離開",
+            command=self._on_close,
+            width=12
+        )
+        self.btn_exit.pack(side=tk.LEFT)
+
+        self.btn_start = tk.Button(
+            action_row_bottom,
+            text="🚀 開始更新",
+            command=self.start_update_thread,
+            font=("Microsoft JhengHei UI", 12, "bold"),
+            bg="#1976d2",
+            fg="#ffffff",
+            activebackground="#1565c0",
+            activeforeground="#ffffff",
+            relief=tk.FLAT,
+            padx=16,
+            pady=3,
+            cursor="hand2"
+        )
+        self.btn_start.pack(side=tk.RIGHT)
+
+        # 2. 左欄卡片容器 (依序 pack 基礎環境卡片)
+        self.left_cards_frame = ttk.Frame(left_col)
+        self.left_cards_frame.pack(side=tk.TOP, fill=tk.X)
+
+        self.lbl_no_pkg_left = tk.Label(
+            self.left_cards_frame,
+            text="ℹ️ 目前目錄未偵測到基礎環境安裝包\n(如需檢視請勾選下方「👁️ 顯示全部安裝包」)",
+            font=("Microsoft JhengHei UI", 10),
+            fg="#777777",
+            justify=tk.CENTER
+        )
+
+        for pkg in BASE_ENV_CONFIGS:
+            self._create_pkg_card(self.left_cards_frame, pkg)
+
+        # 3. Apache 服務與資安防護設定區塊 (上移緊接在 PHP 8.5 卡片正下方)
+        left_sec_frame = ttk.LabelFrame(left_col, text=" 🛡️ Apache 服務與資安防護設定 ", padding="4")
+        left_sec_frame.pack(side=tk.TOP, fill=tk.X, pady=(6, 0))
 
         # 第 1 列：Apache 服務重啟選項 + 重新掃描按鈕
-        ctrl_row_apache = ttk.Frame(left_ctrl_frame, padding="1")
+        ctrl_row_apache = ttk.Frame(left_sec_frame, padding="1")
         ctrl_row_apache.pack(fill=tk.X, pady=(1, 2))
 
         self.chk_apache = ttk.Checkbutton(
@@ -2225,14 +2252,14 @@ class UpdaterApp:
         self.btn_rescan.pack(side=tk.RIGHT)
 
         chk_reg_apache = ttk.Checkbutton(
-            left_ctrl_frame,
+            left_sec_frame,
             text="若未安裝 Apache 服務則自動註冊 (Apache2.4)",
             variable=self.auto_register_apache_var
         )
         chk_reg_apache.pack(anchor=tk.W, pady=(1, 2))
 
         chk_sec = ttk.Checkbutton(
-            left_ctrl_frame,
+            left_sec_frame,
             text="安裝/更新時自動套用資安防護 (ServerTokens Prod / expose_php = Off)",
             variable=self.auto_security_hardening_var
         )
@@ -2240,26 +2267,11 @@ class UpdaterApp:
 
         # 獨立按鈕：手動一鍵套用資安弱點防護
         self.btn_sec_harden = ttk.Button(
-            left_ctrl_frame,
+            left_sec_frame,
             text="🛡️ 一鍵套用資安弱點防護 (隱藏 Apache / PHP 版本資訊)",
             command=self.manual_apply_security_hardening
         )
         self.btn_sec_harden.pack(fill=tk.X, pady=(3, 2))
-
-        # 左欄卡片容器與未偵測到提示
-        self.left_cards_frame = ttk.Frame(left_col)
-        self.left_cards_frame.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
-
-        self.lbl_no_pkg_left = tk.Label(
-            self.left_cards_frame,
-            text="ℹ️ 目前目錄未偵測到基礎環境安裝包\n(如需檢視請勾選下方「👁️ 顯示全部安裝包」)",
-            font=("Microsoft JhengHei UI", 10),
-            fg="#777777",
-            justify=tk.CENTER
-        )
-
-        for pkg in BASE_ENV_CONFIGS:
-            self._create_pkg_card(self.left_cards_frame, pkg)
 
         # =============================================================
         # 右側欄位：智慧控管系統模組更新 (LAH 應用與套件)
