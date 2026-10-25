@@ -4,6 +4,22 @@
 
 ---
 
+## [v1.6.1] - 2026-10-25
+
+### 📦 備份設定與資料還原支援（`_LAH_Backup_*.zip`）
+- **自動偵測與一鍵還原備份包**：於主視窗頂部「📂 安裝根目錄與備份設定還原」區塊新增備份還原選項與獨立按鈕。啟動時自動於 `C:\Temp`、程式目錄與桌面搜尋最新的 `_LAH_Backup_*.zip` 備份檔並帶入路徑。
+- **雙模式還原流程**：支援勾選「📦 安裝/更新後自動從備份包回復原始設定」於全新安裝時自動套用，亦支援點擊「⚡ 立即單獨還原備份」隨時獨立還原 `.env`、`AD.php`、即時通資料庫 `lah-messenger-server/db`、附件 `uploads`、`httpd.conf` 與 `php.ini`，還原後自動校正路徑與資安防護。
+
+### 🚀 全新安裝與更新收尾自動化完善
+- **Apache 雙層巢狀目錄防呆與自動攤平**：強化 `detect_strip_prefix` 支援識別含外層散落說明檔（如 `ReadMe.txt`、`-- Win64 VS18 --`）的 Apache Lounge 官方壓縮包並自動剝除 `Apache24/` 外層目錄。同時新增 `flatten_nested_apache_dir` 自動偵測並攤平既有的 `Apache24\Apache24` 雙層目錄。
+- **全流程自動化收尾**：安裝或更新完成後，自動產生或校正 `httpd.conf` 與 `php7/php.ini`、`php85/php.ini` 並套用資安弱點防護、自動註冊並立即啟動 `Apache2.4` Windows 服務、自動將本機綠色版 Node（`<root_dir>\node\node.exe`）註冊至 PATH 最前端並綁定 PM2 核心守護進程、拉起 5 大核心服務，最後自動配置 `LAH_PM2_Service` 原生系統服務與開機自動化。
+
+### 🐛 錯誤修復與壓縮包清理體驗優化
+- **修復更新完成後卡在「更新進行中，請稍候...」無法關閉視窗之問題**：修正 `_run_update_process` 的 `finally` 區塊中未定義變數 `should_restart_apache` 導致的 `NameError`，確保 `_on_update_completed_ui` 100% 執行，完成後進度視窗按鈕立即切換為可用的「✅ 完成並關閉 (Esc)」。
+- **壓縮包清理詢問（預設保留）與同模組多別名清理**：更新完成後彈出詢問視窗（預設焦點為「否」保留壓縮包），僅在使用者明確點選「是」時才執行刪除。同時將同模組匹配到的所有別名壓縮檔（如 `LAH-NUXTJS-node_modules.zip` 與 `LAH-FE-node_modules.zip`）一併納入 `all_filepaths`，徹底解決別名壓縮包殘留問題。
+
+---
+
 ## [v1.6.0] - 2026-10-25
 
 ### 🌐 Web 基礎環境與伺服器安裝擴充

@@ -168,7 +168,6 @@ def query_apache_service():
             res = subprocess.run(
                 ["sc.exe", "query", name],
                 capture_output=True,
-                text=True,
                 creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
             )
             if res.returncode == 0:
@@ -182,10 +181,9 @@ def query_apache_service():
             ["powershell", "-NoProfile", "-Command",
              "Get-Service *apache* -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Name -First 1"],
             capture_output=True,
-            text=True,
             creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
         )
-        val = res.stdout.strip()
+        val = _decode_console_bytes(res.stdout).strip()
         if val:
             return val
     except Exception:
@@ -200,10 +198,10 @@ def is_service_running(svc_name):
         res = subprocess.run(
             ["sc.exe", "query", svc_name],
             capture_output=True,
-            text=True,
             creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
         )
-        return "STATE" in res.stdout and "RUNNING" in res.stdout
+        out_str = _decode_console_bytes(res.stdout)
+        return "STATE" in out_str and "RUNNING" in out_str
     except Exception:
         return False
 
@@ -223,7 +221,6 @@ def stop_apache_service(svc_name, log_func):
         subprocess.run(
             ["net.exe", "stop", svc_name],
             capture_output=True,
-            text=True,
             creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
         )
     except Exception as e:
@@ -251,7 +248,6 @@ def start_apache_service(svc_name, log_func):
         subprocess.run(
             ["net.exe", "start", svc_name],
             capture_output=True,
-            text=True,
             creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
         )
     except Exception as e:
@@ -1753,13 +1749,16 @@ def detect_strip_prefix(zf, expected_folder_name, zip_stem, target_leaf_name="",
     """
     【關鍵防呆機制】：
     檢查 zip 壓縮包內部的頂層結構。
-    如果壓縮檔頂層已經包含與預期名稱、壓縮檔名或目標目錄同名的單一資料夾，
-    且無散落於根目錄的單獨檔案，則傳回該資料夾前綴 (例如 'www/')，
-    後續解壓縮時自動對齊消除外層，避免變成 www\\www 的雙層目錄！
-    若頂層直接散落各檔案或有多個不同頂層資料夾，則傳回空字串 ""。
+    1. 如果壓縮檔頂層已經包含與預期名稱、壓縮檔名或目標目錄同名的單一資料夾，
+       且無散落於根目錄的單獨檔案，則傳回該資料夾前綴 (例如 'www/')。
+    2. 針對 Apache Lounge 官方壓縮包 (httpd-2.4.*-x64-*.zip)，其頂層通常包含
+       'Apache24/' 資料夾與散落的 'ReadMe.txt', '-- Win64 VS18 --' 等說明檔。
+       若頂層同時僅有 1 個與預期名稱匹配的資料夾，且該資料夾內具備核心目錄 (如 bin/, conf/)，
+       則同樣傳回 'Apache24/' 並於解壓縮迴圈自動略過外層散落說明檔，徹底杜絕 Apache24\\Apache24 雙層巢狀！
     """
     top_dirs = set()
     has_root_files = False
+    sub_dirs_by_top = {}
 
     candidates = {
         expected_folder_name.strip("/\\").lower(),
@@ -1784,18 +1783,150 @@ def detect_strip_prefix(zf, expected_folder_name, zip_stem, target_leaf_name="",
         # 如果第一層直接是檔案（不是目錄）
         if len(parts) == 1 and not (info.is_dir() or info.filename.endswith('/')):
             has_root_files = True
-            break
-        top_dirs.add(parts[0])
+            continue
+        top_d = parts[0]
+        top_dirs.add(top_d)
+        if len(parts) >= 2:
+            sub_dirs_by_top.setdefault(top_d, set()).add(parts[1].lower())
 
-    if not has_root_files and len(top_dirs) == 1:
+    if len(top_dirs) == 1:
         single_dir = list(top_dirs)[0]
         s_lower = single_dir.lower()
-        if (s_lower in candidates or
+        is_match = (
+            s_lower in candidates or
             any(s_lower.startswith(c) or c.startswith(s_lower) for c in candidates) or
-            s_lower.startswith("httpd") or s_lower.startswith("apache") or s_lower.startswith("php")):
-            return single_dir + '/'
+            s_lower.startswith("httpd") or s_lower.startswith("apache") or s_lower.startswith("php")
+        )
+        if is_match:
+            if not has_root_files:
+                return single_dir + '/'
+            # 即使根目錄有 ReadMe.txt 等散落說明檔，只要該唯一資料夾名稱完全吻合預期資料夾 (如 Apache24)
+            # 或內部包含 bin/conf/ext 等核心子目錄，即判定為官方封裝外層目錄並予以剝除
+            sub_set = sub_dirs_by_top.get(single_dir, set())
+            if s_lower in candidates or ("bin" in sub_set and "conf" in sub_set) or ("ext" in sub_set):
+                return single_dir + '/'
 
     return ""
+
+
+def flatten_nested_apache_dir(apache_dir, log_func=None):
+    """
+    自動修復 Apache24\\Apache24 雙層巢狀結構：
+    若目標 apache_dir 下找不到 bin/httpd.exe，但 apache_dir\\Apache24\\bin\\httpd.exe 存在，
+    自動將內層 Apache24 的所有內容提升合併至外層 apache_dir。
+    """
+    outer_httpd = os.path.join(apache_dir, "bin", "httpd.exe")
+    inner_apache = os.path.join(apache_dir, "Apache24")
+    inner_httpd = os.path.join(inner_apache, "bin", "httpd.exe")
+
+    if not os.path.isfile(outer_httpd) and os.path.isfile(inner_httpd):
+        if log_func:
+            log_func(f"🛠️ 偵測到雙層巢狀目錄 [{inner_apache}]，正在自動攤平校正至 [{apache_dir}]...", "warning")
+        try:
+            for item in os.listdir(inner_apache):
+                s_item = os.path.join(inner_apache, item)
+                d_item = os.path.join(apache_dir, item)
+                if os.path.isdir(s_item):
+                    shutil.copytree(s_item, d_item, dirs_exist_ok=True)
+                    shutil.rmtree(s_item, ignore_errors=True)
+                else:
+                    shutil.copy2(s_item, d_item)
+                    os.remove(s_item)
+            try:
+                os.rmdir(inner_apache)
+            except Exception:
+                shutil.rmtree(inner_apache, ignore_errors=True)
+            if log_func:
+                log_func(f"  ✓ 已成功將雙層目錄攤平至：{apache_dir}", "success")
+            return True
+        except Exception as e:
+            if log_func:
+                log_func(f"  ⚠️ 攤平 Apache24 目錄時發生例外: {e}", "warning")
+    return False
+
+
+def find_latest_backup_zip(search_dirs):
+    """在指定目錄清單中搜尋最新的 _LAH_Backup_*.zip 備份壓縮檔"""
+    candidates = []
+    for d in search_dirs:
+        if not d or not os.path.isdir(d):
+            continue
+        try:
+            for fname in os.listdir(d):
+                if fname.lower().startswith("_lah_backup_") and fname.lower().endswith(".zip"):
+                    full_p = os.path.join(d, fname)
+                    if os.path.isfile(full_p):
+                        candidates.append((os.path.getmtime(full_p), full_p))
+        except Exception:
+            pass
+    if not candidates:
+        return None
+    candidates.sort(key=lambda x: x[0], reverse=True)
+    return candidates[0][1]
+
+
+def restore_from_backup_zip(zip_path, root_dir, log_func=None):
+    """
+    自 _LAH_Backup_*.zip 備份壓縮包還原原始設定檔與資料庫 (.env, AD.php, db/, uploads/, php.ini, httpd.conf)。
+    還原後若包含 Apache24/conf/httpd.conf 或 php.ini，會確保路徑與目標 root_dir 對齊。
+    """
+    if not zip_path or not os.path.isfile(zip_path):
+        msg = f"找不到指定的備份壓縮檔：{zip_path}"
+        if log_func:
+            log_func(f"❌ {msg}", "error")
+        return False, msg, 0
+
+    if log_func:
+        log_func("-" * 50, "info")
+        log_func(f"📦 正在自備份壓縮檔還原系統設定與資料：{os.path.basename(zip_path)} ➔ {root_dir}", "info")
+
+    restored_count = 0
+    restored_categories = set()
+    norm_root = os.path.normpath(root_dir)
+
+    try:
+        with zipfile.ZipFile(zip_path, "r") as zf:
+            for m in zf.infolist():
+                raw_name = get_zip_member_path(m).replace("\\", "/").lstrip("/")
+                if not raw_name or raw_name.startswith("__MACOSX") or raw_name.endswith(".DS_Store"):
+                    continue
+
+                dest_path = os.path.normpath(os.path.join(norm_root, raw_name.replace("/", os.sep)))
+                # Zip Slip 防護
+                if not (dest_path == norm_root or dest_path.startswith(norm_root + os.sep)):
+                    continue
+
+                if m.is_dir() or m.filename.endswith("/"):
+                    os.makedirs(dest_path, exist_ok=True)
+                    continue
+
+                os.makedirs(os.path.dirname(dest_path), exist_ok=True)
+                with zf.open(m) as src, open(dest_path, "wb") as dst:
+                    shutil.copyfileobj(src, dst)
+
+                try:
+                    dt = time.mktime(m.date_time + (0, 0, -1))
+                    os.utime(dest_path, (dt, dt))
+                except Exception:
+                    pass
+
+                restored_count += 1
+                top_part = raw_name.split("/")[0]
+                if raw_name.endswith(".env") or raw_name.endswith("AD.php") or raw_name.endswith("php.ini") or raw_name.endswith("httpd.conf"):
+                    restored_categories.add(raw_name)
+                else:
+                    restored_categories.add(f"{top_part}/...")
+
+        if log_func:
+            for cat in sorted(restored_categories):
+                log_func(f"  ✓ 已還原項目: {cat}", "info")
+            log_func(f"✅ 備份還原完成！共成功還原 {restored_count} 個設定與資料檔案。", "success")
+        return True, f"成功還原 {restored_count} 個檔案", restored_count
+    except Exception as e:
+        msg = f"還原備份壓縮檔發生異常: {e}"
+        if log_func:
+            log_func(f"❌ {msg}", "error")
+        return False, msg, restored_count
 
 
 def find_release_notes(app_dir):
@@ -1877,6 +2008,7 @@ class UpdaterApp:
         self._build_ui()
         self._detect_apache_service()
         self._detect_pm2_service()
+        self._auto_detect_backup_zip()
         self.rescan()
         # 啟動時偵測預設安裝目錄是否存在，若無則提示使用者選擇
         self._check_default_root_dir()
@@ -1886,6 +2018,10 @@ class UpdaterApp:
         self.root_dir_var = tk.StringVar(value=r"C:\AppServ")
         self.root_dir_var.trace_add("write", self._on_root_dir_changed)
 
+        # 備份還原選項與路徑變數
+        self.restore_backup_var = tk.BooleanVar(value=False)
+        self.backup_zip_path_var = tk.StringVar(value="")
+
         # 各壓縮包狀態變數
         self.pkg_vars = {}
         for pkg in PACKAGE_CONFIGS:
@@ -1893,6 +2029,7 @@ class UpdaterApp:
                 "checked": tk.BooleanVar(value=False),
                 "exists": False,
                 "filepath": "",
+                "all_filepaths": [],
                 "filesize": 0,
                 "status_var": tk.StringVar(value="⚪ 偵測中..."),
                 "target_path_var": tk.StringVar(value=""),
@@ -2000,12 +2137,12 @@ class UpdaterApp:
         )
         self.btn_view_notes.pack(side=tk.RIGHT)
 
-        # 2. 安裝根目錄選擇區塊 (side=tk.TOP)
-        dir_frame = ttk.LabelFrame(main_frame, text=" 📂 安裝根目錄設定 (預設連動基底) ", padding="6")
+        # 2. 安裝根目錄與備份設定還原區塊 (side=tk.TOP)
+        dir_frame = ttk.LabelFrame(main_frame, text=" 📂 安裝根目錄與備份設定還原 ", padding="6")
         dir_frame.pack(side=tk.TOP, fill=tk.X, pady=(0, 4))
 
         dir_inner = ttk.Frame(dir_frame)
-        dir_inner.pack(fill=tk.X)
+        dir_inner.pack(fill=tk.X, pady=(0, 3))
 
         ttk.Label(dir_inner, text="系統安裝根目錄：", font=("Microsoft JhengHei UI", 11, "bold")).pack(side=tk.LEFT, padx=(0, 6))
         self.root_entry = ttk.Entry(dir_inner, textvariable=self.root_dir_var, font=("Consolas", 12))
@@ -2013,6 +2150,36 @@ class UpdaterApp:
 
         self.btn_browse = ttk.Button(dir_inner, text="瀏覽...", command=self._browse_root_dir, width=10)
         self.btn_browse.pack(side=tk.RIGHT)
+
+        # 第 2 列：從備份 ZIP 包還原原始設定與資料
+        backup_inner = ttk.Frame(dir_frame)
+        backup_inner.pack(fill=tk.X)
+
+        self.chk_restore_backup = ttk.Checkbutton(
+            backup_inner,
+            text="📦 安裝/更新後自動從備份包回復原始設定：",
+            variable=self.restore_backup_var
+        )
+        self.chk_restore_backup.pack(side=tk.LEFT, padx=(0, 4))
+
+        self.backup_entry = ttk.Entry(backup_inner, textvariable=self.backup_zip_path_var, font=("Consolas", 11))
+        self.backup_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 6))
+
+        self.btn_restore_now = ttk.Button(
+            backup_inner,
+            text="⚡ 立即單獨還原備份",
+            command=self.manual_restore_backup,
+            width=18
+        )
+        self.btn_restore_now.pack(side=tk.RIGHT)
+
+        self.btn_browse_backup = ttk.Button(
+            backup_inner,
+            text="選擇備份檔...",
+            command=self._browse_backup_zip,
+            width=12
+        )
+        self.btn_browse_backup.pack(side=tk.RIGHT, padx=(0, 6))
 
         # 3. 雙欄卡片式更新清單區塊 (左右雙欄格局)
         pkg_frame = ttk.Frame(main_frame)
@@ -2481,7 +2648,7 @@ class UpdaterApp:
         self.set_ui_updating_state(False)
         if self.btn_close_progress and self.btn_close_progress.winfo_exists():
             self.btn_close_progress.configure(
-                text="關閉視窗 (Esc)",
+                text="✅ 完成並關閉 (Esc)",
                 state="normal"
             )
         if self.progress_dlg and self.progress_dlg.winfo_exists():
@@ -2517,6 +2684,127 @@ class UpdaterApp:
             norm = os.path.normpath(selected)
             self.root_dir_var.set(norm)
             self.log(f"已更新安裝根目錄為：{norm}", "info")
+
+    def _auto_detect_backup_zip(self):
+        """啟動時自動在常用目錄搜尋最新的 _LAH_Backup_*.zip 備份檔並帶入"""
+        root_dir = self.root_dir_var.get().strip()
+        parent_root = os.path.dirname(root_dir) if root_dir else ""
+        search_dirs = [
+            self.app_dir,
+            r"C:\Temp",
+            parent_root,
+            os.path.join(os.environ.get("USERPROFILE", ""), "Desktop"),
+            os.path.join(os.environ.get("USERPROFILE", ""), "Downloads"),
+        ]
+        found = find_latest_backup_zip(search_dirs)
+        if found:
+            self.backup_zip_path_var.set(os.path.normpath(found))
+            self.log(f"📦 已自動偵測到系統備份包：{found} (如需還原請勾選上方備份還原選項或點擊立即還原)", "info")
+
+    def _browse_backup_zip(self):
+        """瀏覽並選擇 _LAH_Backup_*.zip 備份壓縮檔"""
+        cur = self.backup_zip_path_var.get().strip()
+        init_dir = os.path.dirname(cur) if (cur and os.path.exists(os.path.dirname(cur))) else (r"C:\Temp" if os.path.exists(r"C:\Temp") else self.app_dir)
+        selected = filedialog.askopenfilename(
+            initialdir=init_dir,
+            title="請選擇系統備份壓縮檔 (_LAH_Backup_*.zip)",
+            filetypes=[("ZIP 備份壓縮檔", "*.zip"), ("所有檔案", "*.*")]
+        )
+        if selected:
+            norm = os.path.normpath(selected)
+            self.backup_zip_path_var.set(norm)
+            self.restore_backup_var.set(True)
+            self.log(f"已選擇備份壓縮檔：{norm}", "info")
+
+    def manual_restore_backup(self):
+        """手動獨立執行：從指定的備份 ZIP 檔還原原始設定與資料庫至安裝根目錄"""
+        if self.is_updating:
+            messagebox.showwarning("提示", "系統正在執行更新作業，請稍候再進行備份還原！", parent=self.root)
+            return
+
+        zip_path = self.backup_zip_path_var.get().strip()
+        if not zip_path or not os.path.isfile(zip_path):
+            self._browse_backup_zip()
+            zip_path = self.backup_zip_path_var.get().strip()
+            if not zip_path or not os.path.isfile(zip_path):
+                return
+
+        root_dir = self.root_dir_var.get().strip()
+        if not root_dir:
+            messagebox.showwarning("提示", "請先設定系統安裝根目錄！", parent=self.root)
+            return
+
+        confirm = messagebox.askyesno(
+            "確認還原備份設定與資料",
+            f"即將從以下備份壓縮包還原原始設定與資料庫：\n"
+            f"📦 備份檔案：{zip_path}\n"
+            f"📂 目標根目錄：{root_dir}\n\n"
+            f"還原範圍包含：\n"
+            f"• 各專案環境設定檔 (.env / AD.php)\n"
+            f"• 即時通資料庫與上傳附件 (lah-messenger-server/db & uploads)\n"
+            f"• 伺服器設定檔 (Apache httpd.conf / PHP php.ini)\n"
+            f"• 並自動校正設定檔路徑與資安防護\n\n"
+            f"是否確認立即執行還原？",
+            parent=self.root
+        )
+        if not confirm:
+            return
+
+        self.set_ui_updating_state(True)
+        self._open_progress_dialog()
+
+        def _worker():
+            try:
+                self.log("=" * 60, "info")
+                self.log("📦 開始執行備份設定與資料還原作業...", "info")
+                self.set_progress(15, "正在解壓縮並還原備份檔案...")
+
+                ok, msg, count = restore_from_backup_zip(zip_path, root_dir, self.log)
+
+                # 還原後自動校正 Apache / PHP 設定路徑與資安防護
+                apache_tgt = os.path.normpath(self.pkg_vars["apache24"]["target_path_var"].get().strip()) if "apache24" in self.pkg_vars else os.path.join(root_dir, "Apache24")
+                php7_tgt = os.path.normpath(self.pkg_vars["php7"]["target_path_var"].get().strip()) if "php7" in self.pkg_vars else os.path.join(root_dir, "php7")
+                php85_tgt = os.path.normpath(self.pkg_vars["php85"]["target_path_var"].get().strip()) if "php85" in self.pkg_vars else os.path.join(root_dir, "php85")
+
+                if os.path.isdir(apache_tgt):
+                    flatten_nested_apache_dir(apache_tgt, self.log)
+                    self.set_progress(75, "正在校正 Apache 與 PHP 設定檔路徑...")
+                    configure_apache_environment(
+                        apache_dir=apache_tgt,
+                        root_dir=root_dir,
+                        php7_dir=php7_tgt if os.path.isdir(php7_tgt) else None,
+                        php85_dir=php85_tgt if os.path.isdir(php85_tgt) else None,
+                        enable_security=self.auto_security_hardening_var.get(),
+                        log_func=self.log
+                    )
+                if self.auto_security_hardening_var.get():
+                    for p_dir in (php7_tgt, php85_tgt):
+                        ini_f = os.path.join(p_dir, "php.ini")
+                        if os.path.isfile(ini_f):
+                            apply_php_security_hardening(ini_f, self.log)
+
+                self.set_progress(100, f"✅ 備份還原完成！(共還原 {count} 個檔案)")
+                self.log("=" * 60, "success")
+
+                def _done():
+                    self._on_update_completed_ui()
+                    parent_w = self.progress_dlg if (self.progress_dlg and self.progress_dlg.winfo_exists()) else self.root
+                    if ok:
+                        messagebox.showinfo(
+                            "備份還原成功",
+                            f"🎉 已成功從備份檔還原 {count} 個設定與資料檔案至：\n{root_dir}\n\n"
+                            "若 Apache 或 PM2 服務正在運行中，建議重新啟動服務以載入最新設定與資料庫。",
+                            parent=parent_w
+                        )
+                    else:
+                        messagebox.showerror("備份還原失敗", f"還原過程發生錯誤：\n{msg}", parent=parent_w)
+
+                self.root.after(0, _done)
+            except Exception as ex:
+                self.log(f"❌ 備份還原發生未預期錯誤: {ex}", "error")
+                self.root.after(0, self._on_update_completed_ui)
+
+        threading.Thread(target=_worker, daemon=True).start()
 
     def _on_root_dir_changed(self, *args):
         """當安裝根目錄變更時，即時連動更新未個別自訂路徑的壓縮包目標路徑"""
@@ -2631,7 +2919,10 @@ class UpdaterApp:
                     self.lbl_pm2_status.config(fg="#666666")
                     self.btn_align_pm2.configure(state="normal", text="⚡ 喚醒綠色 PM2 核心")
 
-            self.root.after(0, _apply_ui)
+            try:
+                self.root.after(0, _apply_ui)
+            except Exception:
+                pass
 
         threading.Thread(target=_query_and_set, daemon=True).start()
 
@@ -3030,26 +3321,39 @@ class UpdaterApp:
             p_name = pkg["name"]
             v = self.pkg_vars[p_id]
             candidates = [p_name] + pkg.get("alt_names", [])
-            found_path = next((os.path.join(self.app_dir, name) for name in candidates if os.path.isfile(os.path.join(self.app_dir, name))), None)
+            matched_paths = []
+            seen_norm = set()
+
+            for name in candidates:
+                cp = os.path.join(self.app_dir, name)
+                if os.path.isfile(cp):
+                    np = os.path.normpath(cp).lower()
+                    if np not in seen_norm:
+                        seen_norm.add(np)
+                        matched_paths.append(cp)
 
             # 支援 pattern 正則表達式模糊/萬用字元辨識
-            if not found_path and pkg.get("pattern"):
+            if pkg.get("pattern"):
                 try:
                     pat = re.compile(pkg["pattern"])
                     for fname in os.listdir(self.app_dir):
                         if pat.match(fname):
                             full_f = os.path.join(self.app_dir, fname)
                             if os.path.isfile(full_f):
-                                found_path = full_f
-                                break
+                                np = os.path.normpath(full_f).lower()
+                                if np not in seen_norm:
+                                    seen_norm.add(np)
+                                    matched_paths.append(full_f)
                 except Exception:
                     pass
 
+            found_path = matched_paths[0] if matched_paths else None
             zip_path = found_path if found_path else os.path.join(self.app_dir, p_name)
 
             if os.path.isfile(zip_path):
                 v["exists"] = True
                 v["filepath"] = zip_path
+                v["all_filepaths"] = matched_paths
                 size = os.path.getsize(zip_path)
                 v["filesize"] = size
                 v["checked"].set(True)
@@ -3060,6 +3364,7 @@ class UpdaterApp:
             else:
                 v["exists"] = False
                 v["filepath"] = ""
+                v["all_filepaths"] = []
                 v["filesize"] = 0
                 v["checked"].set(False)
                 v["status_var"].set("⚪ 未提供（本次略過）")
@@ -3130,6 +3435,14 @@ class UpdaterApp:
             self.btn_sec_harden.configure(state=state)
         if hasattr(self, 'chk_show_all'):
             self.chk_show_all.configure(state=state)
+        if hasattr(self, 'chk_restore_backup'):
+            self.chk_restore_backup.configure(state=state)
+        if hasattr(self, 'backup_entry'):
+            self.backup_entry.configure(state=state)
+        if hasattr(self, 'btn_browse_backup'):
+            self.btn_browse_backup.configure(state=state)
+        if hasattr(self, 'btn_restore_now'):
+            self.btn_restore_now.configure(state=state)
 
         for p_id in self.pkg_vars:
             exists = self.pkg_vars[p_id]["exists"]
@@ -3183,15 +3496,21 @@ class UpdaterApp:
             summary_parts.append("【智慧控管系統模組】：\n" + "\n".join(summary_app))
 
         summary = "\n\n".join(summary_parts)
-        apache_note = f"\n• 更新前後將自動重啟 Apache 服務 ({self.apache_service_name or '自動搜尋'})" if self.restart_apache_var.get() else ""
-        pm2_note = "\n• 更新完成後將自動重啟 PM2 服務 (pm2 restart all)" if self.restart_pm2_var.get() else ""
+        backup_zip = self.backup_zip_path_var.get().strip() if self.restore_backup_var.get() else ""
+        if self.restore_backup_var.get() and (not backup_zip or not os.path.isfile(backup_zip)):
+            messagebox.showwarning("提示", "您已勾選「從備份包回復原始設定」，但尚未指定有效的備份壓縮檔 (_LAH_Backup_*.zip)！", parent=self.root)
+            return
+
+        backup_note = f"\n• 安裝後將自動從備份包回復原始設定與資料 ({os.path.basename(backup_zip)})" if backup_zip else ""
+        apache_note = f"\n• 更新前後將自動重啟或啟動 Apache 服務 ({self.apache_service_name or 'Apache2.4'})" if (self.restart_apache_var.get() or any(p["id"] == "apache24" for p in selected_pkgs)) else ""
+        pm2_note = "\n• 更新完成後將自動綁定綠色版 Node、拉起 PM2 核心服務並設定開機自動化" if (self.restart_pm2_var.get() or any(p.get("is_nodejs") for p in selected_pkgs)) else ""
         node_note = "\n• 包含 Node.js 綠色執行環境或核心依賴套件更新，解壓前將安全暫停 Node/PM2 服務以釋放檔案鎖定" if any(p["id"] == "node" or p.get("is_sub_package", False) for p in selected_pkgs) else ""
-        sec_note = "\n• 基礎環境更新後將自動套用資安弱點防護 (隱藏 Apache / PHP 版本資訊)" if self.auto_security_hardening_var.get() and any(p.get("is_base_env") for p in selected_pkgs) else ""
-        apache_svc_note = "\n• 安裝後將自動檢查並註冊 Apache2.4 Windows 服務" if self.auto_register_apache_var.get() and any(p["id"] == "apache24" for p in selected_pkgs) else ""
+        sec_note = "\n• 將自動套用資安弱點防護 (隱藏 Apache / PHP 版本資訊)" if self.auto_security_hardening_var.get() else ""
+        apache_svc_note = "\n• 將自動檢查並註冊啟動 Apache2.4 Windows 服務" if self.auto_register_apache_var.get() else ""
 
         confirm = messagebox.askyesno(
             "確認開始更新",
-            f"即將開始更新以下項目：\n\n{summary}{apache_note}{pm2_note}{node_note}{sec_note}{apache_svc_note}\n\n是否確認立即執行解壓縮覆蓋？"
+            f"即將開始更新以下項目：\n\n{summary}{backup_note}{apache_note}{pm2_note}{node_note}{sec_note}{apache_svc_note}\n\n是否確認立即執行解壓縮覆蓋？"
         )
         if not confirm:
             return
@@ -3314,8 +3633,15 @@ class UpdaterApp:
                         raw_name = get_zip_member_path(m).replace('\\', '/')
 
                         # 剔除防呆前綴
-                        if strip_prefix and raw_name.startswith(strip_prefix):
-                            rel_sub = raw_name[len(strip_prefix):].lstrip('/')
+                        if strip_prefix:
+                            if raw_name.startswith(strip_prefix):
+                                rel_sub = raw_name[len(strip_prefix):].lstrip('/')
+                            elif '/' not in raw_name.strip('/'):
+                                # 若啟用了單一資料夾剝除 (如 Apache24/)，自動略過壓縮包最外層散落的 ReadMe.txt 等說明檔
+                                processed_files += 1
+                                continue
+                            else:
+                                rel_sub = raw_name.lstrip('/')
                         else:
                             rel_sub = raw_name.lstrip('/')
 
@@ -3354,71 +3680,89 @@ class UpdaterApp:
 
                 self.log(f"✅ {p_name} 解壓縮覆蓋完成 (共處理 {pkg_count} 個項目)。", "success")
 
-            # 步驟 3.5：若本次有更新 Apache 或 PHP，執行智慧配置、資安強化與服務註冊
+            # 步驟 3.2：若有勾選「從備份包回復原始設定」，立即執行備份還原
+            if self.restore_backup_var.get():
+                b_zip = self.backup_zip_path_var.get().strip()
+                if b_zip and os.path.isfile(b_zip):
+                    self.set_progress(90, f"正在從備份包還原原始設定與資料 ({os.path.basename(b_zip)})...")
+                    restore_from_backup_zip(b_zip, root_dir, self.log)
+                else:
+                    self.log(f"⚠️ 找不到指定的備份檔 [{b_zip}]，略過備份還原步驟。", "warning")
+
+            # 步驟 3.5：檢查並自動校正 Apache 與 PHP 設定檔、資安弱點防護與服務註冊
             has_apache = any(p["id"] == "apache24" for p in selected_pkgs)
             has_php7 = any(p["id"] == "php7" for p in selected_pkgs)
             has_php85 = any(p["id"] == "php85" for p in selected_pkgs)
+            has_nodejs_app = any(p.get("is_nodejs", False) for p in selected_pkgs)
 
             apache_tgt = os.path.normpath(self.pkg_vars["apache24"]["target_path_var"].get().strip()) if "apache24" in self.pkg_vars else os.path.join(root_dir, "Apache24")
             php7_tgt = os.path.normpath(self.pkg_vars["php7"]["target_path_var"].get().strip()) if "php7" in self.pkg_vars else os.path.join(root_dir, "php7")
             php85_tgt = os.path.normpath(self.pkg_vars["php85"]["target_path_var"].get().strip()) if "php85" in self.pkg_vars else os.path.join(root_dir, "php85")
+            node_tgt = os.path.normpath(self.pkg_vars["node"]["target_path_var"].get().strip()) if "node" in self.pkg_vars else os.path.join(root_dir, "node")
 
-            if has_apache or has_php7 or has_php85:
-                self.set_progress(90, "正在自動校正 Apache 與 PHP 設定檔...")
+            # 防呆：若目標 Apache24 目錄存在雙層 Apache24\Apache24 巢狀結構，自動攤平修復
+            if os.path.isdir(apache_tgt):
+                flatten_nested_apache_dir(apache_tgt, self.log)
+
+            # 3.5a：處理 PHP 7 與 PHP 8.5 設定檔 (php.ini) 與資安弱點防護
+            if os.path.isdir(php7_tgt) and (has_php7 or self.restore_backup_var.get() or self.auto_security_hardening_var.get()):
+                php7_ini = os.path.join(php7_tgt, "php.ini")
+                if not os.path.isfile(php7_ini):
+                    for cand in ("php.ini-production", "php.ini-development"):
+                        cand_path = os.path.join(php7_tgt, cand)
+                        if os.path.isfile(cand_path):
+                            shutil.copyfile(cand_path, php7_ini)
+                            self.log(f"  ✓ 已依據 {cand} 產生 PHP 7 設定檔 (php.ini)", "info")
+                            break
+                if os.path.isfile(php7_ini) and self.auto_security_hardening_var.get():
+                    apply_php_security_hardening(php7_ini, self.log)
+
+            if os.path.isdir(php85_tgt) and (has_php85 or self.restore_backup_var.get() or self.auto_security_hardening_var.get()):
+                php85_ini = os.path.join(php85_tgt, "php.ini")
+                if not os.path.isfile(php85_ini):
+                    for cand in ("php.ini-production", "php.ini-development"):
+                        cand_path = os.path.join(php85_tgt, cand)
+                        if os.path.isfile(cand_path):
+                            shutil.copyfile(cand_path, php85_ini)
+                            self.log(f"  ✓ 已依據 {cand} 產生 PHP 8.5 設定檔 (php.ini)", "info")
+                            break
+                if os.path.isfile(php85_ini) and self.auto_security_hardening_var.get():
+                    apply_php_security_hardening(php85_ini, self.log)
+
+            # 3.5b：處理 Apache 設定檔 (httpd.conf)、資安強化與 Apache2.4 Windows 服務註冊
+            if os.path.isdir(apache_tgt) and (has_apache or has_php7 or has_php85 or self.restore_backup_var.get() or self.auto_security_hardening_var.get() or self.auto_register_apache_var.get()):
+                self.set_progress(91, "正在自動校正 Apache 與 PHP 整合設定檔...")
                 self.log("⏳ 正在檢查並自動校正 Apache 與 PHP 整合設定...", "info")
 
-                if has_apache and os.path.isdir(apache_tgt):
-                    conf_file = os.path.join(apache_tgt, "conf", "httpd.conf")
-                    if not os.path.isfile(conf_file):
-                        ref_conf = os.path.join(root_dir, "LAH-API", "httpd.conf-ref")
-                        if not os.path.isfile(ref_conf):
-                            ref_conf = os.path.join(self.app_dir, "httpd.conf-ref")
-                        if os.path.isfile(ref_conf):
-                            os.makedirs(os.path.join(apache_tgt, "conf"), exist_ok=True)
-                            shutil.copyfile(ref_conf, conf_file)
-                            self.log(f"  ✓ 已套用專案標準 httpd.conf 參考範本至 [{conf_file}]", "info")
+                conf_file = os.path.join(apache_tgt, "conf", "httpd.conf")
+                if not os.path.isfile(conf_file):
+                    ref_conf = os.path.join(root_dir, "LAH-API", "httpd.conf-ref")
+                    if not os.path.isfile(ref_conf):
+                        ref_conf = os.path.join(self.app_dir, "httpd.conf-ref")
+                    if os.path.isfile(ref_conf):
+                        os.makedirs(os.path.join(apache_tgt, "conf"), exist_ok=True)
+                        shutil.copyfile(ref_conf, conf_file)
+                        self.log(f"  ✓ 已套用專案標準 httpd.conf 參考範本至 [{conf_file}]", "info")
 
-                    configure_apache_environment(
-                        apache_dir=apache_tgt,
-                        root_dir=root_dir,
-                        php7_dir=php7_tgt if os.path.isdir(php7_tgt) else None,
-                        php85_dir=php85_tgt if os.path.isdir(php85_tgt) else None,
-                        enable_security=self.auto_security_hardening_var.get(),
-                        log_func=self.log
-                    )
+                configure_apache_environment(
+                    apache_dir=apache_tgt,
+                    root_dir=root_dir,
+                    php7_dir=php7_tgt if os.path.isdir(php7_tgt) else None,
+                    php85_dir=php85_tgt if os.path.isdir(php85_tgt) else None,
+                    enable_security=self.auto_security_hardening_var.get(),
+                    log_func=self.log
+                )
 
-                    if self.auto_register_apache_var.get():
-                        self.set_progress(92, "正在檢查並註冊 Apache Windows 服務...")
-                        install_apache_service(apache_tgt, "Apache2.4", self.log)
-                        self.apache_service_name = query_apache_service() or "Apache2.4"
+                if self.auto_register_apache_var.get():
+                    self.set_progress(92, "正在檢查並註冊 Apache Windows 服務...")
+                    install_apache_service(apache_tgt, "Apache2.4", self.log)
+                    self.apache_service_name = query_apache_service()
+                    if self.apache_service_name:
                         svc_name = self.apache_service_name
+                        self.root.after(0, self._detect_apache_service)
 
-                if has_php7 and os.path.isdir(php7_tgt):
-                    php7_ini = os.path.join(php7_tgt, "php.ini")
-                    if not os.path.isfile(php7_ini):
-                        for cand in ("php.ini-production", "php.ini-development"):
-                            cand_path = os.path.join(php7_tgt, cand)
-                            if os.path.isfile(cand_path):
-                                shutil.copyfile(cand_path, php7_ini)
-                                self.log(f"  ✓ 已依據 {cand} 產生 PHP 7 設定檔 (php.ini)", "info")
-                                break
-                    if os.path.isfile(php7_ini) and self.auto_security_hardening_var.get():
-                        apply_php_security_hardening(php7_ini, self.log)
-
-                if has_php85 and os.path.isdir(php85_tgt):
-                    php85_ini = os.path.join(php85_tgt, "php.ini")
-                    if not os.path.isfile(php85_ini):
-                        for cand in ("php.ini-production", "php.ini-development"):
-                            cand_path = os.path.join(php85_tgt, cand)
-                            if os.path.isfile(cand_path):
-                                shutil.copyfile(cand_path, php85_ini)
-                                self.log(f"  ✓ 已依據 {cand} 產生 PHP 8.5 設定檔 (php.ini)", "info")
-                                break
-                    if os.path.isfile(php85_ini) and self.auto_security_hardening_var.get():
-                        apply_php_security_hardening(php85_ini, self.log)
-
-            # 若本次有更新 node.zip，自動將目標 node 目錄註冊至使用者 PATH 最前端
-            if is_updating_node:
+            # 若目標目錄存在 node，自動將目標 node 目錄註冊至使用者 PATH 最前端
+            if os.path.isdir(node_tgt):
                 self.set_progress(93, "正在註冊綠色 Node.js 環境變數 PATH...")
                 register_path_to_user_environment(node_tgt, self.log)
 
@@ -3427,107 +3771,121 @@ class UpdaterApp:
             if os.path.isdir(oci_dir):
                 register_path_to_user_environment(oci_dir, self.log)
 
-            # 步驟 4：若更新前有停止 Apache，或勾選了重啟，在此重新啟動服務
-            target_svc = self.apache_service_name or svc_name
-            if should_stop_apache and target_svc and apache_was_stopped and not apache_restarted:
-                self.set_progress(95, f"正在啟動 Apache 服務 [{target_svc}]...")
-                start_apache_service(target_svc, self.log)
+            # 步驟 4：啟動或重啟 Apache 服務（若更新前曾停止、或勾選了重啟、或全新安裝註冊了 Apache 服務）
+            target_svc = self.apache_service_name or svc_name or query_apache_service()
+            should_start_apache = (
+                apache_was_stopped or
+                self.restart_apache_var.get() or
+                has_apache or
+                has_base_env_update or
+                has_apache_app_update
+            )
+            if target_svc and should_start_apache and not apache_restarted:
+                if not is_service_running(target_svc):
+                    self.set_progress(95, f"正在啟動 Apache 服務 [{target_svc}]...")
+                    start_apache_service(target_svc, self.log)
                 apache_restarted = True
 
-            elapsed = time.time() - start_time
-            self.set_progress(100, f"✅ 全部更新作業完成！(耗時 {elapsed:.1f} 秒)")
-            self.log("=" * 60, "success")
-            self.log(f"🎉 全部選取的更新包已順利更新完成！(總耗時: {elapsed:.1f} 秒)", "success")
+            # 步驟 5：確認 PM2 使用本機綠色版 Node、拉起 5 大核心服務並配置 PM2 自動化服務
+            target_pm2_cmd = resolve_pm2_command(root_dir)
+            should_run_pm2 = self.restart_pm2_var.get() or has_node_runtime or has_nodejs_app or self.restore_backup_var.get()
 
-            # 步驟 5：若有勾選「更新後自動重啟 PM2 服務」，自動執行重啟、還原或核心校正
-            if self.restart_pm2_var.get():
-                self.set_progress(97, "正在檢查 PM2 核心守護進程狀態...")
+            if should_run_pm2 and target_pm2_cmd:
+                self.root.after(0, self._detect_pm2_service)
+                self.set_progress(96, "正在確認 PM2 核心守護進程綁定本機綠色版 Node...")
                 daemon_info = query_pm2_daemon_info(root_dir)
                 target_node = os.path.normpath(os.path.join(root_dir, "node", "node.exe"))
 
                 if pm2_was_killed or not daemon_info["is_running"]:
-                    self.set_progress(98, "正在透過綠色環境喚醒 PM2 守護程序並還原服務 (pm2 resurrect)...")
-                    self.log("🚀 偵測到 PM2 守護程序未運行或先前已停止，正在執行 [pm2 resurrect] 自備份還原服務...", "info")
+                    self.set_progress(97, "正在透過綠色版 Node 喚醒 PM2 守護程序並拉起核心服務...")
+                    self.log(f"🚀 正在透過本機綠色版 Node ({target_node}) 喚醒 PM2 並巡檢啟動 5 大核心服務...", "info")
                     res_ok, res_err = resurrect_pm2_services(self.log, root_dir)
-                    elapsed = time.time() - start_time
-                    self.set_progress(100, f"✅ 全部更新與 PM2 服務還原完成！(耗時 {elapsed:.1f} 秒)")
                     if not res_ok:
-                        warn_event = threading.Event()
-
-                        def _warn_res():
-                            try:
-                                parent_w = self.progress_dlg if (self.progress_dlg and self.progress_dlg.winfo_exists()) else self.root
-                                messagebox.showwarning(
-                                    "PM2 還原提醒",
-                                    f"執行 PM2 服務還原時回傳非預期結果：\n{res_err}\n\n"
-                                    "請稍後於終端機手動執行 pm2 resurrect 或檢查 PM2 服務狀態。",
-                                    parent=parent_w
-                                )
-                            finally:
-                                warn_event.set()
-
-                        self.root.after(0, _warn_res)
-                        warn_event.wait()
+                        self.log(f"⚠️ PM2 resurrect 提示 ({res_err})，正在執行全方位生態系補啟動...", "warning")
+                        audit_and_ensure_pm2_services(self.log, root_dir)
                 elif not daemon_info["is_target_node"]:
                     self.log(f"⚠️ 偵測到現有 PM2 核心由外部 Node 運行 [{daemon_info['exe_path']}]", "warning")
-                    self.log(f"🚀 正在自動執行無痛切換：將 PM2 核心校正綁定至綠色環境 ({target_node})...", "info")
+                    self.log(f"🚀 正在自動將 PM2 核心無痛切換綁定至本機綠色版 Node ({target_node})...", "info")
                     align_ok, align_msg = align_pm2_daemon_to_portable(self.log, root_dir)
-                    elapsed = time.time() - start_time
-                    self.set_progress(100, f"✅ 全部更新與 PM2 核心切換完成！(耗時 {elapsed:.1f} 秒)")
                     if not align_ok:
                         self.log(f"⚠️ PM2 核心切換回傳警示: {align_msg}", "warning")
+                    audit_and_ensure_pm2_services(self.log, root_dir)
                 else:
-                    self.set_progress(98, "正在執行 pm2 restart all 重啟 PM2 服務...")
-                    pm2_ok, pm2_err = restart_pm2_services(self.log, root_dir)
-                    elapsed = time.time() - start_time
-                    self.set_progress(100, f"✅ 全部更新與 PM2 重啟作業完成！(耗時 {elapsed:.1f} 秒)")
-                    if not pm2_ok:
-                        warn_event = threading.Event()
+                    self.set_progress(97, "正在執行 pm2 restart all 重啟並巡檢 PM2 服務...")
+                    restart_pm2_services(self.log, root_dir)
 
-                        def _warn_pm2():
-                            try:
-                                parent_w = self.progress_dlg if (self.progress_dlg and self.progress_dlg.winfo_exists()) else self.root
-                                messagebox.showwarning(
-                                    "PM2 重啟提醒",
-                                    f"執行 PM2 服務重啟時回傳非預期結果：\n{pm2_err}\n\n"
-                                    "請稍後於終端機手動執行 pm2 restart all 或檢查 PM2 服務狀態。",
-                                    parent=parent_w
-                                )
-                            finally:
-                                warn_event.set()
+                # 確認並自動配置 PM2 開機自動化守護服務 (LAH_PM2_Service / 排程)
+                self.set_progress(99, "正在設定 PM2 開機自動化服務 (LAH_PM2_Service)...")
+                self.log("⚙️ 正在設定並確認 PM2 開機自動化服務與守護進程...", "info")
+                auto_ok, auto_msg = setup_pm2_autostart(self.log, root_dir)
+                if auto_ok:
+                    self.log(f"✅ PM2 自動化配置完成：{auto_msg}", "success")
+                else:
+                    self.log(f"⚠️ PM2 自動化配置提示：{auto_msg}", "warning")
 
-                        self.root.after(0, _warn_pm2)
-                        warn_event.wait()
-
-                # 即時更新主視窗狀態標籤
+                # 即時更新主視窗 PM2 狀態標籤
                 self.root.after(0, self.update_pm2_daemon_status)
+            elif should_run_pm2 and not target_pm2_cmd:
+                self.log("ℹ️ 系統尚未安裝 Node.js / PM2 執行環境，略過 PM2 服務啟動與自動化設定。", "info")
             else:
                 self.log("ℹ️ 未勾選「更新後重啟 PM2 服務」，略過 PM2 重啟作業。", "info")
 
-            # 彈出完成與空間清理對話框
+            elapsed = time.time() - start_time
+            self.set_progress(100, f"✅ 全部安裝與自動化設定作業完成！(耗時 {elapsed:.1f} 秒)")
+            self.log("=" * 60, "success")
+            self.log(f"🎉 全部選取的安裝包與系統自動化配置已順利完成！(總耗時: {elapsed:.1f} 秒)", "success")
+
+            # 先解除更新鎖定並更新進度視窗按鈕，再彈出壓縮包清理詢問對話框（預設不刪除）
             def _post_update_dialog():
+                self._on_update_completed_ui()
                 parent_w = self.progress_dlg if (self.progress_dlg and self.progress_dlg.winfo_exists()) else self.root
+
+                # 彙整本次所有選取模組對應之全部壓縮檔路徑（包含別名壓縮檔如 LAH-FE-node_modules.zip）
+                zips_to_clean = []
+                seen_z = set()
+                for pkg in selected_pkgs:
+                    v = self.pkg_vars[pkg["id"]]
+                    paths = v.get("all_filepaths") or ([v["filepath"]] if v.get("filepath") else [])
+                    for zp in paths:
+                        if zp and os.path.isfile(zp):
+                            nz = os.path.normpath(zp).lower()
+                            if nz not in seen_z:
+                                seen_z.add(nz)
+                                zips_to_clean.append(zp)
+
+                if not zips_to_clean:
+                    return
+
+                zip_names_preview = "\n".join([f"  • {os.path.basename(p)}" for p in zips_to_clean[:8]])
+                if len(zips_to_clean) > 8:
+                    zip_names_preview += f"\n  ... 等共 {len(zips_to_clean)} 個壓縮檔"
+
                 ask_cleanup = messagebox.askyesno(
-                    "更新完成 - 清理空間確認",
-                    f"🎉 所有選取的系統模組已順利更新完成！(耗時 {elapsed:.1f} 秒)\n\n"
-                    "是否要一併刪除本次已更新成功的壓縮包 (.zip) 以釋放磁碟空間？\n"
-                    "（點選「是」僅清除本次已完成更新的 zip 檔，說明文字檔仍會完整保留）",
+                    "安裝/更新完成 - 是否刪除安裝壓縮包？",
+                    f"🎉 所有選取的系統模組與自動化配置已順利完成！(耗時 {elapsed:.1f} 秒)\n\n"
+                    f"請問是否要刪除本次已安裝完成的壓縮包 (.zip) 以釋放磁碟空間？\n"
+                    f"{zip_names_preview}\n\n"
+                    f"• 點選「否」(預設建議)：完整保留所有安裝壓縮包。\n"
+                    f"• 點選「是」：刪除上述已安裝完成的 zip 檔（說明檔與備份檔仍會保留）。",
+                    default=messagebox.NO,
                     parent=parent_w
                 )
                 if ask_cleanup:
                     del_count = 0
-                    for pkg in selected_pkgs:
-                        zpath = self.pkg_vars[pkg["id"]]["filepath"]
+                    for zpath in zips_to_clean:
+                        zname = os.path.basename(zpath)
                         if os.path.isfile(zpath):
                             try:
                                 os.remove(zpath)
-                                self.log(f"🗑️ 已刪除壓縮包: {pkg['name']}", "info")
+                                self.log(f"🗑️ 已刪除壓縮包: {zname}", "info")
                                 del_count += 1
                             except Exception as de:
-                                self.log(f"⚠️ 刪除 {pkg['name']} 失敗: {de}", "warning")
+                                self.log(f"⚠️ 刪除 {zname} 失敗: {de}", "warning")
                     if del_count > 0:
-                        self.log(f"已清理 {del_count} 個更新壓縮包，釋放磁碟空間。", "success")
+                        self.log(f"✅ 已清理 {del_count} 個更新壓縮包，釋放磁碟空間。", "success")
                         self.rescan()
+                else:
+                    self.log("ℹ️ 使用者選擇保留安裝壓縮包 (.zip)，未執行刪除。", "info")
 
             self.root.after(0, _post_update_dialog)
 
@@ -3552,10 +3910,13 @@ class UpdaterApp:
             self.root.after(0, _show_unexp_err)
         finally:
             # 確保若先前停止過 Apache 服務，發生異常中斷時也一定嘗試重啟，維持系統服務運作
-            if should_restart_apache and svc_name and apache_was_stopped and not apache_restarted:
-                self.log(f"⚠️ 偵測到更新中斷或異常，緊急嘗試恢復 Apache 服務 [{svc_name}]...", "warning")
-                start_apache_service(svc_name, self.log)
-                apache_restarted = True
+            try:
+                if should_stop_apache and svc_name and apache_was_stopped and not apache_restarted:
+                    self.log(f"⚠️ 偵測到更新中斷或異常，緊急嘗試恢復 Apache 服務 [{svc_name}]...", "warning")
+                    start_apache_service(svc_name, self.log)
+                    apache_restarted = True
+            except Exception as fin_ex:
+                self.log(f"⚠️ 恢復 Apache 服務時發生例外: {fin_ex}", "warning")
             self.root.after(0, self._on_update_completed_ui)
 
     def _on_close(self):
