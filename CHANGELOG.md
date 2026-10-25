@@ -4,6 +4,26 @@
 
 ---
 
+## [v1.6.3] - 2026-10-25
+
+### 🚀 5 階段基礎環境自動化管線與「從 0 到 1 / 部分更新」雙向相容
+- **設定檔升級保護機制（不覆寫既有 `httpd.conf` / `php.ini`）**：解壓縮 `Apache24`、`php7`、`php85` 官方壓縮包時，若目標路徑已存在 `conf/httpd.conf` 或 `php.ini`，自動將壓縮包內的原廠預設檔另存為 `.default`，完整保留既有設定與備份還原設定，再進行冪等注入。
+- **[階段 1/5] 建立 Apache 服務並搭配 PHP 7.4 (`mod_php`)**：
+  - 新增 `ensure_php_ini_configured` 自動由 `php.ini-production` 初始化 `php.ini`、校正 `extension_dir` 為正斜線絕對路徑、自動啟用 `ext/` 下的必備擴充模組（`curl, fileinfo, gd2, mbstring, openssl, pdo_sqlite, sqlite3`）與 `date.timezone = "Asia/Taipei"`。
+  - 新增 `configure_apache_mod_php7` 校正 `Define SRVROOT`、`DocumentRoot "<root>/www"`、`DirectoryIndex index.php`，啟用 `headers_module` 與 `rewrite_module`，並自動掃描掛載 `php7` 的 7 個核心依賴 DLL（`LoadFile`）與 `LoadModule php7_module`。
+  - 強化 `install_apache_service`：若系統既有 `Apache2.4` 服務指向舊路徑，自動停止並重新對齊註冊至當前目標 `httpd.exe`。
+- **[階段 2/5] 增加 FCGI 的 API Proxy 設定（以 PM2 的 `lah-api-v85` 保護執行）**：
+  - 自動初始化 `php85/php.ini` 並啟用 PHP 8.5 擴充模組（含 `odbc, pdo_odbc, intl, sockets, zip` 等）及調優 `memory_limit = 512M`、`max_execution_time = 300`。
+  - 新增 `configure_apache_fcgi_proxy` 與 `ensure_lah_api_ecosystem_config`：啟用 `proxy_module`、`proxy_fcgi_module`，注入 `/LAH-API` 與 `/LAH-API/api` Alias、機敏副檔名與核心子目錄阻擋防護、以及 `fcgi://127.0.0.1:8085/` 轉發池，並確保 `LAH-API/ecosystem.config.js`（由 PM2 `lah-api-v85` 守護 `php-cgi.exe -b 127.0.0.1:8085`）到位。
+- **[階段 3/5] 套用資安弱點防護並執行語法檢驗**：
+  - 自動向 Apache 寫入 `ServerTokens Prod`、`ServerSignature Off`，向 PHP 7.4 與 8.5 寫入 `expose_php = Off`（不吐伺服器或 PHP 版本資訊），並執行 `httpd.exe -t` 確認 `Syntax OK`。
+- **[階段 4/5] 綠色版 Node 設定與 PM2 自動化啟動**：
+  - 自動註冊 `<root_dir>\node` 與 `instantclient_11_2` 至 PATH 最前端、將 PM2 Daemon 對齊綁定至本機綠色版 `node.exe`、智慧判斷重啟或補齊受管服務，並確保 `LAH_PM2_Service` 開機自動啟動服務就緒。
+- **[階段 5/5] 全系統服務啟動與連接埠最終健康驗證 (`verify_all_services_health`)**：
+  - 啟動或重啟 Apache 服務後，自動對 `Apache2.4` (`Port 80`)、`lah-api-v85` (`Port 8085`)、`LAH-FE` (`Port 8080`)、`LAH-WSS` (`Port 8081/8082`) 進行服務與 TCP Port 監聽檢查；若有未就緒項目自動重試拉起一次，並於日誌與完成對話框列出完整驗證報告。
+
+---
+
 ## [v1.6.2] - 2026-10-25
 
 ### 🎨 左右雙欄版面重構與全域操作列左移平衡

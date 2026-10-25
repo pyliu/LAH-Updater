@@ -9,6 +9,7 @@ import re
 import sys
 import time
 import shutil
+import socket
 import zipfile
 import threading
 import subprocess
@@ -403,8 +404,11 @@ def check_apache_syntax(apache_dir, log_func=None):
 
 
 def install_apache_service(apache_dir, svc_name="Apache2.4", log_func=None):
-    """在 Windows 系統註冊安裝 Apache 服務 (httpd.exe -k install)"""
-    httpd_exe = os.path.join(apache_dir, "bin", "httpd.exe")
+    """
+    在 Windows 系統註冊安裝 Apache 服務 (httpd.exe -k install)。
+    具備路徑自動調和機制：若服務已註冊但指向舊的或不存在的 httpd.exe，自動重新註冊至當前 apache_dir。
+    """
+    httpd_exe = os.path.normpath(os.path.join(apache_dir, "bin", "httpd.exe"))
     if not os.path.isfile(httpd_exe):
         if log_func:
             log_func(f"⚠️ 找不到 httpd.exe，無法註冊服務：{httpd_exe}", "warning")
@@ -412,12 +416,31 @@ def install_apache_service(apache_dir, svc_name="Apache2.4", log_func=None):
 
     existing_svc = query_apache_service()
     if existing_svc:
-        if log_func:
-            log_func(f"ℹ️ 系統已註冊 Apache 服務 [{existing_svc}]，無需重複安裝。", "info")
-        return True
+        # 檢查現存服務之執行檔路徑是否與目標 httpd.exe 相符
+        svc_info = query_installed_service_info(existing_svc)
+        raw_path = (svc_info.get("pathname") or "").strip()
+        if raw_path:
+            # 擷取 pathname 中的 .exe 路徑
+            m_exe = re.search(r'([a-zA-Z]:[^"]*?httpd\.exe)', raw_path, re.IGNORECASE)
+            installed_exe = os.path.normpath(m_exe.group(1)) if m_exe else ""
+            if installed_exe and installed_exe.lower() != httpd_exe.lower():
+                if log_func:
+                    log_func(f"🔄 偵測到既有 Apache 服務 [{existing_svc}] 路徑為 [{installed_exe}]，正在自動重新對齊至 [{httpd_exe}]...", "warning")
+                stop_apache_service(existing_svc, log_func)
+                subprocess.run(["sc.exe", "delete", existing_svc], capture_output=True, timeout=10, creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
+                time.sleep(1.5)
+                existing_svc = None
+            else:
+                if log_func:
+                    log_func(f"ℹ️ 系統已註冊 Apache 服務 [{existing_svc}] 且路徑相符 ({httpd_exe})。", "info")
+                return True
+        else:
+            if log_func:
+                log_func(f"ℹ️ 系統已註冊 Apache 服務 [{existing_svc}]，無需重複安裝。", "info")
+            return True
 
     if log_func:
-        log_func(f"⏳ 正在註冊 Windows 服務 [{svc_name}]...", "info")
+        log_func(f"⏳ 正在註冊 Windows 服務 [{svc_name}] ({httpd_exe})...", "info")
     try:
         res = subprocess.run(
             [httpd_exe, "-k", "install", "-n", svc_name],
@@ -427,7 +450,7 @@ def install_apache_service(apache_dir, svc_name="Apache2.4", log_func=None):
             creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
         )
         combined = (res.stdout + " " + res.stderr).strip()
-        if res.returncode == 0 or "successfully installed" in combined.lower():
+        if res.returncode == 0 or "successfully installed" in combined.lower() or query_apache_service():
             if log_func:
                 log_func(f"✅ Apache 服務 [{svc_name}] 註冊安裝成功！", "success")
             return True
@@ -441,20 +464,126 @@ def install_apache_service(apache_dir, svc_name="Apache2.4", log_func=None):
         return False
 
 
-def configure_apache_environment(apache_dir, root_dir, php7_dir=None, php85_dir=None, enable_security=True, log_func=None):
+def ensure_php_ini_configured(php_dir, is_php85=False, log_func=None):
     """
-    自動校正 Apache httpd.conf 設定檔：
-    1. 校正 Define SRVROOT 為目標 Apache24 目錄 (正斜線)
-    2. 若啟用資安強化，確保 ServerTokens Prod 與 ServerSignature Off
-    3. 若目標存在 PHP 7 (php7apache2_4.dll)，自動配置或更新 PHP 7 模組載入
-    4. 若目標存在 PHP 8.5 與 LAH-API，自動配置 mod_proxy_fcgi 轉發規則
-    5. 執行 httpd.exe -t 語法檢驗
+    冪等初始化與配置 PHP 設定檔 (php7/php.ini 或 php85/php.ini)：
+    1. 若 php.ini 不存在，自動由 php.ini-production 或 php.ini-development 複製建立。
+    2. 校正 extension_dir 指向當前 <php_dir>/ext。
+    3. 掃描並確保該版本存在的核心擴充套件 (curl, gd/gd2, mbstring, openssl, pdo_sqlite, sqlite3 等) 已取消註解啟用。
+    4. 確保 date.timezone = "Asia/Taipei"，以及 PHP 8.5 的 memory_limit 與 max_execution_time 充足。
+    """
+    if not php_dir or not os.path.isdir(php_dir):
+        return False
+
+    ini_path = os.path.join(php_dir, "php.ini")
+    ver_label = "PHP 8.5" if is_php85 else "PHP 7.4"
+
+    if not os.path.isfile(ini_path):
+        for cand in ("php.ini-production", "php.ini-development"):
+            cand_path = os.path.join(php_dir, cand)
+            if os.path.isfile(cand_path):
+                shutil.copyfile(cand_path, ini_path)
+                if log_func:
+                    log_func(f"  ✓ 已依據 {cand} 初始化產生 {ver_label} 設定檔: {ini_path}", "info")
+                break
+
+    if not os.path.isfile(ini_path):
+        if log_func:
+            log_func(f"  ⚠️ 找不到 {ver_label} 設定檔或範本: {ini_path}", "warning")
+        return False
+
+    try:
+        with open(ini_path, "r", encoding="utf-8", errors="replace") as f:
+            content = f.read()
+
+        orig_content = content
+        php_fwd = php_dir.replace("\\", "/")
+        ext_fwd = f"{php_fwd}/ext"
+
+        # 1. 校正 extension_dir
+        if re.search(r'(?m)^\s*extension_dir\s*=', content):
+            content = re.sub(
+                r'(?m)^\s*extension_dir\s*=.*$',
+                f'extension_dir = "{ext_fwd}"',
+                content,
+                count=1
+            )
+        elif re.search(r'(?m)^\s*;\s*extension_dir\s*=\s*"ext"', content):
+            content = re.sub(
+                r'(?m)^\s*;\s*extension_dir\s*=\s*"ext".*$',
+                f'extension_dir = "{ext_fwd}"',
+                content,
+                count=1
+            )
+        else:
+            content += f'\nextension_dir = "{ext_fwd}"\n'
+
+        # 2. 啟用核心擴充套件 (僅啟用 ext 目錄下實際存在 DLL 的項目)
+        if is_php85:
+            target_exts = ["curl", "fileinfo", "gd", "intl", "mbstring", "odbc", "openssl", "pdo_odbc", "pdo_sqlite", "sockets", "sqlite3", "zip"]
+        else:
+            target_exts = ["curl", "fileinfo", "gd2", "mbstring", "openssl", "pdo_sqlite", "sqlite3"]
+
+        enabled_exts = []
+        for ext in target_exts:
+            dll_file = os.path.join(php_dir, "ext", f"php_{ext}.dll")
+            if not os.path.isfile(dll_file):
+                continue
+            # 檢查是否已經啟用
+            active_pat = rf'(?m)^\s*extension\s*=\s*(?:php_)?{re.escape(ext)}(?:\.dll)?\b'
+            if re.search(active_pat, content):
+                continue
+            # 嘗試取消分號註解
+            commented_pat = rf'(?m)^\s*;\s*extension\s*=\s*(?:php_)?{re.escape(ext)}(?:\.dll)?\s*(?:;.*)?$'
+            if re.search(commented_pat, content):
+                content = re.sub(commented_pat, f"extension={ext}", content, count=1)
+                enabled_exts.append(ext)
+            else:
+                content += f"\nextension={ext}\n"
+                enabled_exts.append(ext)
+
+        # 3. 確保 date.timezone
+        if not re.search(r'(?m)^\s*date\.timezone\s*=\s*\S+', content):
+            if re.search(r'(?m)^\s*;\s*date\.timezone\s*=', content):
+                content = re.sub(r'(?m)^\s*;\s*date\.timezone\s*=.*$', 'date.timezone = "Asia/Taipei"', content, count=1)
+            else:
+                content += '\ndate.timezone = "Asia/Taipei"\n'
+
+        # 4. PHP 8.5 執行期資源參數確保
+        if is_php85:
+            content = re.sub(r'(?m)^\s*max_execution_time\s*=\s*30\b.*$', 'max_execution_time = 300', content)
+            content = re.sub(r'(?m)^\s*memory_limit\s*=\s*128M\b.*$', 'memory_limit = 512M', content)
+
+        if content != orig_content:
+            with open(ini_path, "w", encoding="utf-8") as f:
+                f.write(content)
+            if log_func:
+                ext_msg = f" (新啟用擴充: {', '.join(enabled_exts)})" if enabled_exts else ""
+                log_func(f"  ✓ {ver_label} 設定檔 ({os.path.basename(php_dir)}/php.ini) 路徑與擴充模組已校正完成{ext_msg}", "success")
+        else:
+            if log_func:
+                log_func(f"  ℹ️ {ver_label} 設定檔 ({os.path.basename(php_dir)}/php.ini) 擴充與路徑設定已就緒", "info")
+        return True
+    except Exception as e:
+        if log_func:
+            log_func(f"  ⚠️ 配置 {ver_label} php.ini 時發生異常: {e}", "warning")
+        return False
+
+
+def configure_apache_mod_php7(apache_dir, root_dir, php7_dir=None, log_func=None):
+    """
+    【階段 1】配置 Apache 2.4 基礎環境並搭配 PHP 7.4 的 mod_php (php7_module)：
+    1. 校正 Define SRVROOT 與 ServerRoot
+    2. 啟用 headers_module、rewrite_module
+    3. 校正 DocumentRoot 與 <Directory> 指向 <root_dir>/www，並確保 DirectoryIndex 包含 index.php
+    4. 自動掃描 php7 目錄下的依賴 DLL (php7ts.dll, libcrypto, libssl, libssh2, nghttp2, libsqlite3, libsodium)
+       並掛載 LoadModule php7_module 與 PHPIniDir
     """
     conf_path = os.path.join(apache_dir, "conf", "httpd.conf")
     if not os.path.isfile(conf_path):
         if log_func:
             log_func(f"⚠️ 未找到 httpd.conf：{conf_path}", "warning")
-        return False
+        return False, False
 
     try:
         with open(conf_path, "r", encoding="utf-8", errors="replace") as f:
@@ -462,6 +591,7 @@ def configure_apache_environment(apache_dir, root_dir, php7_dir=None, php85_dir=
 
         orig_content = content
         apache_fwd = apache_dir.replace('\\', '/')
+        www_fwd = os.path.join(root_dir, "www").replace('\\', '/')
 
         # 1. 校正 SRVROOT
         if re.search(r'(?m)^\s*Define\s+SRVROOT\b', content):
@@ -473,39 +603,99 @@ def configure_apache_environment(apache_dir, root_dir, php7_dir=None, php85_dir=
         else:
             content = f'Define SRVROOT "{apache_fwd}"\nServerRoot "${{SRVROOT}}"\n' + content
 
-        # 2. 資安強化
-        if enable_security:
-            if re.search(r"(?m)^\s*#?\s*ServerTokens\b", content):
-                content = re.sub(r"(?m)^\s*#?\s*ServerTokens\s+.*$", "ServerTokens Prod", content)
-            else:
-                content += "\nServerTokens Prod\n"
+        # 2. 啟用基礎必備模組 (headers_module, rewrite_module)
+        for mod_name in ("headers_module", "rewrite_module"):
+            content = re.sub(
+                rf'(?m)^\s*#\s*(LoadModule\s+{mod_name}\s+modules/mod_{mod_name.replace("_module", "")}\.so)',
+                r'\1',
+                content
+            )
 
-            if re.search(r"(?m)^\s*#?\s*ServerSignature\b", content):
-                content = re.sub(r"(?m)^\s*#?\s*ServerSignature\s+.*$", "ServerSignature Off", content)
-            else:
-                content += "\nServerSignature Off\n"
+        # 3. 校正 ServerName (避免啟動時 AH00558 警告)
+        if re.search(r'(?m)^\s*#\s*ServerName\s+www\.example\.com:80', content):
+            content = re.sub(r'(?m)^\s*#\s*ServerName\s+www\.example\.com:80.*$', 'ServerName localhost:80', content)
 
-        # 3. 檢查並配置 PHP 7.4 (mod_php7)
+        # 4. 校正 DocumentRoot 與 <Directory "<root>/www">
+        content = re.sub(
+            r'(?m)^\s*DocumentRoot\s+"[^"]*"',
+            f'DocumentRoot "{www_fwd}"',
+            content,
+            count=1
+        )
+        if re.search(r'<Directory\s+"\$\{SRVROOT\}/htdocs">', content):
+            www_dir_block = (
+                f'<Directory "{www_fwd}">\n'
+                f'    Header set Access-Control-Allow-Origin "*"\n'
+                f'    Options -Indexes +FollowSymLinks\n'
+                f'    AllowOverride None\n'
+                f'    Require all granted\n'
+                f'</Directory>'
+            )
+            content = re.sub(
+                r'<Directory\s+"\$\{SRVROOT\}/htdocs">[\s\S]*?</Directory>',
+                www_dir_block,
+                content,
+                count=1
+            )
+        else:
+            content = re.sub(
+                r'<Directory\s+"[a-zA-Z]:/[^"]*?/www">',
+                f'<Directory "{www_fwd}">',
+                content
+            )
+
+        # 5. 確保 DirectoryIndex 包含 index.php
+        if re.search(r'(?m)^\s*DirectoryIndex\b', content):
+            def _ensure_index_php(m):
+                line = m.group(0)
+                if "index.php" not in line:
+                    return "    DirectoryIndex index.html index.htm index.php"
+                return line
+            content = re.sub(r'(?m)^\s*DirectoryIndex\s+.*$', _ensure_index_php, content, count=1)
+
+        # 6. 配置 PHP 7.4 (mod_php7) 與相依 LoadFile DLL
         if php7_dir and os.path.isdir(php7_dir):
             p7_fwd = php7_dir.replace('\\', '/')
             p7_dll = os.path.join(php7_dir, "php7apache2_4.dll")
             if os.path.isfile(p7_dll):
-                if not re.search(r"(?m)^\s*LoadModule\s+php7_module\b", content):
-                    php7_block = (
-                        f'\n# =====================================================================\n'
-                        f'# PHP 7.4 (mod_php7) 自動掛載設定\n'
-                        f'# =====================================================================\n'
-                        f'LoadFile "{p7_fwd}/php7ts.dll"\n'
-                        f'LoadModule php7_module "{p7_fwd}/php7apache2_4.dll"\n'
-                        f'PHPIniDir "{p7_fwd}"\n'
-                        f'<FilesMatch \\.php$>\n'
-                        f'    SetHandler application/x-httpd-php\n'
-                        f'</FilesMatch>\n'
+                preload_dlls = [
+                    "php7ts.dll",
+                    "libcrypto-1_1-x64.dll",
+                    "libssl-1_1-x64.dll",
+                    "libssh2.dll",
+                    "nghttp2.dll",
+                    "libsqlite3.dll",
+                    "libsodium.dll"
+                ]
+                load_lines = []
+                for dll_name in preload_dlls:
+                    if os.path.isfile(os.path.join(php7_dir, dll_name)):
+                        load_lines.append(f'LoadFile "{p7_fwd}/{dll_name}"')
+                load_files_str = "\n".join(load_lines)
+
+                php7_block = (
+                    f'# =====================================================================\n'
+                    f'# PHP 7.4 (mod_php7) Configuration\n'
+                    f'# =====================================================================\n'
+                    f'{load_files_str}\n'
+                    f'LoadModule php7_module "{p7_fwd}/php7apache2_4.dll"\n'
+                    f'PHPIniDir "{p7_fwd}"\n'
+                    f'<FilesMatch \\.php$>\n'
+                    f'    SetHandler application/x-httpd-php\n'
+                    f'</FilesMatch>'
+                )
+
+                # 若已存在舊的 PHP 7.4 區塊，整塊更新對齊路徑與完整 LoadFile；否則追加至末尾
+                existing_p7_pat = r'(?s)# =+\s*# PHP 7\.4 \(mod_php7\).*?</FilesMatch>'
+                if re.search(existing_p7_pat, content):
+                    content = re.sub(existing_p7_pat, php7_block, content, count=1)
+                elif re.search(r'(?m)^\s*LoadModule\s+php7_module\b', content):
+                    # 校正既有單行路徑並確保依賴 LoadFile 存在
+                    content = re.sub(
+                        r'(?m)^\s*LoadFile\s+"[^"]*?/php7[^"]*?/([^"/]+)"',
+                        rf'LoadFile "{p7_fwd}/\1"',
+                        content
                     )
-                    content += php7_block
-                    if log_func:
-                        log_func("  ✓ 已向 Apache httpd.conf 注入 PHP 7.4 模組載入規則", "info")
-                else:
                     content = re.sub(
                         r'(?m)^\s*LoadModule\s+php7_module\s+.*$',
                         f'LoadModule php7_module "{p7_fwd}/php7apache2_4.dll"',
@@ -516,45 +706,20 @@ def configure_apache_environment(apache_dir, root_dir, php7_dir=None, php85_dir=
                         f'PHPIniDir "{p7_fwd}"',
                         content
                     )
-
-        # 4. 檢查並配置 PHP 8.5 (LAH-API FastCGI)
-        if php85_dir and os.path.isdir(php85_dir):
-            api_dir = os.path.join(root_dir, "LAH-API")
-            if os.path.isdir(api_dir):
-                api_fwd = api_dir.replace('\\', '/')
-                content = re.sub(r'(?m)^\s*#\s*(LoadModule\s+proxy_module\s+modules/mod_proxy\.so)', r'\1', content)
-                content = re.sub(r'(?m)^\s*#\s*(LoadModule\s+proxy_fcgi_module\s+modules/mod_proxy_fcgi\.so)', r'\1', content)
-
-                fcgi_block = (
-                    f'\n# =====================================================================\n'
-                    f'# LAH-API (PHP 8.5 FastCGI via PM2 on 127.0.0.1:8085)\n'
-                    f'# =====================================================================\n'
-                    f'Alias /LAH-API/api "{api_fwd}/v1"\n'
-                    f'Alias /lah-api/api "{api_fwd}/v1"\n'
-                    f'Alias /LAH-API "{api_fwd}"\n'
-                    f'Alias /lah-api "{api_fwd}"\n'
-                    f'<Directory "{api_fwd}">\n'
-                    f'    Header set Access-Control-Allow-Origin "*"\n'
-                    f'    Options -Indexes +FollowSymLinks\n'
-                    f'    AllowOverride None\n'
-                    f'    Require all granted\n'
-                    f'    <FilesMatch "\\.php$">\n'
-                    f'        <If "-f %{{REQUEST_FILENAME}}">\n'
-                    f'            SetHandler "proxy:fcgi://127.0.0.1:8085/"\n'
-                    f'            ProxyFCGISetEnvIf "reqenv(\'SCRIPT_FILENAME\') =~ m#^proxy:fcgi://127\\.0\\.0\\.1:8085/(.*)$#" SCRIPT_FILENAME "$1"\n'
-                    f'        </If>\n'
-                    f'    </FilesMatch>\n'
-                    f'</Directory>\n'
-                    f'<Proxy "fcgi://127.0.0.1:8085/" enablereuse=on max=16>\n'
-                    f'    ProxySet timeout=300\n'
-                    f'</Proxy>\n'
-                )
-                if "proxy:fcgi://127.0.0.1:8085/" not in content:
-                    content += fcgi_block
+                    for line in load_lines:
+                        dll_n = line.split("/")[-1].rstrip('"')
+                        if dll_n not in content:
+                            content = content.replace(
+                                f'LoadModule php7_module "{p7_fwd}/php7apache2_4.dll"',
+                                f'{line}\nLoadModule php7_module "{p7_fwd}/php7apache2_4.dll"'
+                            )
+                else:
+                    content = content.rstrip() + "\n\n" + php7_block + "\n"
                     if log_func:
-                        log_func("  ✓ 已向 Apache httpd.conf 注入 LAH-API PHP 8.5 FastCGI 轉發規則", "info")
+                        log_func("  ✓ 已向 Apache httpd.conf 掛載 PHP 7.4 (mod_php7) 與相關依賴 DLL", "success")
 
-        if content != orig_content:
+        changed = (content != orig_content)
+        if changed:
             bak_path = conf_path + f".bak_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
             try:
                 shutil.copyfile(conf_path, bak_path)
@@ -563,14 +728,211 @@ def configure_apache_environment(apache_dir, root_dir, php7_dir=None, php85_dir=
             with open(conf_path, "w", encoding="utf-8") as f:
                 f.write(content)
             if log_func:
-                log_func("  ✓ Apache httpd.conf 設定已自動更新！", "success")
+                log_func("  ✓ Apache 基礎設定與 PHP 7.4 (mod_php) 配置已更新完成！", "success")
+        else:
+            if log_func:
+                log_func("  ℹ️ Apache 基礎設定與 PHP 7.4 (mod_php) 配置已對齊，無需變更", "info")
+        return True, changed
+    except Exception as e:
+        if log_func:
+            log_func(f"  ❌ 配置 Apache mod_php7 時發生異常: {e}", "error")
+        return False, False
 
-        check_apache_syntax(apache_dir, log_func)
+
+def ensure_lah_api_ecosystem_config(root_dir, php85_dir=None, log_func=None):
+    """
+    確保 <root_dir>\\LAH-API\\ecosystem.config.js 存在並正確配置 lah-api-v85 (PHP 8.5 FastCGI on 127.0.0.1:8085)
+    """
+    api_dir = os.path.join(root_dir, "LAH-API")
+    if not os.path.isdir(api_dir):
+        return False
+
+    eco_path = os.path.join(api_dir, "ecosystem.config.js")
+    if os.path.isfile(eco_path):
+        if log_func:
+            log_func(f"  ℹ️ 已確認 PM2 守護設定檔存在: {eco_path} (lah-api-v85)", "info")
+        return True
+
+    # 若不存在則自動建立動態探測版 ecosystem.config.js
+    eco_content = """const path = require('path');
+const fs = require('fs');
+
+function resolveRootDir() {
+  if (process.env.LAH_ROOT && fs.existsSync(process.env.LAH_ROOT)) {
+    return path.normalize(process.env.LAH_ROOT);
+  }
+  const candidates = [
+    path.resolve(__dirname, '..'),
+    path.resolve(__dirname, '..', '..'),
+    'C:\\\\AppServ'
+  ];
+  return candidates.find(c => fs.existsSync(path.join(c, 'node')) || fs.existsSync(path.join(c, 'php85'))) || 'C:\\\\AppServ';
+}
+
+const rootDir = resolveRootDir();
+const php85Dir = path.join(rootDir, 'php85');
+const phpCgi = path.join(php85Dir, 'php-cgi.exe');
+const phpIni = path.join(php85Dir, 'php.ini');
+const ociDir = path.join(rootDir, 'instantclient_11_2');
+
+module.exports = {
+  apps: [
+    {
+      name: "lah-api-v85",
+      script: phpCgi,
+      args: `-b 127.0.0.1:8085 -c "${phpIni}"`,
+      cwd: __dirname,
+      interpreter: "none",
+      exec_mode: "fork",
+      instances: 1,
+      autorestart: true,
+      watch: false,
+      max_memory_restart: "1G",
+      env: {
+        PATH: ociDir + ";" + php85Dir + ";" + (process.env.PATH || ""),
+        NLS_LANG: "American_America.US7ASCII",
+        PHP_FCGI_CHILDREN: "16",
+        PHP_FCGI_MAX_REQUESTS: "10000"
+      }
+    }
+  ]
+};
+"""
+    try:
+        with open(eco_path, "w", encoding="utf-8") as f:
+            f.write(eco_content)
+        if log_func:
+            log_func(f"  ✓ 已自動建立 PM2 FastCGI 守護設定檔: {eco_path} (lah-api-v85)", "success")
         return True
     except Exception as e:
         if log_func:
-            log_func(f"  ❌ 設定 Apache 發生異常: {e}", "error")
+            log_func(f"  ⚠️ 建立 {eco_path} 失敗: {e}", "warning")
         return False
+
+
+def configure_apache_fcgi_proxy(apache_dir, root_dir, php85_dir=None, log_func=None):
+    """
+    【階段 2】在 Apache httpd.conf 增加 FCGI 的 API Proxy 設定 (搭配 PM2 的 lah-api-v85 於 127.0.0.1:8085 保護執行)：
+    1. 自動啟用 proxy_module, proxy_fcgi_module, headers_module
+    2. 注入或校正 LAH-API FastCGI Alias、Directory 安全防護與 Proxy 轉發池
+    3. 確保 LAH-API/ecosystem.config.js 存在以供 PM2 啟動 lah-api-v85
+    """
+    conf_path = os.path.join(apache_dir, "conf", "httpd.conf")
+    if not os.path.isfile(conf_path):
+        return False, False
+
+    api_dir = os.path.join(root_dir, "LAH-API")
+    if not os.path.isdir(api_dir) and not (php85_dir and os.path.isdir(php85_dir)):
+        return True, False
+
+    try:
+        with open(conf_path, "r", encoding="utf-8", errors="replace") as f:
+            content = f.read()
+
+        orig_content = content
+        api_fwd = api_dir.replace('\\', '/')
+
+        # 1. 啟用 proxy_module, proxy_fcgi_module, headers_module
+        content = re.sub(r'(?m)^\s*#\s*(LoadModule\s+proxy_module\s+modules/mod_proxy\.so)', r'\1', content)
+        content = re.sub(r'(?m)^\s*#\s*(LoadModule\s+proxy_fcgi_module\s+modules/mod_proxy_fcgi\.so)', r'\1', content)
+        content = re.sub(r'(?m)^\s*#\s*(LoadModule\s+headers_module\s+modules/mod_headers\.so)', r'\1', content)
+
+        # 2. 組裝標準 LAH-API FastCGI Proxy 設定區塊 (含機敏檔與核心子目錄防護)
+        fcgi_block = (
+            f'# =====================================================================\n'
+            f'# LAH-API (PHP 8.5 FastCGI via PM2 on 127.0.0.1:8085)\n'
+            f'# =====================================================================\n'
+            f'# 優先定義相容 Alias：將舊呼叫端之 /api/ 映射至實體 /v1/ 目錄\n'
+            f'Alias /LAH-API/api "{api_fwd}/v1"\n'
+            f'Alias /lah-api/api "{api_fwd}/v1"\n\n'
+            f'# 服務根目錄映射\n'
+            f'Alias /LAH-API "{api_fwd}"\n'
+            f'Alias /lah-api "{api_fwd}"\n\n'
+            f'<Directory "{api_fwd}">\n'
+            f'    Header set Access-Control-Allow-Origin "*"\n'
+            f'    Options -Indexes +FollowSymLinks\n'
+            f'    AllowOverride None\n'
+            f'    Require all granted\n\n'
+            f'    # 安全防護：禁止直接存取機敏副檔名檔案\n'
+            f'    <FilesMatch "^\\.|\\.(json|lock|xml|bat|ps1|md|ini|config|yml|yaml)$">\n'
+            f'        Require all denied\n'
+            f'    </FilesMatch>\n\n'
+            f'    <FilesMatch "\\.php$">\n'
+            f'        <If "-f %{{REQUEST_FILENAME}}">\n'
+            f'            SetHandler "proxy:fcgi://127.0.0.1:8085/"\n'
+            f'            ProxyFCGISetEnvIf "reqenv(\'SCRIPT_FILENAME\') =~ m#^proxy:fcgi://127\\.0\\.0\\.1:8085/(.*)$#" SCRIPT_FILENAME "$1"\n'
+            f'        </If>\n'
+            f'    </FilesMatch>\n'
+            f'</Directory>\n\n'
+            f'<Directory "{api_fwd}/include">\n'
+            f'    Require all denied\n'
+            f'</Directory>\n\n'
+            f'<Directory "{api_fwd}/tests">\n'
+            f'    Require all denied\n'
+            f'</Directory>\n\n'
+            f'<Directory "{api_fwd}/vendor">\n'
+            f'    Require all denied\n'
+            f'</Directory>\n\n'
+            f'<Proxy "fcgi://127.0.0.1:8085/" enablereuse=on max=16>\n'
+            f'    ProxySet timeout=300\n'
+            f'</Proxy>'
+        )
+
+        existing_fcgi_pat = r'(?s)# =+\s*# LAH-API \(PHP 8\.5 FastCGI.*?</Proxy>'
+        if re.search(existing_fcgi_pat, content):
+            content = re.sub(existing_fcgi_pat, fcgi_block, content, count=1)
+        elif "proxy:fcgi://127.0.0.1:8085/" not in content:
+            content = content.rstrip() + "\n\n" + fcgi_block + "\n"
+            if log_func:
+                log_func("  ✓ 已向 Apache httpd.conf 注入 LAH-API (PHP 8.5 FastCGI on 127.0.0.1:8085) Proxy 設定", "success")
+
+        changed = (content != orig_content)
+        if changed:
+            with open(conf_path, "w", encoding="utf-8") as f:
+                f.write(content)
+            if log_func:
+                log_func("  ✓ Apache FCGI API Proxy 設定已更新完成！", "success")
+        else:
+            if log_func:
+                log_func("  ℹ️ Apache FCGI API Proxy 設定已就緒，無需變更", "info")
+
+        # 確保 LAH-API/ecosystem.config.js 就緒
+        ensure_lah_api_ecosystem_config(root_dir, php85_dir, log_func)
+        return True, changed
+    except Exception as e:
+        if log_func:
+            log_func(f"  ❌ 配置 Apache FCGI Proxy 時發生異常: {e}", "error")
+        return False, False
+
+
+def configure_apache_environment(apache_dir, root_dir, php7_dir=None, php85_dir=None, enable_security=True, log_func=None):
+    """
+    依序完整配置 Apache 與 PHP 雙軌環境：
+    1. PHP 7.4 與 PHP 8.5 設定檔 (php.ini) 校正與擴充模組啟用
+    2. Apache 基礎環境與 PHP 7.4 mod_php 掛載
+    3. LAH-API PHP 8.5 FastCGI Proxy 轉發設定與 PM2 ecosystem.config.js 確保
+    4. 資安弱點防護 (隱藏 Apache ServerTokens/ServerSignature 與 PHP expose_php)
+    5. 執行 httpd.exe -t 語法檢驗
+    """
+    if php7_dir and os.path.isdir(php7_dir):
+        ensure_php_ini_configured(php7_dir, is_php85=False, log_func=log_func)
+    if php85_dir and os.path.isdir(php85_dir):
+        ensure_php_ini_configured(php85_dir, is_php85=True, log_func=log_func)
+
+    ok1, _ = configure_apache_mod_php7(apache_dir, root_dir, php7_dir=php7_dir, log_func=log_func)
+    ok2, _ = configure_apache_fcgi_proxy(apache_dir, root_dir, php85_dir=php85_dir, log_func=log_func)
+
+    if enable_security:
+        conf_path = os.path.join(apache_dir, "conf", "httpd.conf")
+        if os.path.isfile(conf_path):
+            apply_apache_security_hardening(conf_path, log_func)
+        if php7_dir and os.path.isfile(os.path.join(php7_dir, "php.ini")):
+            apply_php_security_hardening(os.path.join(php7_dir, "php.ini"), log_func)
+        if php85_dir and os.path.isfile(os.path.join(php85_dir, "php.ini")):
+            apply_php_security_hardening(os.path.join(php85_dir, "php.ini"), log_func)
+
+    check_apache_syntax(apache_dir, log_func)
+    return ok1 and ok2
 
 
 def _decode_console_bytes(raw_bytes):
@@ -1725,6 +2087,173 @@ def test_pm2_autostart_execution(log_func, root_dir=None):
 
     log_func(f"✅ 開機與巡檢測試完成！連接埠狀態：{', '.join(ports_status)}", "success")
     return True, f"開機與巡檢測試完成！\n" + "\n".join([f"• {p}" for p in ports_status])
+
+
+def is_tcp_port_listening(port, host="127.0.0.1", timeout=0.5):
+    """使用原生 socket 快速檢測本機 TCP 連接埠是否處於 Listen 狀態"""
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.settimeout(timeout)
+            return s.connect_ex((host, int(port))) == 0
+    except Exception:
+        return False
+
+
+def wait_for_tcp_port(port, max_wait=4.0, host="127.0.0.1"):
+    """等待指定 TCP 連接埠進入監聽狀態（最長等待 max_wait 秒）"""
+    deadline = time.time() + max_wait
+    while time.time() < deadline:
+        if is_tcp_port_listening(port, host=host):
+            return True
+        time.sleep(0.4)
+    return is_tcp_port_listening(port, host=host)
+
+
+def verify_all_services_health(root_dir, apache_dir=None, log_func=None):
+    """
+    【階段 5】全方位最終服務啟動驗證與自動修復重試：
+    針對目標目錄下實際已部署的環境與模組，逐一驗證服務狀態與監聽連接埠：
+    1. Apache 2.4 + PHP 7.4 (mod_php) -> Windows 服務狀態 & Port 80
+    2. PHP 8.5 FastCGI (lah-api-v85) -> PM2 狀態 & Port 8085
+    3. 智慧管控前端 (LAH-FE / LAH-SCHEDULER) -> PM2 狀態 & Port 8080
+    4. 即時通訊伺服器 (LAH-WSS) -> PM2 狀態 & Port 8081 / 8082
+    5. 綠色版 Node 綁定與 PM2 開機自啟動 (LAH_PM2_Service)
+    若偵測到服務未啟動，自動執行一次重試拉起，並回傳結構化健檢報告。
+    """
+    target_root = root_dir if (root_dir and os.path.exists(root_dir)) else r"C:\AppServ"
+    target_apache = apache_dir if (apache_dir and os.path.exists(apache_dir)) else os.path.join(target_root, "Apache24")
+
+    if log_func:
+        log_func("-" * 50, "info")
+        log_func("🩺 [階段 5/5] 正在執行全系統服務啟動狀態與連接埠最終健康驗證...", "info")
+
+    report_lines = []
+    all_healthy = True
+
+    # 1. 驗證 Apache 2.4 + PHP 7.4 (Port 80)
+    httpd_exe = os.path.join(target_apache, "bin", "httpd.exe")
+    if os.path.isfile(httpd_exe):
+        svc_name = query_apache_service()
+        if not svc_name:
+            install_apache_service(target_apache, "Apache2.4", log_func)
+            svc_name = query_apache_service()
+
+        svc_running = is_service_running(svc_name) if svc_name else False
+        port80_ok = wait_for_tcp_port(80, max_wait=2.0)
+
+        if not (svc_running and port80_ok) and svc_name:
+            if log_func:
+                log_func(f"  🔄 偵測到 Apache [{svc_name}] 尚未完全就緒，正在自動重試啟動...", "warning")
+            start_apache_service(svc_name, log_func)
+            svc_running = is_service_running(svc_name)
+            port80_ok = wait_for_tcp_port(80, max_wait=3.0)
+
+        if svc_running and port80_ok:
+            msg = f"✅ Apache 2.4 ({svc_name}) + mod_php7 : 運行中 (Port 80 正常監聽)"
+            if log_func:
+                log_func(f"  {msg}", "success")
+            report_lines.append(msg)
+        else:
+            all_healthy = False
+            st_txt = "運行中" if svc_running else "未啟動"
+            p_txt = "監聽中" if port80_ok else "未監聽"
+            msg = f"⚠️ Apache 2.4 ({svc_name or '未註冊'}) : 服務={st_txt}, Port 80={p_txt}"
+            if log_func:
+                log_func(f"  {msg}", "warning")
+            report_lines.append(msg)
+
+    # 2. 驗證 PM2 與 Node 相關服務
+    pm2_bin = resolve_pm2_command(target_root)
+    php85_cgi = os.path.join(target_root, "php85", "php-cgi.exe")
+    api_eco = os.path.join(target_root, "LAH-API", "ecosystem.config.js")
+    fe_eco = os.path.join(target_root, "LAH-NUXTJS", "ecosystem.config.js")
+    wss_eco = os.path.join(target_root, "lah-messenger-server", "ecosystem.config.js")
+
+    if pm2_bin:
+        # 2a. PHP 8.5 FastCGI API (lah-api-v85 on Port 8085)
+        if os.path.isfile(php85_cgi) and os.path.isdir(os.path.join(target_root, "LAH-API")):
+            ensure_lah_api_ecosystem_config(target_root, os.path.join(target_root, "php85"), None)
+            port8085_ok = wait_for_tcp_port(8085, max_wait=2.0)
+            if not port8085_ok and os.path.isfile(api_eco):
+                if log_func:
+                    log_func("  🔄 偵測到 FastCGI (Port 8085) 尚未監聽，正在透過 PM2 自動補啟動 lah-api-v85...", "warning")
+                subprocess.run([pm2_bin, "start", api_eco, "--no-color"], capture_output=True, timeout=20, creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
+                port8085_ok = wait_for_tcp_port(8085, max_wait=3.0)
+
+            if port8085_ok:
+                msg = "✅ PHP 8.5 FastCGI (lah-api-v85) : 運行中 (Port 8085 正常監聽)"
+                if log_func:
+                    log_func(f"  {msg}", "success")
+                report_lines.append(msg)
+            else:
+                all_healthy = False
+                msg = "⚠️ PHP 8.5 FastCGI (lah-api-v85) : Port 8085 未監聽"
+                if log_func:
+                    log_func(f"  {msg}", "warning")
+                report_lines.append(msg)
+
+        # 2b. 智慧管控前端 (LAH-FE / LAH-SCHEDULER on Port 8080)
+        if os.path.isfile(fe_eco):
+            port8080_ok = wait_for_tcp_port(8080, max_wait=3.5)
+            if not port8080_ok:
+                if log_func:
+                    log_func("  🔄 偵測到前端網站 (Port 8080) 尚未監聽，正在透過 PM2 嘗試拉起 LAH-FE...", "warning")
+                subprocess.run([pm2_bin, "start", fe_eco, "--no-color"], capture_output=True, timeout=25, creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
+                port8080_ok = wait_for_tcp_port(8080, max_wait=5.0)
+
+            if port8080_ok:
+                msg = "✅ 智慧管控前端 (LAH-FE / SCHEDULER) : 運行中 (Port 8080 正常監聽)"
+                if log_func:
+                    log_func(f"  {msg}", "success")
+                report_lines.append(msg)
+            else:
+                all_healthy = False
+                msg = "⚠️ 智慧管控前端 (LAH-FE) : Port 8080 啟動中或未監聽"
+                if log_func:
+                    log_func(f"  {msg}", "warning")
+                report_lines.append(msg)
+
+        # 2c. 即時通訊伺服器 (LAH-WSS on Port 8081 / 8082)
+        if os.path.isfile(wss_eco):
+            p8081_ok = wait_for_tcp_port(8081, max_wait=2.0)
+            p8082_ok = wait_for_tcp_port(8082, max_wait=2.0)
+            if not (p8081_ok and p8082_ok):
+                if log_func:
+                    log_func("  🔄 偵測到即時通伺服器 (Port 8081/8082) 尚未監聽，正在透過 PM2 嘗試拉起 LAH-WSS...", "warning")
+                subprocess.run([pm2_bin, "start", wss_eco, "--no-color"], capture_output=True, timeout=20, creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
+                p8081_ok = wait_for_tcp_port(8081, max_wait=3.0)
+                p8082_ok = wait_for_tcp_port(8082, max_wait=2.0)
+
+            if p8081_ok and p8082_ok:
+                msg = "✅ 即時通訊伺服器 (LAH-WSS) : 運行中 (Port 8081/8082 正常監聽)"
+                if log_func:
+                    log_func(f"  {msg}", "success")
+                report_lines.append(msg)
+            else:
+                all_healthy = False
+                msg = f"⚠️ 即時通訊伺服器 (LAH-WSS) : 8081={'監聽' if p8081_ok else '未監聽'}, 8082={'監聽' if p8082_ok else '未監聽'}"
+                if log_func:
+                    log_func(f"  {msg}", "warning")
+                report_lines.append(msg)
+
+        # 2d. 綠色版 Node 核心綁定與開機自動化狀態
+        daemon_info = query_pm2_daemon_info(target_root)
+        autostart_cfg = check_pm2_autostart_config()
+        has_auto = bool(autostart_cfg["services"] or autostart_cfg["tasks"] or autostart_cfg["startup_shortcuts"])
+        if daemon_info["is_running"] and daemon_info["is_target_node"] and has_auto:
+            msg = f"✅ 綠色版 Node 與 PM2 開機自啟動 : 已綁定 ({daemon_info['exe_path']}) 且自啟動就緒"
+            if log_func:
+                log_func(f"  {msg}", "success")
+            report_lines.append(msg)
+        else:
+            node_st = "已綁定綠色版" if daemon_info.get("is_target_node") else (daemon_info.get("exe_path") or "未運行")
+            auto_st = "已啟用" if has_auto else "未設定"
+            msg = f"ℹ️ 綠色版 Node 核心 ({node_st}) / 開機自啟動 ({auto_st})"
+            if log_func:
+                log_func(f"  {msg}", "info")
+            report_lines.append(msg)
+
+    return all_healthy, report_lines
 
 
 def get_zip_member_path(info):
@@ -3675,36 +4204,45 @@ class UpdaterApp:
                             os.makedirs(dest_file_path, exist_ok=True)
                         else:
                             os.makedirs(os.path.dirname(dest_file_path), exist_ok=True)
-                            # 解壓縮檔案內容並覆蓋
-                            with zf.open(m) as src, open(dest_file_path, 'wb') as dst:
-                                shutil.copyfileobj(src, dst)
+                            # 保護既有設定檔：升級 Apache24 或 PHP 時，若目標已有 httpd.conf / php.ini，將壓縮包內的預設檔另存為 .default
+                            rel_norm = rel_sub.replace('\\', '/').lower()
+                            if (pkg["id"] == "apache24" and rel_norm == "conf/httpd.conf" and os.path.isfile(dest_file_path)) or \
+                               (pkg["id"] in ("php7", "php85") and rel_norm == "php.ini" and os.path.isfile(dest_file_path)):
+                                default_copy = dest_file_path + ".default"
+                                with zf.open(m) as src, open(default_copy, 'wb') as dst:
+                                    shutil.copyfileobj(src, dst)
+                                self.log(f"🛡️ [設定保護] 已保留既有 {os.path.basename(dest_file_path)}，壓縮包原廠範本另存為 {os.path.basename(default_copy)}", "info")
+                            else:
+                                # 解壓縮檔案內容並覆蓋
+                                with zf.open(m) as src, open(dest_file_path, 'wb') as dst:
+                                    shutil.copyfileobj(src, dst)
 
-                            # 嘗試保留原檔案時間戳記
-                            try:
-                                dt = time.mktime(m.date_time + (0, 0, -1))
-                                os.utime(dest_file_path, (dt, dt))
-                            except Exception:
-                                pass
+                                # 嘗試保留原檔案時間戳記
+                                try:
+                                    dt = time.mktime(m.date_time + (0, 0, -1))
+                                    os.utime(dest_file_path, (dt, dt))
+                                except Exception:
+                                    pass
 
                         processed_files += 1
-                        pct = 5.0 + (processed_files / total_files_all) * 85.0
+                        pct = 5.0 + (processed_files / total_files_all) * 80.0
                         self.set_progress(pct, f"[{idx}/{len(selected_pkgs)}] 解壓中: {p_name} ({processed_files}/{total_files_all})")
 
                 self.log(f"✅ {p_name} 解壓縮覆蓋完成 (共處理 {pkg_count} 個項目)。", "success")
 
-            # 步驟 3.2：若有勾選「從備份包回復原始設定」，立即執行備份還原
+            # 若有勾選「從備份包回復原始設定」，於解壓後優先執行備份還原
             if self.restore_backup_var.get():
                 b_zip = self.backup_zip_path_var.get().strip()
                 if b_zip and os.path.isfile(b_zip):
-                    self.set_progress(90, f"正在從備份包還原原始設定與資料 ({os.path.basename(b_zip)})...")
+                    self.set_progress(86, f"正在從備份包還原原始設定與資料 ({os.path.basename(b_zip)})...")
                     restore_from_backup_zip(b_zip, root_dir, self.log)
                 else:
                     self.log(f"⚠️ 找不到指定的備份檔 [{b_zip}]，略過備份還原步驟。", "warning")
 
-            # 步驟 3.5：檢查並自動校正 Apache 與 PHP 設定檔、資安弱點防護與服務註冊
             has_apache = any(p["id"] == "apache24" for p in selected_pkgs)
             has_php7 = any(p["id"] == "php7" for p in selected_pkgs)
             has_php85 = any(p["id"] == "php85" for p in selected_pkgs)
+            has_lah_api = any(p["id"] == "lah_api" for p in selected_pkgs)
             has_nodejs_app = any(p.get("is_nodejs", False) for p in selected_pkgs)
 
             apache_tgt = os.path.normpath(self.pkg_vars["apache24"]["target_path_var"].get().strip()) if "apache24" in self.pkg_vars else os.path.join(root_dir, "Apache24")
@@ -3716,141 +4254,195 @@ class UpdaterApp:
             if os.path.isdir(apache_tgt):
                 flatten_nested_apache_dir(apache_tgt, self.log)
 
-            # 3.5a：處理 PHP 7 與 PHP 8.5 設定檔 (php.ini) 與資安弱點防護
-            if os.path.isdir(php7_tgt) and (has_php7 or self.restore_backup_var.get() or self.auto_security_hardening_var.get()):
-                php7_ini = os.path.join(php7_tgt, "php.ini")
-                if not os.path.isfile(php7_ini):
-                    for cand in ("php.ini-production", "php.ini-development"):
-                        cand_path = os.path.join(php7_tgt, cand)
-                        if os.path.isfile(cand_path):
-                            shutil.copyfile(cand_path, php7_ini)
-                            self.log(f"  ✓ 已依據 {cand} 產生 PHP 7 設定檔 (php.ini)", "info")
-                            break
-                if os.path.isfile(php7_ini) and self.auto_security_hardening_var.get():
-                    apply_php_security_hardening(php7_ini, self.log)
+            apache_conf_changed = False
 
-            if os.path.isdir(php85_tgt) and (has_php85 or self.restore_backup_var.get() or self.auto_security_hardening_var.get()):
-                php85_ini = os.path.join(php85_tgt, "php.ini")
-                if not os.path.isfile(php85_ini):
-                    for cand in ("php.ini-production", "php.ini-development"):
-                        cand_path = os.path.join(php85_tgt, cand)
-                        if os.path.isfile(cand_path):
-                            shutil.copyfile(cand_path, php85_ini)
-                            self.log(f"  ✓ 已依據 {cand} 產生 PHP 8.5 設定檔 (php.ini)", "info")
-                            break
-                if os.path.isfile(php85_ini) and self.auto_security_hardening_var.get():
-                    apply_php_security_hardening(php85_ini, self.log)
+            # =========================================================================
+            # 【階段 1/5】建立 Apache 服務並搭配 PHP 7.4 的 mod_php
+            # =========================================================================
+            if os.path.isdir(php7_tgt):
+                self.set_progress(88, "[階段 1/5] 正在配置 PHP 7.4 環境設定檔 (php.ini)...")
+                self.log("-" * 50, "info")
+                self.log("🔧 [階段 1/5] 正在確認並配置 Apache 2.4 服務與 PHP 7.4 (mod_php)...", "info")
+                ensure_php_ini_configured(php7_tgt, is_php85=False, log_func=self.log)
 
-            # 3.5b：處理 Apache 設定檔 (httpd.conf)、資安強化與 Apache2.4 Windows 服務註冊
-            if os.path.isdir(apache_tgt) and (has_apache or has_php7 or has_php85 or self.restore_backup_var.get() or self.auto_security_hardening_var.get() or self.auto_register_apache_var.get()):
-                self.set_progress(91, "正在自動校正 Apache 與 PHP 整合設定檔...")
-                self.log("⏳ 正在檢查並自動校正 Apache 與 PHP 整合設定...", "info")
+            if os.path.isdir(apache_tgt):
+                self.set_progress(89, "[階段 1/5] 正在配置 Apache 2.4 + PHP 7.4 (mod_php) 與註冊服務...")
+                if not os.path.isdir(php7_tgt):
+                    self.log("-" * 50, "info")
+                    self.log("🔧 [階段 1/5] 正在確認並配置 Apache 2.4 服務...", "info")
 
                 conf_file = os.path.join(apache_tgt, "conf", "httpd.conf")
                 if not os.path.isfile(conf_file):
-                    ref_conf = os.path.join(root_dir, "LAH-API", "httpd.conf-ref")
-                    if not os.path.isfile(ref_conf):
-                        ref_conf = os.path.join(self.app_dir, "httpd.conf-ref")
-                    if os.path.isfile(ref_conf):
-                        os.makedirs(os.path.join(apache_tgt, "conf"), exist_ok=True)
-                        shutil.copyfile(ref_conf, conf_file)
-                        self.log(f"  ✓ 已套用專案標準 httpd.conf 參考範本至 [{conf_file}]", "info")
+                    for ref_cand in (
+                        os.path.join(root_dir, "LAH-API", "httpd.conf-ref"),
+                        os.path.join(self.app_dir, "httpd.conf-ref"),
+                        conf_file + ".default"
+                    ):
+                        if os.path.isfile(ref_cand):
+                            os.makedirs(os.path.join(apache_tgt, "conf"), exist_ok=True)
+                            shutil.copyfile(ref_cand, conf_file)
+                            self.log(f"  ✓ 已初始化產生 httpd.conf 設定檔 (來源: {os.path.basename(ref_cand)})", "info")
+                            break
 
-                configure_apache_environment(
+                _, mod_php_changed = configure_apache_mod_php7(
                     apache_dir=apache_tgt,
                     root_dir=root_dir,
                     php7_dir=php7_tgt if os.path.isdir(php7_tgt) else None,
-                    php85_dir=php85_tgt if os.path.isdir(php85_tgt) else None,
-                    enable_security=self.auto_security_hardening_var.get(),
                     log_func=self.log
                 )
+                if mod_php_changed:
+                    apache_conf_changed = True
 
-                if self.auto_register_apache_var.get():
-                    self.set_progress(92, "正在檢查並註冊 Apache Windows 服務...")
+                if self.auto_register_apache_var.get() or has_apache:
                     install_apache_service(apache_tgt, "Apache2.4", self.log)
                     self.apache_service_name = query_apache_service()
                     if self.apache_service_name:
                         svc_name = self.apache_service_name
                         self.root.after(0, self._detect_apache_service)
 
-            # 若目標目錄存在 node，自動將目標 node 目錄註冊至使用者 PATH 最前端
+            # =========================================================================
+            # 【階段 2/5】增加 FCGI 的 API Proxy 設定 (以 PM2 的 lah-api-v85 保護執行)
+            # =========================================================================
+            if os.path.isdir(php85_tgt) or os.path.isdir(os.path.join(root_dir, "LAH-API")):
+                self.set_progress(91, "[階段 2/5] 正在配置 PHP 8.5 與 FCGI API Proxy (lah-api-v85)...")
+                self.log("-" * 50, "info")
+                self.log("⚡ [階段 2/5] 正在配置 PHP 8.5 FastCGI 與 Apache API Proxy 轉發設定...", "info")
+                if os.path.isdir(php85_tgt):
+                    ensure_php_ini_configured(php85_tgt, is_php85=True, log_func=self.log)
+                if os.path.isdir(apache_tgt):
+                    _, fcgi_changed = configure_apache_fcgi_proxy(
+                        apache_dir=apache_tgt,
+                        root_dir=root_dir,
+                        php85_dir=php85_tgt if os.path.isdir(php85_tgt) else None,
+                        log_func=self.log
+                    )
+                    if fcgi_changed:
+                        apache_conf_changed = True
+                else:
+                    ensure_lah_api_ecosystem_config(root_dir, php85_tgt if os.path.isdir(php85_tgt) else None, self.log)
+
+            # =========================================================================
+            # 【階段 3/5】套用資安設定 (不吐伺服器與 PHP 版本資訊) 並檢驗語法
+            # =========================================================================
+            if self.auto_security_hardening_var.get():
+                self.set_progress(93, "[階段 3/5] 正在套用資安弱點防護 (隱藏伺服器與 PHP 版本資訊)...")
+                self.log("-" * 50, "info")
+                self.log("🛡️ [階段 3/5] 正在套用資安弱點防護設定 (ServerTokens Prod / expose_php = Off)...", "info")
+                if os.path.isdir(apache_tgt):
+                    conf_file = os.path.join(apache_tgt, "conf", "httpd.conf")
+                    if os.path.isfile(conf_file):
+                        sec_ok, sec_msg = apply_apache_security_hardening(conf_file, self.log)
+                        if sec_ok and "已成功套用" in sec_msg:
+                            apache_conf_changed = True
+                if os.path.isdir(php7_tgt) and os.path.isfile(os.path.join(php7_tgt, "php.ini")):
+                    apply_php_security_hardening(os.path.join(php7_tgt, "php.ini"), self.log)
+                if os.path.isdir(php85_tgt) and os.path.isfile(os.path.join(php85_tgt, "php.ini")):
+                    apply_php_security_hardening(os.path.join(php85_tgt, "php.ini"), self.log)
+
+            if os.path.isdir(apache_tgt):
+                check_apache_syntax(apache_tgt, self.log)
+
+            # =========================================================================
+            # 【階段 4/5】綠色 Node 設定與啟動 PM2 自動啟動
+            # =========================================================================
             if os.path.isdir(node_tgt):
-                self.set_progress(93, "正在註冊綠色 Node.js 環境變數 PATH...")
+                self.set_progress(95, "[階段 4/5] 正在設定綠色版 Node 環境與 PM2 自動化服務...")
+                self.log("-" * 50, "info")
+                self.log("🟢 [階段 4/5] 正在設定綠色版 Node 環境、綁定 PM2 核心並配置自動啟動...", "info")
                 register_path_to_user_environment(node_tgt, self.log)
 
-            # 若目標目錄存在 instantclient_11_2，自動註冊至使用者 PATH
             oci_dir = os.path.join(root_dir, "instantclient_11_2")
             if os.path.isdir(oci_dir):
                 register_path_to_user_environment(oci_dir, self.log)
 
-            # 步驟 4：啟動或重啟 Apache 服務（若更新前曾停止、或勾選了重啟、或全新安裝註冊了 Apache 服務）
+            target_pm2_cmd = resolve_pm2_command(root_dir)
+            if target_pm2_cmd:
+                self.root.after(0, self._detect_pm2_service)
+                daemon_info = query_pm2_daemon_info(root_dir)
+                target_node = os.path.normpath(os.path.join(root_dir, "node", "node.exe"))
+                need_pm2_restart = (
+                    self.restart_pm2_var.get() or
+                    has_node_runtime or
+                    has_nodejs_app or
+                    has_php85 or
+                    has_lah_api or
+                    self.restore_backup_var.get()
+                )
+
+                if pm2_was_killed or not daemon_info["is_running"]:
+                    self.set_progress(96, "[階段 4/5] 正在透過綠色版 Node 喚醒 PM2 並拉起所有核心服務...")
+                    self.log(f"🚀 正在透過本機綠色版 Node ({target_node}) 喚醒 PM2 並啟動受管服務...", "info")
+                    res_ok, res_err = resurrect_pm2_services(self.log, root_dir)
+                    if not res_ok:
+                        self.log(f"ℹ️ 執行全方位生態系巡檢與初始化啟動...", "info")
+                        audit_and_ensure_pm2_services(self.log, root_dir)
+                elif not daemon_info["is_target_node"]:
+                    self.set_progress(96, "[階段 4/5] 正在將 PM2 核心切換綁定至本機綠色版 Node...")
+                    self.log(f"⚠️ 偵測到現有 PM2 核心由外部 Node 運行 [{daemon_info['exe_path']}]，正在自動切換至綠色版 ({target_node})...", "warning")
+                    align_ok, align_msg = align_pm2_daemon_to_portable(self.log, root_dir)
+                    if not align_ok:
+                        self.log(f"⚠️ PM2 核心切換回傳警示: {align_msg}", "warning")
+                    audit_and_ensure_pm2_services(self.log, root_dir)
+                elif need_pm2_restart:
+                    self.set_progress(96, "[階段 4/5] 正在執行 pm2 restart all 重啟並巡檢 PM2 服務...")
+                    restart_pm2_services(self.log, root_dir)
+                else:
+                    # 僅更新無關模組 (如單獨更新 www.zip 且未勾選重啟 PM2)：不打斷現有服務，僅巡檢補齊離線項目
+                    audit_and_ensure_pm2_services(self.log, root_dir)
+
+                # 確認並自動配置 PM2 開機自動啟動服務 (LAH_PM2_Service)
+                autostart_cfg = check_pm2_autostart_config()
+                has_autostart = bool(autostart_cfg["services"] or autostart_cfg["tasks"] or autostart_cfg["startup_shortcuts"])
+                if not has_autostart or has_node_runtime or need_pm2_restart:
+                    self.set_progress(98, "[階段 4/5] 正在設定 PM2 開機自動化服務 (LAH_PM2_Service)...")
+                    auto_ok, auto_msg = setup_pm2_autostart(self.log, root_dir)
+                    if auto_ok:
+                        self.log(f"  ✓ PM2 開機自動啟動已確認就緒：{auto_msg}", "success")
+                    else:
+                        self.log(f"  ⚠️ PM2 開機自動啟動配置提示：{auto_msg}", "warning")
+
+                self.root.after(0, self.update_pm2_daemon_status)
+            else:
+                self.log("ℹ️ 系統目前尚無 Node.js / PM2 執行環境，略過 PM2 設定步驟。", "info")
+
+            # =========================================================================
+            # 【階段 5/5】確認可以正常啟動所有設定的服務 (啟動 Apache + 全方位最終健康檢查)
+            # =========================================================================
             target_svc = self.apache_service_name or svc_name or query_apache_service()
-            should_start_apache = (
+            should_start_or_restart_apache = (
                 apache_was_stopped or
+                apache_conf_changed or
                 self.restart_apache_var.get() or
                 has_apache or
                 has_base_env_update or
                 has_apache_app_update
             )
-            if target_svc and should_start_apache and not apache_restarted:
-                if not is_service_running(target_svc):
-                    self.set_progress(95, f"正在啟動 Apache 服務 [{target_svc}]...")
+            if target_svc and not apache_restarted:
+                if is_service_running(target_svc):
+                    if should_start_or_restart_apache:
+                        self.set_progress(99, f"[階段 5/5] 正在重新啟動 Apache 服務 [{target_svc}] 以套用設定...")
+                        stop_apache_service(target_svc, self.log)
+                        start_apache_service(target_svc, self.log)
+                    apache_restarted = True
+                else:
+                    self.set_progress(99, f"[階段 5/5] 正在啟動 Apache 服務 [{target_svc}]...")
                     start_apache_service(target_svc, self.log)
-                apache_restarted = True
+                    apache_restarted = True
 
-            # 步驟 5：確認 PM2 使用本機綠色版 Node、拉起 5 大核心服務並配置 PM2 自動化服務
-            target_pm2_cmd = resolve_pm2_command(root_dir)
-            should_run_pm2 = self.restart_pm2_var.get() or has_node_runtime or has_nodejs_app or self.restore_backup_var.get()
-
-            if should_run_pm2 and target_pm2_cmd:
-                self.root.after(0, self._detect_pm2_service)
-                self.set_progress(96, "正在確認 PM2 核心守護進程綁定本機綠色版 Node...")
-                daemon_info = query_pm2_daemon_info(root_dir)
-                target_node = os.path.normpath(os.path.join(root_dir, "node", "node.exe"))
-
-                if pm2_was_killed or not daemon_info["is_running"]:
-                    self.set_progress(97, "正在透過綠色版 Node 喚醒 PM2 守護程序並拉起核心服務...")
-                    self.log(f"🚀 正在透過本機綠色版 Node ({target_node}) 喚醒 PM2 並巡檢啟動 5 大核心服務...", "info")
-                    res_ok, res_err = resurrect_pm2_services(self.log, root_dir)
-                    if not res_ok:
-                        self.log(f"⚠️ PM2 resurrect 提示 ({res_err})，正在執行全方位生態系補啟動...", "warning")
-                        audit_and_ensure_pm2_services(self.log, root_dir)
-                elif not daemon_info["is_target_node"]:
-                    self.log(f"⚠️ 偵測到現有 PM2 核心由外部 Node 運行 [{daemon_info['exe_path']}]", "warning")
-                    self.log(f"🚀 正在自動將 PM2 核心無痛切換綁定至本機綠色版 Node ({target_node})...", "info")
-                    align_ok, align_msg = align_pm2_daemon_to_portable(self.log, root_dir)
-                    if not align_ok:
-                        self.log(f"⚠️ PM2 核心切換回傳警示: {align_msg}", "warning")
-                    audit_and_ensure_pm2_services(self.log, root_dir)
-                else:
-                    self.set_progress(97, "正在執行 pm2 restart all 重啟並巡檢 PM2 服務...")
-                    restart_pm2_services(self.log, root_dir)
-
-                # 確認並自動配置 PM2 開機自動化守護服務 (LAH_PM2_Service / 排程)
-                self.set_progress(99, "正在設定 PM2 開機自動化服務 (LAH_PM2_Service)...")
-                self.log("⚙️ 正在設定並確認 PM2 開機自動化服務與守護進程...", "info")
-                auto_ok, auto_msg = setup_pm2_autostart(self.log, root_dir)
-                if auto_ok:
-                    self.log(f"✅ PM2 自動化配置完成：{auto_msg}", "success")
-                else:
-                    self.log(f"⚠️ PM2 自動化配置提示：{auto_msg}", "warning")
-
-                # 即時更新主視窗 PM2 狀態標籤
-                self.root.after(0, self.update_pm2_daemon_status)
-            elif should_run_pm2 and not target_pm2_cmd:
-                self.log("ℹ️ 系統尚未安裝 Node.js / PM2 執行環境，略過 PM2 服務啟動與自動化設定。", "info")
-            else:
-                self.log("ℹ️ 未勾選「更新後重啟 PM2 服務」，略過 PM2 重啟作業。", "info")
+            # 執行最終全方位服務與連接埠健康確認 (含自動重試拉起)
+            all_svc_ok, health_report = verify_all_services_health(root_dir, apache_tgt, self.log)
 
             elapsed = time.time() - start_time
-            self.set_progress(100, f"✅ 全部安裝與自動化設定作業完成！(耗時 {elapsed:.1f} 秒)")
+            self.set_progress(100, f"✅ 全部安裝與服務啟動確認完成！(耗時 {elapsed:.1f} 秒)")
             self.log("=" * 60, "success")
-            self.log(f"🎉 全部選取的安裝包與系統自動化配置已順利完成！(總耗時: {elapsed:.1f} 秒)", "success")
+            self.log(f"🎉 全部選取的安裝包與 5 階段系統自動化配置已順利完成！(總耗時: {elapsed:.1f} 秒)", "success")
 
-            # 先解除更新鎖定並更新進度視窗按鈕，再彈出壓縮包清理詢問對話框（預設不刪除）
+            # 先解除更新鎖定並更新進度視窗按鈕，再彈出壓縮包清理詢問對話框（附上服務健檢摘要）
             def _post_update_dialog():
                 self._on_update_completed_ui()
                 parent_w = self.progress_dlg if (self.progress_dlg and self.progress_dlg.winfo_exists()) else self.root
+
+                health_summary = ("\n\n【系統服務啟動狀態確認】：\n" + "\n".join(health_report)) if health_report else ""
 
                 # 彙整本次所有選取模組對應之全部壓縮檔路徑（包含別名壓縮檔如 LAH-FE-node_modules.zip）
                 zips_to_clean = []
@@ -3866,6 +4458,12 @@ class UpdaterApp:
                                 zips_to_clean.append(zp)
 
                 if not zips_to_clean:
+                    if health_summary:
+                        messagebox.showinfo(
+                            "安裝/更新與服務驗證完成",
+                            f"🎉 所有選取的系統模組與自動化配置已順利完成！(耗時 {elapsed:.1f} 秒){health_summary}",
+                            parent=parent_w
+                        )
                     return
 
                 zip_names_preview = "\n".join([f"  • {os.path.basename(p)}" for p in zips_to_clean[:8]])
@@ -3873,8 +4471,9 @@ class UpdaterApp:
                     zip_names_preview += f"\n  ... 等共 {len(zips_to_clean)} 個壓縮檔"
 
                 ask_cleanup = messagebox.askyesno(
-                    "安裝/更新完成 - 是否刪除安裝壓縮包？",
-                    f"🎉 所有選取的系統模組與自動化配置已順利完成！(耗時 {elapsed:.1f} 秒)\n\n"
+                    "安裝/更新完成 - 服務驗證與壓縮包清理確認",
+                    f"🎉 所有選取的系統模組與自動化配置已順利完成！(耗時 {elapsed:.1f} 秒)"
+                    f"{health_summary}\n\n"
                     f"請問是否要刪除本次已安裝完成的壓縮包 (.zip) 以釋放磁碟空間？\n"
                     f"{zip_names_preview}\n\n"
                     f"• 點選「否」(預設建議)：完整保留所有安裝壓縮包。\n"
