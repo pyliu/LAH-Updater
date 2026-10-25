@@ -589,6 +589,175 @@ def backup_critical_data(log_func, root_dir, backup_dir):
 
 
 # ==============================================================================
+# 獨立彈出進度與日誌對話框 (ProgressDialog)
+# ==============================================================================
+
+class ProgressDialog(tk.Toplevel):
+    def __init__(self, parent, root_dir):
+        super().__init__(parent)
+        self.parent = parent
+        self.root_dir = root_dir
+        self.is_running = True
+        self.is_done = False
+
+        self.title("智慧控管與監控系統 - 移除作業執行進度")
+        self.geometry("980x620")
+        self.minsize(820, 500)
+        self.transient(parent)
+        self.grab_set()
+
+        self.progress_percent_var = tk.StringVar(value="0.0%")
+        self.progress_status_var = tk.StringVar(value="正在準備移除作業...")
+
+        self._center_window()
+        self._build_ui()
+        self.protocol("WM_DELETE_WINDOW", self._on_close)
+
+    def _center_window(self):
+        self.update_idletasks()
+        try:
+            pw = self.parent.winfo_width()
+            ph = self.parent.winfo_height()
+            px = self.parent.winfo_rootx()
+            py = self.parent.winfo_rooty()
+            w = 980
+            h = 620
+            x = max(0, px + (pw - w) // 2)
+            y = max(0, py + (ph - h) // 2)
+            self.geometry(f"{w}x{h}+{x}+{y}")
+        except Exception:
+            pass
+
+    def _build_ui(self):
+        container = ttk.Frame(self, padding="14")
+        container.pack(fill=tk.BOTH, expand=True)
+
+        # 頂部標題與目標資訊
+        hdr_frame = ttk.Frame(container)
+        hdr_frame.pack(fill=tk.X, pady=(0, 10))
+
+        title_lbl = tk.Label(
+            hdr_frame,
+            text="🚨 系統移除清理作業進行中...",
+            font=("Microsoft JhengHei UI", 15, "bold"),
+            fg="#c62828"
+        )
+        title_lbl.pack(side=tk.LEFT)
+
+        target_lbl = tk.Label(
+            hdr_frame,
+            text=f"目標根目錄：{self.root_dir}",
+            font=("Consolas", 11),
+            fg="#555555"
+        )
+        target_lbl.pack(side=tk.RIGHT, padx=5)
+
+        # 進度列資訊
+        prog_info_frame = ttk.Frame(container)
+        prog_info_frame.pack(fill=tk.X, pady=(4, 2))
+
+        status_lbl = ttk.Label(prog_info_frame, textvariable=self.progress_status_var, font=("Microsoft JhengHei UI", 11, "bold"))
+        status_lbl.pack(side=tk.LEFT)
+
+        percent_lbl = ttk.Label(prog_info_frame, textvariable=self.progress_percent_var, font=("Consolas", 13, "bold"), foreground="#c62828")
+        percent_lbl.pack(side=tk.RIGHT)
+
+        self.progress_bar = ttk.Progressbar(container, mode="determinate")
+        self.progress_bar.pack(fill=tk.X, pady=(0, 8))
+
+        # 即時日誌輸出視窗
+        log_frame = ttk.LabelFrame(container, text=" 📜 執行日誌輸出 ", padding="6")
+        log_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 8))
+
+        self.log_box = scrolledtext.ScrolledText(
+            log_frame,
+            wrap=tk.WORD,
+            font=("Consolas", 10),
+            bg="#1e1e1e",
+            fg="#d4d4d4",
+            insertbackground="#ffffff"
+        )
+        self.log_box.pack(fill=tk.BOTH, expand=True)
+
+        self.log_box.tag_config("info", foreground="#9cdcfe")
+        self.log_box.tag_config("success", foreground="#4ec9b0")
+        self.log_box.tag_config("warning", foreground="#ce9178")
+        self.log_box.tag_config("error", foreground="#f44747")
+        self.log_box.tag_config("time", foreground="#6a9955")
+
+        # 底部按鈕列
+        bottom_frame = ttk.Frame(container)
+        bottom_frame.pack(side=tk.BOTTOM, fill=tk.X)
+
+        self.btn_close = ttk.Button(bottom_frame, text="關閉離開", command=self._on_close, state="disabled", width=14)
+        self.btn_close.pack(side=tk.RIGHT)
+
+    def log(self, message, level="info"):
+        now_str = datetime.now().strftime("[%H:%M:%S] ")
+
+        def _append():
+            if hasattr(self, 'log_box') and self.log_box.winfo_exists():
+                self.log_box.insert(tk.END, now_str, "time")
+                self.log_box.insert(tk.END, message + "\n", level)
+                self.log_box.see(tk.END)
+
+        if threading.current_thread() is threading.main_thread():
+            _append()
+        else:
+            self.after(0, _append)
+
+    def set_progress(self, percent, text=None):
+        def _update():
+            p = max(0.0, min(100.0, float(percent)))
+            self.progress_percent_var.set(f"{p:.1f}%")
+            self.progress_bar["value"] = p
+            if text:
+                self.progress_status_var.set(text)
+
+        if threading.current_thread() is threading.main_thread():
+            _update()
+        else:
+            self.after(0, _update)
+
+    def finish(self, success=True, elapsed=0):
+        def _done():
+            self.is_running = False
+            self.is_done = True
+            if success:
+                self.set_progress(100, f"✅ 全部選取項目已成功移除！(耗時 {elapsed:.1f} 秒)")
+                self.btn_close.configure(state="normal", text="完成並關閉")
+                messagebox.showinfo(
+                    "移除完成",
+                    f"🎉 系統移除作業已順利完成！\n\n"
+                    f"• 所選之 Windows 系統服務與守護進程已停止並完全卸載\n"
+                    f"• 開機自啟動腳本、工作排程器與環境變數 (PATH) 已全面清除\n"
+                    f"• 安裝根目錄中之程式碼、執行環境與其餘殘留檔案已全數移除\n\n"
+                    f"若有勾選備份，刪除前之關鍵資料備份壓縮檔已安全保留於安裝根目錄。",
+                    parent=self
+                )
+            else:
+                self.btn_close.configure(state="normal", text="關閉離開")
+                messagebox.showerror(
+                    "移除過程發生警示",
+                    f"⚠️ 系統移除清理作業執行期間發生錯誤，請詳閱日誌視窗紀錄之錯誤訊息！",
+                    parent=self
+                )
+
+        if threading.current_thread() is threading.main_thread():
+            _done()
+        else:
+            self.after(0, _done)
+
+    def _on_close(self):
+        if self.is_running:
+            messagebox.showwarning("警告", "移除作業正在背景進行中，請稍候完成再關閉視窗！", parent=self)
+            return
+        self.grab_release()
+        self.destroy()
+        self.parent.destroy()
+
+
+# ==============================================================================
 # GUI 應用程式主類別
 # ==============================================================================
 
@@ -596,8 +765,8 @@ class UninstallerApp:
     def __init__(self, root):
         self.root = root
         self.root.title("智慧控管與監控系統 - 自動移除工具")
-        self.root.geometry("980x750")
-        self.root.minsize(860, 640)
+        self.root.geometry("1180x530")
+        self.root.minsize(1050, 480)
 
         self.app_dir = get_app_dir()
         self.is_running = False
@@ -651,9 +820,6 @@ class UninstallerApp:
         self.do_remove_logs_var = tk.BooleanVar(value=True)
         self.do_clean_root_var = tk.BooleanVar(value=True)
 
-        self.progress_percent_var = tk.StringVar(value="0.0%")
-        self.progress_status_var = tk.StringVar(value="請確認欲移除項目後，點擊『🚨 開始執行移除作業』。")
-
     def _build_ui(self):
         main_frame = ttk.Frame(self.root, padding="14")
         main_frame.pack(fill=tk.BOTH, expand=True)
@@ -682,7 +848,7 @@ class UninstallerApp:
 
         # 關鍵佈局：底部按鈕列優先向 side=tk.BOTTOM pack
         bottom_frame = ttk.Frame(main_frame)
-        bottom_frame.pack(side=tk.BOTTOM, fill=tk.X, pady=(6, 0))
+        bottom_frame.pack(side=tk.BOTTOM, fill=tk.X, pady=(10, 0))
 
         self.btn_exit = ttk.Button(bottom_frame, text="關閉離開", command=self._on_close, width=12)
         self.btn_exit.pack(side=tk.RIGHT, padx=(8, 0))
@@ -697,8 +863,8 @@ class UninstallerApp:
             activebackground="#b71c1c",
             activeforeground="#ffffff",
             relief=tk.FLAT,
-            padx=16,
-            pady=4,
+            padx=18,
+            pady=5,
             cursor="hand2"
         )
         self.btn_start.pack(side=tk.RIGHT)
@@ -718,7 +884,7 @@ class UninstallerApp:
 
         # 3. 移除項目核取區
         items_frame = ttk.LabelFrame(main_frame, text=" ⚙️ 移除作業與資料清理選項 ", padding="8")
-        items_frame.pack(fill=tk.X, pady=(0, 8))
+        items_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 6))
 
         # 快速選取按鈕
         btn_sel_row = ttk.Frame(items_frame)
@@ -730,102 +896,67 @@ class UninstallerApp:
         btn_none = ttk.Button(btn_sel_row, text="全部取消", command=lambda: self._set_all_checks(False), width=10)
         btn_none.pack(side=tk.LEFT)
 
-        # 項目網格
+        # 項目網格（配置兩等寬欄位確保長文字完整顯示）
         grid_frame = ttk.Frame(items_frame)
-        grid_frame.pack(fill=tk.X)
+        grid_frame.pack(fill=tk.BOTH, expand=True, padx=4, pady=2)
+        grid_frame.columnconfigure(0, weight=1)
+        grid_frame.columnconfigure(1, weight=1)
 
         # 第一行：資料備份與核心服務
         chk_backup = ttk.Checkbutton(grid_frame, text="📦 執行前自動備份重要資料 (即時通 db/, uploads/, .env, AD.php)", variable=self.do_backup_var)
-        chk_backup.grid(row=0, column=0, sticky="w", padx=6, pady=2)
+        chk_backup.grid(row=0, column=0, sticky="w", padx=8, pady=3)
 
         chk_svc = ttk.Checkbutton(grid_frame, text="🛑 停止並解除安裝 Windows 服務 (LAH_PM2_Service, Apache2.4)", variable=self.do_services_var)
-        chk_svc.grid(row=0, column=1, sticky="w", padx=6, pady=2)
+        chk_svc.grid(row=0, column=1, sticky="w", padx=8, pady=3)
 
         # 第二行：守護行程與自啟動
         chk_proc = ttk.Checkbutton(grid_frame, text="⚡ 終止守護行程與背景程序 (pm2 kill, 殘留 node.exe / php-cgi)", variable=self.do_kill_procs_var)
-        chk_proc.grid(row=1, column=0, sticky="w", padx=6, pady=2)
+        chk_proc.grid(row=1, column=0, sticky="w", padx=8, pady=3)
 
         chk_auto = ttk.Checkbutton(grid_frame, text="🧹 清除開機自啟動與環境變數 (啟動資料夾 VBS, 排程器, PATH)", variable=self.do_autostart_var)
-        chk_auto.grid(row=1, column=1, sticky="w", padx=6, pady=2)
+        chk_auto.grid(row=1, column=1, sticky="w", padx=8, pady=3)
 
         # 第三行：程式碼目錄
         chk_fe = ttk.Checkbutton(grid_frame, text="🌐 移除智慧前端網站 (LAH-NUXTJS 及 node_modules)", variable=self.do_remove_fe_var)
-        chk_fe.grid(row=2, column=0, sticky="w", padx=6, pady=2)
+        chk_fe.grid(row=2, column=0, sticky="w", padx=8, pady=3)
 
         chk_wss = ttk.Checkbutton(grid_frame, text="💬 移除即時通訊伺服器 (lah-messenger-server 及 node_modules)", variable=self.do_remove_wss_var)
-        chk_wss.grid(row=2, column=1, sticky="w", padx=6, pady=2)
+        chk_wss.grid(row=2, column=1, sticky="w", padx=8, pady=3)
 
         # 第四行：後端與生產庫
         chk_api = ttk.Checkbutton(grid_frame, text="🔌 移除現代化後端 API 模組 (LAH-API)", variable=self.do_remove_api_var)
-        chk_api.grid(row=3, column=0, sticky="w", padx=6, pady=2)
+        chk_api.grid(row=3, column=0, sticky="w", padx=8, pady=3)
 
         chk_www = ttk.Checkbutton(grid_frame, text="🏢 移除舊版後端生產庫與入口網頁 (www)", variable=self.do_remove_www_var)
-        chk_www.grid(row=3, column=1, sticky="w", padx=6, pady=2)
+        chk_www.grid(row=3, column=1, sticky="w", padx=8, pady=3)
 
         # 第五行：伺服器與 Node.js
         chk_apache = ttk.Checkbutton(grid_frame, text="🌐 移除 Apache 網頁伺服器本體 (Apache24)", variable=self.do_remove_apache_var)
-        chk_apache.grid(row=4, column=0, sticky="w", padx=6, pady=2)
+        chk_apache.grid(row=4, column=0, sticky="w", padx=8, pady=3)
 
         chk_node = ttk.Checkbutton(grid_frame, text="🟩 移除 Node.js 執行期環境 (node)", variable=self.do_remove_node_var)
-        chk_node.grid(row=4, column=1, sticky="w", padx=6, pady=2)
+        chk_node.grid(row=4, column=1, sticky="w", padx=8, pady=3)
 
         # 第六行：PHP 8.5 與 PHP 7 手動安裝目錄
         chk_php85 = ttk.Checkbutton(grid_frame, text="🐘 移除 PHP 8.5 手動安裝目錄 (php85)", variable=self.do_remove_php85_var)
-        chk_php85.grid(row=5, column=0, sticky="w", padx=6, pady=2)
+        chk_php85.grid(row=5, column=0, sticky="w", padx=8, pady=3)
 
         chk_php7 = ttk.Checkbutton(grid_frame, text="🐘 移除 PHP 7 手動安裝目錄 (php7)", variable=self.do_remove_php7_var)
-        chk_php7.grid(row=5, column=1, sticky="w", padx=6, pady=2)
+        chk_php7.grid(row=5, column=1, sticky="w", padx=8, pady=3)
 
         # 第七行：Oracle Instant Client 與系統日誌
         chk_instantclient = ttk.Checkbutton(grid_frame, text="🏛️ 移除 Oracle Instant Client (instantclient_11_2)", variable=self.do_remove_instantclient_var)
-        chk_instantclient.grid(row=6, column=0, sticky="w", padx=6, pady=2)
+        chk_instantclient.grid(row=6, column=0, sticky="w", padx=8, pady=3)
 
         chk_logs = ttk.Checkbutton(grid_frame, text="📜 移除系統日誌目錄 (logs)", variable=self.do_remove_logs_var)
-        chk_logs.grid(row=6, column=1, sticky="w", padx=6, pady=2)
+        chk_logs.grid(row=6, column=1, sticky="w", padx=8, pady=3)
 
         # 第八行：PM2 狀態快照與根目錄其餘殘留檔案
         chk_dumps = ttk.Checkbutton(grid_frame, text="🔄 重置 PM2 狀態快照 (.pm2\\dump.pm2)", variable=self.do_pm2_dumps_var)
-        chk_dumps.grid(row=7, column=0, sticky="w", padx=6, pady=2)
+        chk_dumps.grid(row=7, column=0, sticky="w", padx=8, pady=3)
 
         chk_clean_root = ttk.Checkbutton(grid_frame, text="🧹 清理安裝根目錄其餘殘留檔案 (僅保留備份檔)", variable=self.do_clean_root_var)
-        chk_clean_root.grid(row=7, column=1, sticky="w", padx=6, pady=2)
-
-        # 4. 進度列
-        prog_info_frame = ttk.Frame(main_frame)
-        prog_info_frame.pack(fill=tk.X, pady=(4, 2))
-
-        status_lbl = ttk.Label(prog_info_frame, textvariable=self.progress_status_var, font=("Microsoft JhengHei UI", 11, "bold"))
-        status_lbl.pack(side=tk.LEFT)
-
-        percent_lbl = ttk.Label(prog_info_frame, textvariable=self.progress_percent_var, font=("Consolas", 13, "bold"), foreground="#c62828")
-        percent_lbl.pack(side=tk.RIGHT)
-
-        self.progress_bar = ttk.Progressbar(main_frame, mode="determinate")
-        self.progress_bar.pack(fill=tk.X, pady=(0, 6))
-
-        # 5. 即時日誌視窗
-        log_frame = ttk.LabelFrame(main_frame, text=" 📜 執行日誌輸出 ", padding="6")
-        log_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 6))
-
-        self.log_box = scrolledtext.ScrolledText(
-            log_frame,
-            wrap=tk.WORD,
-            font=("Consolas", 10),
-            bg="#1e1e1e",
-            fg="#d4d4d4",
-            insertbackground="#ffffff"
-        )
-        self.log_box.pack(fill=tk.BOTH, expand=True)
-
-        self.log_box.tag_config("info", foreground="#9cdcfe")
-        self.log_box.tag_config("success", foreground="#4ec9b0")
-        self.log_box.tag_config("warning", foreground="#ce9178")
-        self.log_box.tag_config("error", foreground="#f44747")
-        self.log_box.tag_config("time", foreground="#6a9955")
-
-        self.log("智慧控管與監控系統 - 自動移除工具已就緒。", "info")
-        if not is_admin():
-            self.log("⚠️ 偵測到目前未具備系統管理員權限，建議以『以系統管理員身分執行』以確保服務與排程順利卸載！", "warning")
+        chk_clean_root.grid(row=7, column=1, sticky="w", padx=8, pady=3)
 
     def _set_all_checks(self, state):
         self.do_backup_var.set(state)
@@ -851,36 +982,9 @@ class UninstallerApp:
         if d:
             self.root_dir_var.set(os.path.normpath(d))
 
-    def log(self, message, level="info"):
-        now_str = datetime.now().strftime("[%H:%M:%S] ")
-
-        def _append():
-            if hasattr(self, 'log_box') and self.log_box.winfo_exists():
-                self.log_box.insert(tk.END, now_str, "time")
-                self.log_box.insert(tk.END, message + "\n", level)
-                self.log_box.see(tk.END)
-
-        if threading.current_thread() is threading.main_thread():
-            _append()
-        else:
-            self.root.after(0, _append)
-
-    def set_progress(self, percent, text=None):
-        def _update():
-            p = max(0.0, min(100.0, float(percent)))
-            self.progress_percent_var.set(f"{p:.1f}%")
-            self.progress_bar["value"] = p
-            if text:
-                self.progress_status_var.set(text)
-
-        if threading.current_thread() is threading.main_thread():
-            _update()
-        else:
-            self.root.after(0, _update)
-
     def _on_close(self):
         if self.is_running:
-            messagebox.showwarning("警告", "移除作業正在背景進行中，請稍候完成再關閉視窗！")
+            messagebox.showwarning("警告", "移除作業正在背景進行中，請稍候完成再關閉視窗！", parent=self.root)
             return
         self.root.destroy()
 
@@ -890,7 +994,7 @@ class UninstallerApp:
 
         root_dir = os.path.normpath(self.root_dir_var.get().strip())
         if not os.path.isdir(root_dir):
-            messagebox.showerror("錯誤", f"指定之安裝根目錄不存在：\n{root_dir}\n請確認目錄路徑正確！")
+            messagebox.showerror("錯誤", f"指定之安裝根目錄不存在：\n{root_dir}\n請確認目錄路徑正確！", parent=self.root)
             return
 
         # 檢查是否有勾選任何項目
@@ -912,231 +1016,257 @@ class UninstallerApp:
             self.do_clean_root_var.get(),
         ])
         if not has_any:
-            messagebox.showwarning("提示", "您尚未選取任何欲移除的項目！")
+            messagebox.showwarning("提示", "您尚未選取任何欲移除的項目！", parent=self.root)
             return
 
-        # 雙重確認防護對話框
-        backup_hint = "【已勾選】自動備份關鍵資料 (db/, uploads/, .env, AD.php) 至備份 ZIP 壓縮檔" if self.do_backup_var.get() else "【未勾選】將不進行備份，資料將被永久移除！"
+        # 整理即將執行的項目清單（單次確認對話框）
+        items_summary = []
+        if self.do_backup_var.get():
+            items_summary.append("• 📦 執行前自動備份重要資料 (db/, uploads/, .env, AD.php, php.ini, httpd.conf)")
+        if self.do_services_var.get():
+            items_summary.append("• 🛑 停止並解除安裝 Windows 系統服務 (LAH_PM2_Service, Apache2.4)")
+        if self.do_kill_procs_var.get():
+            items_summary.append("• ⚡ 終止守護行程與背景程序 (pm2 kill, 殘留 node.exe / php-cgi)")
+        if self.do_autostart_var.get():
+            items_summary.append("• 🧹 清除開機自啟動與環境變數 (工作排程器, 啟動資料夾, PATH)")
+        if self.do_pm2_dumps_var.get():
+            items_summary.append("• 🔄 重置 PM2 狀態快照 (.pm2\\dump.pm2)")
+        if self.do_remove_fe_var.get():
+            items_summary.append("• 🌐 移除智慧前端網站 (LAH-NUXTJS)")
+        if self.do_remove_wss_var.get():
+            items_summary.append("• 💬 移除即時通訊伺服器 (lah-messenger-server)")
+        if self.do_remove_api_var.get():
+            items_summary.append("• 🔌 移除現代化後端 API 模組 (LAH-API)")
+        if self.do_remove_www_var.get():
+            items_summary.append("• 🏢 移除舊版後端生產庫 (www)")
+        if self.do_remove_apache_var.get():
+            items_summary.append("• 🌐 移除 Apache 網頁伺服器本體 (Apache24)")
+        if self.do_remove_node_var.get():
+            items_summary.append("• 🟩 移除 Node.js 執行期環境 (node)")
+        if self.do_remove_php85_var.get():
+            items_summary.append("• 🐘 移除 PHP 8.5 手動安裝目錄 (php85)")
+        if self.do_remove_php7_var.get():
+            items_summary.append("• 🐘 移除 PHP 7 手動安裝目錄 (php7)")
+        if self.do_remove_instantclient_var.get():
+            items_summary.append("• 🏛️ 移除 Oracle Instant Client (instantclient_11_2)")
+        if self.do_remove_logs_var.get():
+            items_summary.append("• 📜 移除系統日誌目錄 (logs)")
+        if self.do_clean_root_var.get():
+            items_summary.append("• 🧹 深度清理安裝根目錄其餘殘留檔案 (僅保留備份檔)")
 
-        confirm1 = messagebox.askyesno(
-            "⚠️ 移除確認 (第 1/2 次確認)",
+        items_text = "\n".join(items_summary)
+        backup_hint = f"已勾選自動備份（備份檔將打包存放於 {root_dir}）" if self.do_backup_var.get() else "⚠️ 【注意】未勾選備份，資料將被永久移除！"
+
+        confirm = messagebox.askyesno(
+            "⚠️ 系統移除作業確認",
             f"即將自伺服器移除選取之智慧控管與監控系統項目！\n\n"
-            f"目標根目錄：{root_dir}\n"
-            f"備份狀態：{backup_hint}\n\n"
-            f"此操作將會停止系統服務、終止進程並刪除相關檔案。\n您確定要繼續執行嗎？",
-            icon="warning"
+            f"【目標安裝根目錄】：\n{root_dir}\n\n"
+            f"【備份狀態】：\n{backup_hint}\n\n"
+            f"【預計執行項目清單】：\n{items_text}\n\n"
+            f"⚠️ 此操作將會停止系統服務、終止進程並刪除相關檔案。\n您確定要立即開始執行移除作業嗎？",
+            icon="warning",
+            parent=self.root
         )
-        if not confirm1:
-            return
-
-        confirm2 = messagebox.askyesno(
-            "🚨 最終安全確認 (第 2/2 次確認)",
-            f"請再次確認：\n\n您即將對 [{root_dir}] 執行不可逆之移除清理程序！\n\n"
-            f"點擊『是』將立即開始卸載服務並刪除選取之程式碼檔案。",
-            icon="error"
-        )
-        if not confirm2:
+        if not confirm:
             return
 
         self.is_running = True
         self.btn_start.configure(state="disabled", text="移除作業進行中...")
         self.btn_exit.configure(state="disabled")
 
-        threading.Thread(target=self._uninstall_worker, args=(root_dir,), daemon=True).start()
+        # 彈出專屬執行進度與日誌視窗
+        prog_dlg = ProgressDialog(self.root, root_dir)
 
-    def _uninstall_worker(self, root_dir):
+        threading.Thread(target=self._uninstall_worker, args=(root_dir, prog_dlg), daemon=True).start()
+
+    def _uninstall_worker(self, root_dir, dlg):
         start_time = time.time()
-        self.log("=" * 60, "info")
-        self.log(f"🚨 開始執行系統自動移除清理作業... (目標: {root_dir})", "info")
-        self.set_progress(5, "正在準備移除作業...")
+        try:
+            dlg.log("=" * 60, "info")
+            dlg.log(f"🚨 開始執行系統自動移除清理作業... (目標: {root_dir})", "info")
+            dlg.set_progress(5, "正在準備移除作業...")
 
-        # 階段 1：自動備份
-        if self.do_backup_var.get():
-            self.set_progress(10, "正在備份關鍵持久化資料...")
-            backup_target_dir = root_dir
-            b_ok, b_path = backup_critical_data(self.log, root_dir, backup_target_dir)
-            if not b_ok:
-                self.log("⚠️ 自動備份過程發生警示，但依指示繼續執行後續移除程序...", "warning")
+            # 階段 1：自動備份
+            if self.do_backup_var.get():
+                dlg.set_progress(10, "正在備份關鍵持久化資料...")
+                backup_target_dir = root_dir
+                b_ok, b_path = backup_critical_data(dlg.log, root_dir, backup_target_dir)
+                if not b_ok:
+                    dlg.log("⚠️ 自動備份過程發生警示，但依指示繼續執行後續移除程序...", "warning")
 
-        # 階段 2：停止並解除安裝 Windows 服務
-        if self.do_services_var.get():
-            self.set_progress(25, "正在停止並解除安裝 Windows 服務...")
-            uninstall_lah_pm2_service(self.log, root_dir)
+            # 階段 2：停止並解除安裝 Windows 服務
+            if self.do_services_var.get():
+                dlg.set_progress(25, "正在停止並解除安裝 Windows 服務...")
+                uninstall_lah_pm2_service(dlg.log, root_dir)
+                if self.do_remove_apache_var.get():
+                    uninstall_apache_service(dlg.log, root_dir)
+
+            # 若未移除 Apache，但移除了 PHP 7 或 PHP 8.5，自動清理 httpd.conf 中的轉發或載入設定
+            if not self.do_remove_apache_var.get() and (self.do_remove_php7_var.get() or self.do_remove_php85_var.get()):
+                clean_apache_php_configuration(
+                    dlg.log,
+                    root_dir,
+                    remove_php7=self.do_remove_php7_var.get(),
+                    remove_php85=self.do_remove_php85_var.get()
+                )
+
+            # 階段 3：終止 PM2 與背景殘留進程
+            if self.do_kill_procs_var.get():
+                dlg.set_progress(40, "正在終止受控守護行程與殘留進程...")
+                kill_all_pm2_and_node(dlg.log, root_dir)
+
+            # 階段 4：清除自啟動與環境變數
+            if self.do_autostart_var.get():
+                dlg.set_progress(55, "正在清除開機自啟動與工作排程...")
+                clean_autostart_and_scheduler(dlg.log, root_dir)
+
+                paths_to_remove = []
+                if self.do_remove_node_var.get():
+                    paths_to_remove.append(os.path.join(root_dir, "node"))
+                if self.do_remove_instantclient_var.get():
+                    paths_to_remove.append(os.path.join(root_dir, "instantclient_11_2"))
+                if self.do_remove_php85_var.get():
+                    paths_to_remove.append(os.path.join(root_dir, "php85"))
+                if self.do_remove_php7_var.get():
+                    paths_to_remove.append(os.path.join(root_dir, "php7"))
+                if self.do_remove_apache_var.get():
+                    paths_to_remove.append(os.path.join(root_dir, "Apache24", "bin"))
+
+                if paths_to_remove:
+                    remove_paths_from_user_environment(paths_to_remove, dlg.log)
+
+            # 階段 5：重置 PM2 快照
+            if self.do_pm2_dumps_var.get():
+                dlg.set_progress(65, "正在清除 PM2 快照狀態檔...")
+                clean_pm2_dumps(dlg.log)
+
+            # 階段 6：刪除檔案與目錄
+            dlg.set_progress(75, "正在清理檔案與程式碼目錄...")
+
+            dir_tasks = []
+            if self.do_remove_fe_var.get():
+                dir_tasks.append((os.path.join(root_dir, "LAH-NUXTJS"), "前端網站 (LAH-NUXTJS)"))
+            if self.do_remove_wss_var.get():
+                dir_tasks.append((os.path.join(root_dir, "lah-messenger-server"), "即時通訊伺服器 (lah-messenger-server)"))
+            if self.do_remove_api_var.get():
+                dir_tasks.append((os.path.join(root_dir, "LAH-API"), "現代化後端 API (LAH-API)"))
+            if self.do_remove_www_var.get():
+                dir_tasks.append((os.path.join(root_dir, "www"), "舊版後端生產庫 (www)"))
             if self.do_remove_apache_var.get():
-                uninstall_apache_service(self.log, root_dir)
-
-        # 若未移除 Apache，但移除了 PHP 7 或 PHP 8.5，自動清理 httpd.conf 中的轉發或載入設定
-        if not self.do_remove_apache_var.get() and (self.do_remove_php7_var.get() or self.do_remove_php85_var.get()):
-            clean_apache_php_configuration(
-                self.log,
-                root_dir,
-                remove_php7=self.do_remove_php7_var.get(),
-                remove_php85=self.do_remove_php85_var.get()
-            )
-
-        # 階段 3：終止 PM2 與背景殘留進程
-        if self.do_kill_procs_var.get():
-            self.set_progress(40, "正在終止受控守護行程與殘留進程...")
-            kill_all_pm2_and_node(self.log, root_dir)
-
-        # 階段 4：清除自啟動與環境變數
-        if self.do_autostart_var.get():
-            self.set_progress(55, "正在清除開機自啟動與工作排程...")
-            clean_autostart_and_scheduler(self.log, root_dir)
-
-            paths_to_remove = []
+                dir_tasks.append((os.path.join(root_dir, "Apache24"), "Apache 網頁伺服器 (Apache24)"))
             if self.do_remove_node_var.get():
-                paths_to_remove.append(os.path.join(root_dir, "node"))
-            if self.do_remove_instantclient_var.get():
-                paths_to_remove.append(os.path.join(root_dir, "instantclient_11_2"))
+                dir_tasks.append((os.path.join(root_dir, "node"), "Node.js 綠色環境 (node)"))
             if self.do_remove_php85_var.get():
-                paths_to_remove.append(os.path.join(root_dir, "php85"))
+                dir_tasks.append((os.path.join(root_dir, "php85"), "PHP 8.5 手動安裝目錄 (php85)"))
             if self.do_remove_php7_var.get():
-                paths_to_remove.append(os.path.join(root_dir, "php7"))
-            if self.do_remove_apache_var.get():
-                paths_to_remove.append(os.path.join(root_dir, "Apache24", "bin"))
+                dir_tasks.append((os.path.join(root_dir, "php7"), "PHP 7 手動安裝目錄 (php7)"))
+            if self.do_remove_instantclient_var.get():
+                dir_tasks.append((os.path.join(root_dir, "instantclient_11_2"), "Oracle Instant Client (instantclient_11_2)"))
+            if self.do_remove_logs_var.get():
+                dir_tasks.append((os.path.join(root_dir, "logs"), "系統日誌目錄 (logs)"))
 
-            if paths_to_remove:
-                remove_paths_from_user_environment(paths_to_remove, self.log)
+            total_dirs = len(dir_tasks)
+            for idx, (dpath, dname) in enumerate(dir_tasks, 1):
+                if os.path.exists(dpath):
+                    dlg.log(f"  🗑️ 正在刪除 {dname} [{dpath}]...", "info")
+                    ok, msg = robust_rmtree(dpath, dlg.log)
+                    if ok:
+                        dlg.log(f"  ✓ 已成功刪除 {dname}", "success")
+                curr_pct = 75.0 + (idx / total_dirs) * 15.0 if total_dirs else 90.0
+                dlg.set_progress(curr_pct, f"正在刪除: {dname}")
 
-        # 階段 5：重置 PM2 快照
-        if self.do_pm2_dumps_var.get():
-            self.set_progress(65, "正在清除 PM2 快照狀態檔...")
-            clean_pm2_dumps(self.log)
+            # 階段 6.5：清理安裝根目錄中的其餘殘留檔案與目錄（僅保留備份壓縮檔）
+            if self.do_clean_root_var.get() and os.path.isdir(root_dir):
+                dlg.set_progress(92, "正在清理安裝根目錄其餘殘留檔案...")
+                dlg.log("⏳ 正在清理安裝根目錄其餘殘留檔案 (僅保留刪除前備份壓縮檔)...", "info")
 
-        # 階段 6：刪除檔案與目錄
-        self.set_progress(75, "正在清理檔案與程式碼目錄...")
+                # 建立使用者明確未勾選、需保留之子目錄集合
+                keep_paths = set()
+                if not self.do_remove_fe_var.get():
+                    keep_paths.add(os.path.normpath(os.path.join(root_dir, "LAH-NUXTJS")).lower())
+                if not self.do_remove_wss_var.get():
+                    keep_paths.add(os.path.normpath(os.path.join(root_dir, "lah-messenger-server")).lower())
+                if not self.do_remove_api_var.get():
+                    keep_paths.add(os.path.normpath(os.path.join(root_dir, "LAH-API")).lower())
+                if not self.do_remove_www_var.get():
+                    keep_paths.add(os.path.normpath(os.path.join(root_dir, "www")).lower())
+                if not self.do_remove_apache_var.get():
+                    keep_paths.add(os.path.normpath(os.path.join(root_dir, "Apache24")).lower())
+                if not self.do_remove_node_var.get():
+                    keep_paths.add(os.path.normpath(os.path.join(root_dir, "node")).lower())
+                if not self.do_remove_php85_var.get():
+                    keep_paths.add(os.path.normpath(os.path.join(root_dir, "php85")).lower())
+                if not self.do_remove_php7_var.get():
+                    keep_paths.add(os.path.normpath(os.path.join(root_dir, "php7")).lower())
+                if not self.do_remove_instantclient_var.get():
+                    keep_paths.add(os.path.normpath(os.path.join(root_dir, "instantclient_11_2")).lower())
+                if not self.do_remove_logs_var.get():
+                    keep_paths.add(os.path.normpath(os.path.join(root_dir, "logs")).lower())
 
-        dir_tasks = []
-        if self.do_remove_fe_var.get():
-            dir_tasks.append((os.path.join(root_dir, "LAH-NUXTJS"), "前端網站 (LAH-NUXTJS)"))
-        if self.do_remove_wss_var.get():
-            dir_tasks.append((os.path.join(root_dir, "lah-messenger-server"), "即時通訊伺服器 (lah-messenger-server)"))
-        if self.do_remove_api_var.get():
-            dir_tasks.append((os.path.join(root_dir, "LAH-API"), "現代化後端 API (LAH-API)"))
-        if self.do_remove_www_var.get():
-            dir_tasks.append((os.path.join(root_dir, "www"), "舊版後端生產庫 (www)"))
-        if self.do_remove_apache_var.get():
-            dir_tasks.append((os.path.join(root_dir, "Apache24"), "Apache 網頁伺服器 (Apache24)"))
-        if self.do_remove_node_var.get():
-            dir_tasks.append((os.path.join(root_dir, "node"), "Node.js 綠色環境 (node)"))
-        if self.do_remove_php85_var.get():
-            dir_tasks.append((os.path.join(root_dir, "php85"), "PHP 8.5 手動安裝目錄 (php85)"))
-        if self.do_remove_php7_var.get():
-            dir_tasks.append((os.path.join(root_dir, "php7"), "PHP 7 手動安裝目錄 (php7)"))
-        if self.do_remove_instantclient_var.get():
-            dir_tasks.append((os.path.join(root_dir, "instantclient_11_2"), "Oracle Instant Client (instantclient_11_2)"))
-        if self.do_remove_logs_var.get():
-            dir_tasks.append((os.path.join(root_dir, "logs"), "系統日誌目錄 (logs)"))
-
-        total_dirs = len(dir_tasks)
-        for idx, (dpath, dname) in enumerate(dir_tasks, 1):
-            if os.path.exists(dpath):
-                self.log(f"  🗑️ 正在刪除 {dname} [{dpath}]...", "info")
-                ok, msg = robust_rmtree(dpath, self.log)
-                if ok:
-                    self.log(f"  ✓ 已成功刪除 {dname}", "success")
-            curr_pct = 75.0 + (idx / total_dirs) * 15.0 if total_dirs else 90.0
-            self.set_progress(curr_pct, f"正在刪除: {dname}")
-
-        # 階段 6.5：清理安裝根目錄中的其餘殘留檔案與目錄（僅保留備份壓縮檔）
-        if self.do_clean_root_var.get() and os.path.isdir(root_dir):
-            self.set_progress(92, "正在清理安裝根目錄其餘殘留檔案...")
-            self.log("⏳ 正在清理安裝根目錄其餘殘留檔案 (僅保留刪除前備份壓縮檔)...", "info")
-
-            # 建立使用者明確未勾選、需保留之子目錄集合
-            keep_paths = set()
-            if not self.do_remove_fe_var.get():
-                keep_paths.add(os.path.normpath(os.path.join(root_dir, "LAH-NUXTJS")).lower())
-            if not self.do_remove_wss_var.get():
-                keep_paths.add(os.path.normpath(os.path.join(root_dir, "lah-messenger-server")).lower())
-            if not self.do_remove_api_var.get():
-                keep_paths.add(os.path.normpath(os.path.join(root_dir, "LAH-API")).lower())
-            if not self.do_remove_www_var.get():
-                keep_paths.add(os.path.normpath(os.path.join(root_dir, "www")).lower())
-            if not self.do_remove_apache_var.get():
-                keep_paths.add(os.path.normpath(os.path.join(root_dir, "Apache24")).lower())
-            if not self.do_remove_node_var.get():
-                keep_paths.add(os.path.normpath(os.path.join(root_dir, "node")).lower())
-            if not self.do_remove_php85_var.get():
-                keep_paths.add(os.path.normpath(os.path.join(root_dir, "php85")).lower())
-            if not self.do_remove_php7_var.get():
-                keep_paths.add(os.path.normpath(os.path.join(root_dir, "php7")).lower())
-            if not self.do_remove_instantclient_var.get():
-                keep_paths.add(os.path.normpath(os.path.join(root_dir, "instantclient_11_2")).lower())
-            if not self.do_remove_logs_var.get():
-                keep_paths.add(os.path.normpath(os.path.join(root_dir, "logs")).lower())
-
-            drive, tail = os.path.splitdrive(os.path.normpath(root_dir))
-            if tail in ("\\", "/", ""):
-                self.log("⚠️ 偵測到安裝根目錄為磁碟機根路徑，為保護作業系統，略過整層目錄清理！", "warning")
-            else:
-                try:
-                    for item in os.listdir(root_dir):
-                        item_path = os.path.join(root_dir, item)
-                        norm_item = os.path.normpath(item_path).lower()
-
-                        # 1. 嚴格保護備份壓縮檔
-                        if item.startswith("_LAH_Backup_") and item.endswith(".zip"):
-                            self.log(f"  📦 保留刪除前關鍵備份壓縮檔: [{item}]", "info")
-                            continue
-
-                        # 2. 保留使用者未選取移除的目錄
-                        if norm_item in keep_paths:
-                            self.log(f"  ℹ️ 保留未勾選移除項目: [{item}]", "info")
-                            continue
-
-                        # 3. 清理殘留檔案（如 *.zip, *.bat, *.cmd, *.txt, *.tmp, .pm2 等）
-                        if os.path.isfile(item_path) or os.path.islink(item_path):
-                            try:
-                                os.chmod(item_path, stat.S_IWRITE)
-                                os.remove(item_path)
-                                self.log(f"  🗑️ 已清理根目錄殘留檔案: [{item}]", "info")
-                            except Exception as e:
-                                self.log(f"  ⚠️ 清理檔案 [{item}] 失敗: {e}", "warning")
-                        elif os.path.isdir(item_path):
-                            ok_rm, msg_rm = robust_rmtree(item_path, self.log)
-                            if ok_rm:
-                                self.log(f"  🗑️ 已清理根目錄殘留資料夾: [{item}]", "info")
-                            else:
-                                self.log(f"  ⚠️ 清理資料夾 [{item}] 失敗: {msg_rm}", "warning")
-                except Exception as e:
-                    self.log(f"  ⚠️ 掃描根目錄殘留項目時發生警示: {e}", "warning")
-
-        # 若目標根目錄於清空後無其他檔案，安全移除該根目錄；若僅剩備份檔則保留備份檔
-        if os.path.isdir(root_dir):
-            try:
-                remaining = os.listdir(root_dir)
-                if not remaining:
-                    os.rmdir(root_dir)
-                    self.log(f"  ✓ 安裝根目錄已完全清空，已安全移除資料夾 [{root_dir}]", "success")
-                elif all(f.startswith("_LAH_Backup_") and f.endswith(".zip") for f in remaining):
-                    self.log(f"  🎉 安裝根目錄其餘項目已全數清除，僅保留必要備份檔: [{', '.join(remaining)}] 於 [{root_dir}]", "success")
+                drive, tail = os.path.splitdrive(os.path.normpath(root_dir))
+                if tail in ("\\", "/", ""):
+                    dlg.log("⚠️ 偵測到安裝根目錄為磁碟機根路徑，為保護作業系統，略過整層目錄清理！", "warning")
                 else:
-                    self.log(f"  ℹ️ 安裝根目錄已完成清理，保留之項目 ({len(remaining)} 個): {', '.join(remaining)}", "info")
-            except Exception:
-                pass
+                    try:
+                        for item in os.listdir(root_dir):
+                            item_path = os.path.join(root_dir, item)
+                            norm_item = os.path.normpath(item_path).lower()
 
-        elapsed = time.time() - start_time
-        self.set_progress(100, f"✅ 全部選取項目已成功移除！(總耗時: {elapsed:.1f} 秒)")
-        self.log("=" * 60, "success")
-        self.log(f"🎉 智慧控管與監控系統 - 自動移除作業順利完成！(耗時 {elapsed:.1f} 秒)", "success")
+                            # 1. 嚴格保護備份壓縮檔
+                            if item.startswith("_LAH_Backup_") and item.endswith(".zip"):
+                                dlg.log(f"  📦 保留刪除前關鍵備份壓縮檔: [{item}]", "info")
+                                continue
 
-        def _finish_ui():
-            self.is_running = False
-            self.btn_start.configure(state="normal", text="🚨 開始執行移除作業")
-            self.btn_exit.configure(state="normal")
-            messagebox.showinfo(
-                "移除完成",
-                f"🎉 系統移除作業已順利完成！\n\n"
-                f"• 所選之 Windows 系統服務與守護進程已停止並完全卸載\n"
-                f"• 開機自啟動腳本、工作排程器與環境變數 (PATH) 已全面清除\n"
-                f"• 安裝根目錄中之程式碼、執行環境與其餘殘留檔案已全數移除\n\n"
-                f"若有勾選備份，刪除前之關鍵資料備份壓縮檔已安全保留於安裝根目錄。",
-                parent=self.root
-            )
+                            # 2. 保留使用者未選取移除的目錄
+                            if norm_item in keep_paths:
+                                dlg.log(f"  ℹ️ 保留未勾選移除項目: [{item}]", "info")
+                                continue
 
-        self.root.after(0, _finish_ui)
+                            # 3. 清理殘留檔案（如 *.zip, *.bat, *.cmd, *.txt, *.tmp, .pm2 等）
+                            if os.path.isfile(item_path) or os.path.islink(item_path):
+                                try:
+                                    os.chmod(item_path, stat.S_IWRITE)
+                                    os.remove(item_path)
+                                    dlg.log(f"  🗑️ 已清理根目錄殘留檔案: [{item}]", "info")
+                                except Exception as e:
+                                    dlg.log(f"  ⚠️ 清理檔案 [{item}] 失敗: {e}", "warning")
+                            elif os.path.isdir(item_path):
+                                ok_rm, msg_rm = robust_rmtree(item_path, dlg.log)
+                                if ok_rm:
+                                    dlg.log(f"  🗑️ 已清理根目錄殘留資料夾: [{item}]", "info")
+                                else:
+                                    dlg.log(f"  ⚠️ 清理資料夾 [{item}] 失敗: {msg_rm}", "warning")
+                    except Exception as e:
+                        dlg.log(f"  ⚠️ 掃描根目錄殘留項目時發生警示: {e}", "warning")
+
+            # 若目標根目錄於清空後無其他檔案，安全移除該根目錄；若僅剩備份檔則保留備份檔
+            if os.path.isdir(root_dir):
+                try:
+                    remaining = os.listdir(root_dir)
+                    if not remaining:
+                        os.rmdir(root_dir)
+                        dlg.log(f"  ✓ 安裝根目錄已完全清空，已安全移除資料夾 [{root_dir}]", "success")
+                    elif all(f.startswith("_LAH_Backup_") and f.endswith(".zip") for f in remaining):
+                        dlg.log(f"  🎉 安裝根目錄其餘項目已全數清除，僅保留必要備份檔: [{', '.join(remaining)}] 於 [{root_dir}]", "success")
+                    else:
+                        dlg.log(f"  ℹ️ 安裝根目錄已完成清理，保留之項目 ({len(remaining)} 個): {', '.join(remaining)}", "info")
+                except Exception:
+                    pass
+
+            elapsed = time.time() - start_time
+            dlg.log("=" * 60, "success")
+            dlg.log(f"🎉 智慧控管與監控系統 - 自動移除作業順利完成！(耗時 {elapsed:.1f} 秒)", "success")
+            dlg.finish(success=True, elapsed=elapsed)
+        except Exception as ex:
+            elapsed = time.time() - start_time
+            dlg.log(f"❌ 執行移除清理過程發生未預期例外錯誤: {ex}", "error")
+            dlg.finish(success=False, elapsed=elapsed)
+        finally:
+            def _reset_main_ui():
+                self.is_running = False
+                self.btn_start.configure(state="normal", text="🚨 開始執行移除作業")
+                self.btn_exit.configure(state="normal")
+            self.root.after(0, _reset_main_ui)
 
 
 # ==============================================================================
