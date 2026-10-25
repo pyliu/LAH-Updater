@@ -1839,8 +1839,8 @@ class UpdaterApp:
     def __init__(self, root):
         self.root = root
         self.root.title("智慧控管與監控系統 - 自動更新工具")
-        self.root.geometry("1260x720")
-        self.root.minsize(1100, 620)
+        self.root.geometry("1260x740")
+        self.root.minsize(1100, 720)
 
         # 基礎路徑
         self.app_dir = get_app_dir()
@@ -1928,7 +1928,7 @@ class UpdaterApp:
 
         # 1. 頂部標題區塊 (side=tk.TOP)
         header_frame = ttk.Frame(main_frame)
-        header_frame.pack(side=tk.TOP, fill=tk.X, pady=(0, 6))
+        header_frame.pack(side=tk.TOP, fill=tk.X, pady=(0, 4))
 
         title_label = ttk.Label(
             header_frame,
@@ -1990,7 +1990,7 @@ class UpdaterApp:
 
         # 2. 安裝根目錄選擇區塊 (side=tk.TOP)
         dir_frame = ttk.LabelFrame(main_frame, text=" 📂 安裝根目錄設定 (預設連動基底) ", padding="6")
-        dir_frame.pack(side=tk.TOP, fill=tk.X, pady=(0, 6))
+        dir_frame.pack(side=tk.TOP, fill=tk.X, pady=(0, 4))
 
         dir_inner = ttk.Frame(dir_frame)
         dir_inner.pack(fill=tk.X)
@@ -2023,7 +2023,7 @@ class UpdaterApp:
             foreground="#555555",
             font=("Microsoft JhengHei UI", 10)
         )
-        left_hint.pack(anchor=tk.W, pady=(0, 4))
+        left_hint.pack(anchor=tk.W, pady=(0, 2))
 
         for pkg in BASE_ENV_CONFIGS:
             self._create_pkg_card(left_col, pkg)
@@ -2032,52 +2032,9 @@ class UpdaterApp:
         left_ctrl_frame = ttk.Frame(left_col, padding="2")
         left_ctrl_frame.pack(side=tk.BOTTOM, fill=tk.X, pady=(4, 0))
 
-        # 獨立按鈕：手動一鍵套用資安弱點防護
-        self.btn_sec_harden = ttk.Button(
-            left_ctrl_frame,
-            text="🛡️ 一鍵套用資安弱點防護 (隱藏 Apache / PHP 版本資訊)",
-            command=self.manual_apply_security_hardening
-        )
-        self.btn_sec_harden.pack(fill=tk.X, pady=(3, 2))
-
-        chk_sec = ttk.Checkbutton(
-            left_ctrl_frame,
-            text="安裝/更新時自動套用資安防護 (ServerTokens Prod / expose_php = Off)",
-            variable=self.auto_security_hardening_var
-        )
-        chk_sec.pack(anchor=tk.W, pady=(1, 2))
-
-        chk_reg_apache = ttk.Checkbutton(
-            left_ctrl_frame,
-            text="若未安裝 Apache 服務則自動註冊 (Apache2.4)",
-            variable=self.auto_register_apache_var
-        )
-        chk_reg_apache.pack(anchor=tk.W, pady=(1, 2))
-
-        # =============================================================
-        # 右側欄位：智慧控管系統模組更新 (LAH 應用與套件)
-        # =============================================================
-        right_col = ttk.LabelFrame(pkg_frame, text=" 📦 智慧控管系統模組更新 (LAH 應用與套件) ", padding="6")
-        right_col.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=(4, 0))
-
-        right_hint = ttk.Label(
-            right_col,
-            text=f"來源更新目錄：{self.app_dir}  (各模組路徑預設跟隨根目錄，亦可單獨點擊「瀏覽...」自訂)",
-            foreground="#555555",
-            font=("Microsoft JhengHei UI", 10)
-        )
-        right_hint.pack(anchor=tk.W, pady=(0, 4))
-
-        for pkg in APP_PACKAGE_CONFIGS:
-            self._create_pkg_card(right_col, pkg)
-
-        # 右欄底部控制選項
-        right_ctrl_frame = ttk.Frame(right_col, padding="2")
-        right_ctrl_frame.pack(side=tk.BOTTOM, fill=tk.X, pady=(4, 0))
-
-        # 第 1 列：Apache 服務偵測重啟選項 + 重新掃描按鈕
-        ctrl_row_apache = ttk.Frame(right_ctrl_frame, padding="1")
-        ctrl_row_apache.pack(fill=tk.X, pady=(2, 2))
+        # 第 1 列：Apache 服務重啟選項 + 重新掃描按鈕
+        ctrl_row_apache = ttk.Frame(left_ctrl_frame, padding="1")
+        ctrl_row_apache.pack(fill=tk.X, pady=(1, 2))
 
         self.chk_apache = ttk.Checkbutton(
             ctrl_row_apache,
@@ -2091,12 +2048,55 @@ class UpdaterApp:
         self.btn_rescan = ttk.Button(ctrl_row_apache, text="🔄 重新掃描", command=self.rescan, width=12)
         self.btn_rescan.pack(side=tk.RIGHT)
 
-        # 第 2 列：PM2 管理套件偵測與更新後重啟服務選項
-        ctrl_row_pm2 = ttk.Frame(right_ctrl_frame, padding="1")
-        ctrl_row_pm2.pack(fill=tk.X, pady=(1, 2))
+        chk_reg_apache = ttk.Checkbutton(
+            left_ctrl_frame,
+            text="若未安裝 Apache 服務則自動註冊 (Apache2.4)",
+            variable=self.auto_register_apache_var
+        )
+        chk_reg_apache.pack(anchor=tk.W, pady=(1, 2))
+
+        chk_sec = ttk.Checkbutton(
+            left_ctrl_frame,
+            text="安裝/更新時自動套用資安防護 (ServerTokens Prod / expose_php = Off)",
+            variable=self.auto_security_hardening_var
+        )
+        chk_sec.pack(anchor=tk.W, pady=(1, 2))
+
+        # 獨立按鈕：手動一鍵套用資安弱點防護
+        self.btn_sec_harden = ttk.Button(
+            left_ctrl_frame,
+            text="🛡️ 一鍵套用資安弱點防護 (隱藏 Apache / PHP 版本資訊)",
+            command=self.manual_apply_security_hardening
+        )
+        self.btn_sec_harden.pack(fill=tk.X, pady=(3, 2))
+
+        # =============================================================
+        # 右側欄位：智慧控管系統模組更新 (LAH 應用與套件)
+        # =============================================================
+        right_col = ttk.LabelFrame(pkg_frame, text=" 📦 智慧控管系統模組更新 (LAH 應用與套件) ", padding="6")
+        right_col.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=(4, 0))
+
+        right_hint = ttk.Label(
+            right_col,
+            text=f"來源更新目錄：{self.app_dir}  (各模組路徑預設跟隨根目錄，亦可單獨點擊「瀏覽...」自訂)",
+            foreground="#555555",
+            font=("Microsoft JhengHei UI", 10)
+        )
+        right_hint.pack(anchor=tk.W, pady=(0, 2))
+
+        for pkg in APP_PACKAGE_CONFIGS:
+            self._create_pkg_card(right_col, pkg)
+
+        # 右欄底部控制選項
+        right_ctrl_frame = ttk.Frame(right_col, padding="2")
+        right_ctrl_frame.pack(side=tk.BOTTOM, fill=tk.X, pady=(4, 0))
+
+        # 第 1 列：PM2 管理套件重啟服務選項 + 開機自啟動設定按鈕
+        ctrl_row_pm2_top = ttk.Frame(right_ctrl_frame, padding="1")
+        ctrl_row_pm2_top.pack(fill=tk.X, pady=(1, 2))
 
         self.chk_pm2 = ttk.Checkbutton(
-            ctrl_row_pm2,
+            ctrl_row_pm2_top,
             text="更新後自動重啟 PM2 服務",
             variable=self.restart_pm2_var,
             onvalue=True,
@@ -2104,29 +2104,33 @@ class UpdaterApp:
         )
         self.chk_pm2.pack(side=tk.LEFT)
 
-        self.lbl_pm2_status = tk.Label(
-            ctrl_row_pm2,
-            textvariable=self.pm2_daemon_status_var,
-            font=("Microsoft JhengHei UI", 10, "bold"),
-            fg="#555555"
-        )
-        self.lbl_pm2_status.pack(side=tk.LEFT, padx=(8, 4))
-
-        self.btn_align_pm2 = ttk.Button(
-            ctrl_row_pm2,
-            text="⚡ 立即校正 PM2 核心",
-            command=self.manual_align_pm2_daemon,
-            width=18
-        )
-        self.btn_align_pm2.pack(side=tk.RIGHT, padx=(4, 0))
-
         self.btn_autostart_pm2 = ttk.Button(
-            ctrl_row_pm2,
+            ctrl_row_pm2_top,
             text="⚙️ 開機自啟動設定",
             command=self.manage_pm2_autostart,
             width=16
         )
-        self.btn_autostart_pm2.pack(side=tk.RIGHT, padx=(4, 0))
+        self.btn_autostart_pm2.pack(side=tk.RIGHT)
+
+        # 第 2 列：PM2 核心守護進程狀態標籤 + 立即校正核心按鈕
+        ctrl_row_pm2_bottom = ttk.Frame(right_ctrl_frame, padding="1")
+        ctrl_row_pm2_bottom.pack(fill=tk.X, pady=(1, 2))
+
+        self.lbl_pm2_status = tk.Label(
+            ctrl_row_pm2_bottom,
+            textvariable=self.pm2_daemon_status_var,
+            font=("Microsoft JhengHei UI", 10, "bold"),
+            fg="#555555"
+        )
+        self.lbl_pm2_status.pack(side=tk.LEFT, padx=(2, 4))
+
+        self.btn_align_pm2 = ttk.Button(
+            ctrl_row_pm2_bottom,
+            text="⚡ 立即校正 PM2 核心",
+            command=self.manual_align_pm2_daemon,
+            width=18
+        )
+        self.btn_align_pm2.pack(side=tk.RIGHT)
 
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
 
@@ -2136,9 +2140,9 @@ class UpdaterApp:
         v = self.pkg_vars[p_id]
         is_sub = pkg.get("is_sub_package", False)
 
-        card_padding = (22, 1, 0, 1) if is_sub else (0, 1, 0, 1)
+        card_padding = (22, 0, 0, 1) if is_sub else (0, 0, 0, 1)
         item_card = ttk.Frame(parent_frame, padding=card_padding)
-        item_card.pack(fill=tk.X, pady=1)
+        item_card.pack(fill=tk.X, pady=(0, 1))
 
         top_line = ttk.Frame(item_card)
         top_line.pack(fill=tk.X)
