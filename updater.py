@@ -23,8 +23,48 @@ from tkinter import ttk, filedialog, messagebox
 from tkinter import scrolledtext
 from tkinter import font as tkfont
 
-# 定義 7 種更新包規格
-PACKAGE_CONFIGS = [
+# 定義 3 種基礎環境安裝包規格 (左欄)
+BASE_ENV_CONFIGS = [
+    {
+        "id": "apache24",
+        "name": "Apache24.zip",
+        "pattern": r"(?i)^(httpd-2\.4|apache24?|apache-2\.4).*?\.zip$",
+        "alt_names": ["httpd.zip", "Apache.zip", "Apache-2.4.zip", "httpd-2.4.zip"],
+        "rel_target": "Apache24",
+        "title": "Apache 2.4 網頁伺服器 (Apache24.zip)",
+        "expected_folder": "Apache24",
+        "alt_folders": ["Apache24", "apache24", "Apache-2.4", "httpd-2.4"],
+        "is_base_env": True,
+        "is_nodejs": False
+    },
+    {
+        "id": "php7",
+        "name": "php7.zip",
+        "pattern": r"(?i)^(php-7\.4|php74?|php-7).*?\.zip$",
+        "alt_names": ["php-7.4.zip", "php74.zip", "php.zip"],
+        "rel_target": "php7",
+        "title": "PHP 7.4 執行環境 (php7.zip)",
+        "expected_folder": "php7",
+        "alt_folders": ["php7", "php-7.4", "php-7.4.33-Win32-vc15-x64"],
+        "is_base_env": True,
+        "is_nodejs": False
+    },
+    {
+        "id": "php85",
+        "name": "php85.zip",
+        "pattern": r"(?i)^(php-8\.5|php85?|php-8).*?\.zip$",
+        "alt_names": ["php-8.5.zip", "php8.zip", "php-8.zip"],
+        "rel_target": "php85",
+        "title": "PHP 8.5 執行環境 (php85.zip)",
+        "expected_folder": "php85",
+        "alt_folders": ["php85", "php-8.5", "php-8", "php-8.5.0-Win32-x64"],
+        "is_base_env": True,
+        "is_nodejs": False
+    }
+]
+
+# 定義 7 種應用與系統模組更新包規格 (右欄)
+APP_PACKAGE_CONFIGS = [
     {
         "id": "www",
         "name": "www.zip",
@@ -88,6 +128,9 @@ PACKAGE_CONFIGS = [
         "is_nodejs": True
     }
 ]
+
+# 合併所有更新包規格以相容既有迭代處理
+PACKAGE_CONFIGS = BASE_ENV_CONFIGS + APP_PACKAGE_CONFIGS
 
 
 def is_admin():
@@ -223,6 +266,315 @@ def start_apache_service(svc_name, log_func):
 
     log_func(f"⚠️ 警告：啟動 Apache 服務 [{svc_name}] 等待逾時，請手動確認服務狀態。", "warning")
     return False
+
+
+def apply_apache_security_hardening(conf_path, log_func=None):
+    """
+    資安弱點防護：隱藏 Apache 伺服器版本資訊
+    1. ServerTokens Prod: 隱藏詳細版本與模組清單，HTTP Server 標頭僅回應 'Server: Apache'
+    2. ServerSignature Off: 關閉伺服器產生的錯誤頁面（如 404, 500）底部的 Apache 版本資訊註記
+    """
+    if not os.path.isfile(conf_path):
+        if log_func:
+            log_func(f"⚠️ 未找到 Apache 設定檔：{conf_path}", "warning")
+        return False, "找不到 httpd.conf"
+
+    try:
+        with open(conf_path, "r", encoding="utf-8", errors="replace") as f:
+            content = f.read()
+
+        orig_content = content
+
+        # 1. 處理 ServerTokens
+        if re.search(r"(?m)^\s*#?\s*ServerTokens\b", content):
+            content = re.sub(
+                r"(?m)^\s*#?\s*ServerTokens\s+.*$",
+                "ServerTokens Prod",
+                content
+            )
+        else:
+            content += "\n# 資安弱點防護：隱藏 Apache 版本\nServerTokens Prod\n"
+
+        # 2. 處理 ServerSignature
+        if re.search(r"(?m)^\s*#?\s*ServerSignature\b", content):
+            content = re.sub(
+                r"(?m)^\s*#?\s*ServerSignature\s+.*$",
+                "ServerSignature Off",
+                content
+            )
+        else:
+            content += "\n# 資安弱點防護：關閉錯誤頁面版本簽名\nServerSignature Off\n"
+
+        if content != orig_content:
+            bak_path = conf_path + f".bak_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+            try:
+                shutil.copyfile(conf_path, bak_path)
+            except Exception:
+                pass
+            with open(conf_path, "w", encoding="utf-8") as f:
+                f.write(content)
+            if log_func:
+                log_func("  ✓ Apache httpd.conf 已套用資安強化 (ServerTokens Prod, ServerSignature Off)", "success")
+            return True, "已成功套用 Apache 資安防護"
+        else:
+            if log_func:
+                log_func("  ℹ️ Apache httpd.conf 已具備資安防護設定 (ServerTokens Prod, ServerSignature Off)，無需變更", "info")
+            return True, "設定已是最新狀態"
+    except Exception as e:
+        msg = f"套用 Apache 資安防護發生異常: {e}"
+        if log_func:
+            log_func(f"  ❌ {msg}", "error")
+        return False, msg
+
+
+def apply_php_security_hardening(ini_path, log_func=None):
+    """
+    資安弱點防護：隱藏 PHP 版本資訊 (expose_php = Off)
+    移除 HTTP 回應標頭中的 X-Powered-By: PHP/... 洩漏
+    """
+    if not os.path.isfile(ini_path):
+        if log_func:
+            log_func(f"⚠️ 未找到 PHP 設定檔：{ini_path}", "warning")
+        return False, "找不到 php.ini"
+
+    try:
+        with open(ini_path, "r", encoding="utf-8", errors="replace") as f:
+            content = f.read()
+
+        orig_content = content
+
+        if re.search(r"(?m)^\s*#?\s*;?\s*expose_php\b", content):
+            content = re.sub(
+                r"(?m)^\s*#?\s*;?\s*expose_php\s*=.*$",
+                "expose_php = Off",
+                content
+            )
+        else:
+            if "[PHP]" in content:
+                content = content.replace("[PHP]\n", "[PHP]\n# 資安弱點防護：隱藏 PHP 版本\nexpose_php = Off\n", 1)
+            else:
+                content += "\n# 資安弱點防護：隱藏 PHP 版本\nexpose_php = Off\n"
+
+        if content != orig_content:
+            bak_path = ini_path + f".bak_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+            try:
+                shutil.copyfile(ini_path, bak_path)
+            except Exception:
+                pass
+            with open(ini_path, "w", encoding="utf-8") as f:
+                f.write(content)
+            if log_func:
+                log_func(f"  ✓ {os.path.basename(os.path.dirname(ini_path))}/php.ini 已套用資安強化 (expose_php = Off)", "success")
+            return True, "已成功套用 PHP 資安防護"
+        else:
+            if log_func:
+                log_func(f"  ℹ️ {os.path.basename(os.path.dirname(ini_path))}/php.ini 已設定 expose_php = Off，無需變更", "info")
+            return True, "設定已是最新狀態"
+    except Exception as e:
+        msg = f"套用 PHP 資安防護發生異常: {e}"
+        if log_func:
+            log_func(f"  ❌ {msg}", "error")
+        return False, msg
+
+
+def check_apache_syntax(apache_dir, log_func=None):
+    """檢驗 Apache httpd.conf 設定檔語法 (httpd.exe -t)"""
+    httpd_exe = os.path.join(apache_dir, "bin", "httpd.exe")
+    if not os.path.isfile(httpd_exe):
+        return True, "找不到 httpd.exe"
+
+    try:
+        res = subprocess.run(
+            [httpd_exe, "-t"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
+        )
+        combined = (res.stderr + " " + res.stdout).strip()
+        if "Syntax OK" in combined:
+            if log_func:
+                log_func("  ✓ Apache 設定檔語法檢驗通過 (Syntax OK)！", "success")
+            return True, "Syntax OK"
+        else:
+            if log_func:
+                log_func(f"  ⚠️ Apache 設定檔語法檢驗回傳警告/錯誤: {combined}", "warning")
+            return False, combined
+    except Exception as e:
+        if log_func:
+            log_func(f"  ⚠️ 檢驗 Apache 語法時發生例外: {e}", "warning")
+        return False, str(e)
+
+
+def install_apache_service(apache_dir, svc_name="Apache2.4", log_func=None):
+    """在 Windows 系統註冊安裝 Apache 服務 (httpd.exe -k install)"""
+    httpd_exe = os.path.join(apache_dir, "bin", "httpd.exe")
+    if not os.path.isfile(httpd_exe):
+        if log_func:
+            log_func(f"⚠️ 找不到 httpd.exe，無法註冊服務：{httpd_exe}", "warning")
+        return False
+
+    existing_svc = query_apache_service()
+    if existing_svc:
+        if log_func:
+            log_func(f"ℹ️ 系統已註冊 Apache 服務 [{existing_svc}]，無需重複安裝。", "info")
+        return True
+
+    if log_func:
+        log_func(f"⏳ 正在註冊 Windows 服務 [{svc_name}]...", "info")
+    try:
+        res = subprocess.run(
+            [httpd_exe, "-k", "install", "-n", svc_name],
+            capture_output=True,
+            text=True,
+            timeout=15,
+            creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
+        )
+        combined = (res.stdout + " " + res.stderr).strip()
+        if res.returncode == 0 or "successfully installed" in combined.lower():
+            if log_func:
+                log_func(f"✅ Apache 服務 [{svc_name}] 註冊安裝成功！", "success")
+            return True
+        else:
+            if log_func:
+                log_func(f"⚠️ 註冊 Apache 服務回傳: {combined}", "warning")
+            return False
+    except Exception as e:
+        if log_func:
+            log_func(f"❌ 註冊 Apache 服務失敗: {e}", "error")
+        return False
+
+
+def configure_apache_environment(apache_dir, root_dir, php7_dir=None, php85_dir=None, enable_security=True, log_func=None):
+    """
+    自動校正 Apache httpd.conf 設定檔：
+    1. 校正 Define SRVROOT 為目標 Apache24 目錄 (正斜線)
+    2. 若啟用資安強化，確保 ServerTokens Prod 與 ServerSignature Off
+    3. 若目標存在 PHP 7 (php7apache2_4.dll)，自動配置或更新 PHP 7 模組載入
+    4. 若目標存在 PHP 8.5 與 LAH-API，自動配置 mod_proxy_fcgi 轉發規則
+    5. 執行 httpd.exe -t 語法檢驗
+    """
+    conf_path = os.path.join(apache_dir, "conf", "httpd.conf")
+    if not os.path.isfile(conf_path):
+        if log_func:
+            log_func(f"⚠️ 未找到 httpd.conf：{conf_path}", "warning")
+        return False
+
+    try:
+        with open(conf_path, "r", encoding="utf-8", errors="replace") as f:
+            content = f.read()
+
+        orig_content = content
+        apache_fwd = apache_dir.replace('\\', '/')
+
+        # 1. 校正 SRVROOT
+        if re.search(r'(?m)^\s*Define\s+SRVROOT\b', content):
+            content = re.sub(
+                r'(?m)^\s*Define\s+SRVROOT\s+.*$',
+                f'Define SRVROOT "{apache_fwd}"',
+                content
+            )
+        else:
+            content = f'Define SRVROOT "{apache_fwd}"\nServerRoot "${{SRVROOT}}"\n' + content
+
+        # 2. 資安強化
+        if enable_security:
+            if re.search(r"(?m)^\s*#?\s*ServerTokens\b", content):
+                content = re.sub(r"(?m)^\s*#?\s*ServerTokens\s+.*$", "ServerTokens Prod", content)
+            else:
+                content += "\nServerTokens Prod\n"
+
+            if re.search(r"(?m)^\s*#?\s*ServerSignature\b", content):
+                content = re.sub(r"(?m)^\s*#?\s*ServerSignature\s+.*$", "ServerSignature Off", content)
+            else:
+                content += "\nServerSignature Off\n"
+
+        # 3. 檢查並配置 PHP 7.4 (mod_php7)
+        if php7_dir and os.path.isdir(php7_dir):
+            p7_fwd = php7_dir.replace('\\', '/')
+            p7_dll = os.path.join(php7_dir, "php7apache2_4.dll")
+            if os.path.isfile(p7_dll):
+                if not re.search(r"(?m)^\s*LoadModule\s+php7_module\b", content):
+                    php7_block = (
+                        f'\n# =====================================================================\n'
+                        f'# PHP 7.4 (mod_php7) 自動掛載設定\n'
+                        f'# =====================================================================\n'
+                        f'LoadFile "{p7_fwd}/php7ts.dll"\n'
+                        f'LoadModule php7_module "{p7_fwd}/php7apache2_4.dll"\n'
+                        f'PHPIniDir "{p7_fwd}"\n'
+                        f'<FilesMatch \\.php$>\n'
+                        f'    SetHandler application/x-httpd-php\n'
+                        f'</FilesMatch>\n'
+                    )
+                    content += php7_block
+                    if log_func:
+                        log_func("  ✓ 已向 Apache httpd.conf 注入 PHP 7.4 模組載入規則", "info")
+                else:
+                    content = re.sub(
+                        r'(?m)^\s*LoadModule\s+php7_module\s+.*$',
+                        f'LoadModule php7_module "{p7_fwd}/php7apache2_4.dll"',
+                        content
+                    )
+                    content = re.sub(
+                        r'(?m)^\s*PHPIniDir\s+.*$',
+                        f'PHPIniDir "{p7_fwd}"',
+                        content
+                    )
+
+        # 4. 檢查並配置 PHP 8.5 (LAH-API FastCGI)
+        if php85_dir and os.path.isdir(php85_dir):
+            api_dir = os.path.join(root_dir, "LAH-API")
+            if os.path.isdir(api_dir):
+                api_fwd = api_dir.replace('\\', '/')
+                content = re.sub(r'(?m)^\s*#\s*(LoadModule\s+proxy_module\s+modules/mod_proxy\.so)', r'\1', content)
+                content = re.sub(r'(?m)^\s*#\s*(LoadModule\s+proxy_fcgi_module\s+modules/mod_proxy_fcgi\.so)', r'\1', content)
+
+                fcgi_block = (
+                    f'\n# =====================================================================\n'
+                    f'# LAH-API (PHP 8.5 FastCGI via PM2 on 127.0.0.1:8085)\n'
+                    f'# =====================================================================\n'
+                    f'Alias /LAH-API/api "{api_fwd}/v1"\n'
+                    f'Alias /lah-api/api "{api_fwd}/v1"\n'
+                    f'Alias /LAH-API "{api_fwd}"\n'
+                    f'Alias /lah-api "{api_fwd}"\n'
+                    f'<Directory "{api_fwd}">\n'
+                    f'    Header set Access-Control-Allow-Origin "*"\n'
+                    f'    Options -Indexes +FollowSymLinks\n'
+                    f'    AllowOverride None\n'
+                    f'    Require all granted\n'
+                    f'    <FilesMatch "\\.php$">\n'
+                    f'        <If "-f %{{REQUEST_FILENAME}}">\n'
+                    f'            SetHandler "proxy:fcgi://127.0.0.1:8085/"\n'
+                    f'            ProxyFCGISetEnvIf "reqenv(\'SCRIPT_FILENAME\') =~ m#^proxy:fcgi://127\\.0\\.0\\.1:8085/(.*)$#" SCRIPT_FILENAME "$1"\n'
+                    f'        </If>\n'
+                    f'    </FilesMatch>\n'
+                    f'</Directory>\n'
+                    f'<Proxy "fcgi://127.0.0.1:8085/" enablereuse=on max=16>\n'
+                    f'    ProxySet timeout=300\n'
+                    f'</Proxy>\n'
+                )
+                if "proxy:fcgi://127.0.0.1:8085/" not in content:
+                    content += fcgi_block
+                    if log_func:
+                        log_func("  ✓ 已向 Apache httpd.conf 注入 LAH-API PHP 8.5 FastCGI 轉發規則", "info")
+
+        if content != orig_content:
+            bak_path = conf_path + f".bak_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+            try:
+                shutil.copyfile(conf_path, bak_path)
+            except Exception:
+                pass
+            with open(conf_path, "w", encoding="utf-8") as f:
+                f.write(content)
+            if log_func:
+                log_func("  ✓ Apache httpd.conf 設定已自動更新！", "success")
+
+        check_apache_syntax(apache_dir, log_func)
+        return True
+    except Exception as e:
+        if log_func:
+            log_func(f"  ❌ 設定 Apache 發生異常: {e}", "error")
+        return False
 
 
 def _decode_console_bytes(raw_bytes):
@@ -1437,7 +1789,10 @@ def detect_strip_prefix(zf, expected_folder_name, zip_stem, target_leaf_name="",
 
     if not has_root_files and len(top_dirs) == 1:
         single_dir = list(top_dirs)[0]
-        if single_dir.lower() in candidates:
+        s_lower = single_dir.lower()
+        if (s_lower in candidates or
+            any(s_lower.startswith(c) or c.startswith(s_lower) for c in candidates) or
+            s_lower.startswith("httpd") or s_lower.startswith("apache") or s_lower.startswith("php")):
             return single_dir + '/'
 
     return ""
@@ -1484,8 +1839,8 @@ class UpdaterApp:
     def __init__(self, root):
         self.root = root
         self.root.title("智慧控管與監控系統 - 自動更新工具")
-        self.root.geometry("980x750")
-        self.root.minsize(860, 640)
+        self.root.geometry("1260x720")
+        self.root.minsize(1100, 620)
 
         # 基礎路徑
         self.app_dir = get_app_dir()
@@ -1543,6 +1898,10 @@ class UpdaterApp:
                 "target_path_var": tk.StringVar(value=""),
                 "is_custom_path": False
             }
+
+        # 左側基礎環境選項變數
+        self.auto_register_apache_var = tk.BooleanVar(value=True)
+        self.auto_security_hardening_var = tk.BooleanVar(value=True)
 
         # Apache 自動重啟勾選（預設留白，偵測到本機服務時自動勾選）
         self.restart_apache_var = tk.BooleanVar(value=False)
@@ -1643,98 +2002,82 @@ class UpdaterApp:
         self.btn_browse = ttk.Button(dir_inner, text="瀏覽...", command=self._browse_root_dir, width=10)
         self.btn_browse.pack(side=tk.RIGHT)
 
-        # 3. 更新包偵測清單區塊 (side=tk.TOP, 自適應剩餘中央空間)
-        pkg_frame = ttk.LabelFrame(main_frame, text=" 📦 更新包偵測與各模組安裝路徑 ", padding="6")
-        pkg_frame.pack(side=tk.TOP, fill=tk.BOTH, expand=True, pady=(0, 6))
+        # 3. 雙欄卡片式更新清單區塊 (左右雙欄格局)
+        pkg_frame = ttk.Frame(main_frame)
+        pkg_frame.pack(side=tk.TOP, fill=tk.BOTH, expand=True, pady=(0, 4))
 
-        # 表頭提示
-        header_hint = ttk.Label(
-            pkg_frame,
-            text=f"來源更新目錄：{self.app_dir}  (各模組路徑預設跟隨根目錄，亦可單獨點擊「瀏覽...」自訂)",
-            foreground="#555555",
-            font=("Microsoft JhengHei UI", 10)
-        )
-        header_hint.pack(anchor=tk.W, pady=(0, 4))
-
-        # 建立 7 個更新包項目元件（兩列卡片式佈局，支援個別自訂目標路徑與附屬套件縮排）
         self.chk_widgets = {}
         self.path_entries = {}
         self.browse_buttons = {}
         self.reset_buttons = {}
 
-        for pkg in PACKAGE_CONFIGS:
-            p_id = pkg["id"]
-            v = self.pkg_vars[p_id]
-            is_sub = pkg.get("is_sub_package", False)
+        # =============================================================
+        # 左側欄位：基礎環境與 Web 伺服器 (Apache / PHP)
+        # =============================================================
+        left_col = ttk.LabelFrame(pkg_frame, text=" 🌐 基礎環境與 Web 伺服器 (Apache / PHP) ", padding="6")
+        left_col.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 4))
 
-            # 附屬子套件卡片整體向右縮排 (left=26px)
-            card_padding = (26, 1, 0, 1) if is_sub else (0, 1, 0, 1)
-            item_card = ttk.Frame(pkg_frame, padding=card_padding)
-            item_card.pack(fill=tk.X, pady=1)
+        left_hint = ttk.Label(
+            left_col,
+            text=f"來源：程式目錄下的 x64 安裝包 (支援 httpd-2.4.*.zip, php-7.4.*.zip, php-8.*.zip)",
+            foreground="#555555",
+            font=("Microsoft JhengHei UI", 10)
+        )
+        left_hint.pack(anchor=tk.W, pady=(0, 4))
 
-            # 第 1 列：核取方塊 + 狀態標籤
-            top_line = ttk.Frame(item_card)
-            top_line.pack(fill=tk.X)
+        for pkg in BASE_ENV_CONFIGS:
+            self._create_pkg_card(left_col, pkg)
 
-            chk = ttk.Checkbutton(
-                top_line,
-                text=pkg["title"],
-                variable=v["checked"]
-            )
-            chk.pack(side=tk.LEFT)
-            self.chk_widgets[p_id] = chk
+        # 左欄底部控制選項
+        left_ctrl_frame = ttk.Frame(left_col, padding="2")
+        left_ctrl_frame.pack(side=tk.BOTTOM, fill=tk.X, pady=(4, 0))
 
-            status_lbl = tk.Label(
-                top_line,
-                textvariable=v["status_var"],
-                font=("Microsoft JhengHei UI", 11, "bold"),
-                anchor="e"
-            )
-            status_lbl.pack(side=tk.RIGHT, padx=4)
-            v["status_label_widget"] = status_lbl
+        # 獨立按鈕：手動一鍵套用資安弱點防護
+        self.btn_sec_harden = ttk.Button(
+            left_ctrl_frame,
+            text="🛡️ 一鍵套用資安弱點防護 (隱藏 Apache / PHP 版本資訊)",
+            command=self.manual_apply_security_hardening
+        )
+        self.btn_sec_harden.pack(fill=tk.X, pady=(3, 2))
 
-            # 第 2 列：縮排的個別目標解壓縮路徑輸入框 + 瀏覽按鈕 + 重設按鈕
-            bottom_line = ttk.Frame(item_card, padding=(24, 1, 0, 0))
-            bottom_line.pack(fill=tk.X)
+        chk_sec = ttk.Checkbutton(
+            left_ctrl_frame,
+            text="安裝/更新時自動套用資安防護 (ServerTokens Prod / expose_php = Off)",
+            variable=self.auto_security_hardening_var
+        )
+        chk_sec.pack(anchor=tk.W, pady=(1, 2))
 
-            ttk.Label(
-                bottom_line,
-                text="目標路徑：",
-                font=("Microsoft JhengHei UI", 10),
-                foreground="#555555"
-            ).pack(side=tk.LEFT)
+        chk_reg_apache = ttk.Checkbutton(
+            left_ctrl_frame,
+            text="若未安裝 Apache 服務則自動註冊 (Apache2.4)",
+            variable=self.auto_register_apache_var
+        )
+        chk_reg_apache.pack(anchor=tk.W, pady=(1, 2))
 
-            path_entry = ttk.Entry(
-                bottom_line,
-                textvariable=v["target_path_var"],
-                font=("Consolas", 11)
-            )
-            path_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(2, 6))
-            path_entry.bind("<KeyRelease>", lambda e, pid=p_id: self._on_module_path_manual_edit(pid))
-            self.path_entries[p_id] = path_entry
+        # =============================================================
+        # 右側欄位：智慧控管系統模組更新 (LAH 應用與套件)
+        # =============================================================
+        right_col = ttk.LabelFrame(pkg_frame, text=" 📦 智慧控管系統模組更新 (LAH 應用與套件) ", padding="6")
+        right_col.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=(4, 0))
 
-            btn_browse_pkg = ttk.Button(
-                bottom_line,
-                text="瀏覽...",
-                width=7,
-                command=lambda pid=p_id: self._browse_pkg_target_dir(pid)
-            )
-            btn_browse_pkg.pack(side=tk.LEFT, padx=(0, 4))
-            self.browse_buttons[p_id] = btn_browse_pkg
+        right_hint = ttk.Label(
+            right_col,
+            text=f"來源更新目錄：{self.app_dir}  (各模組路徑預設跟隨根目錄，亦可單獨點擊「瀏覽...」自訂)",
+            foreground="#555555",
+            font=("Microsoft JhengHei UI", 10)
+        )
+        right_hint.pack(anchor=tk.W, pady=(0, 4))
 
-            btn_reset_pkg = ttk.Button(
-                bottom_line,
-                text="↺ 重設",
-                width=6,
-                command=lambda pid=p_id: self._reset_pkg_target_dir(pid)
-            )
-            btn_reset_pkg.pack(side=tk.LEFT)
-            self.reset_buttons[p_id] = btn_reset_pkg
+        for pkg in APP_PACKAGE_CONFIGS:
+            self._create_pkg_card(right_col, pkg)
 
-        # 服務控制與功能按鈕列
+        # 右欄底部控制選項
+        right_ctrl_frame = ttk.Frame(right_col, padding="2")
+        right_ctrl_frame.pack(side=tk.BOTTOM, fill=tk.X, pady=(4, 0))
+
         # 第 1 列：Apache 服務偵測重啟選項 + 重新掃描按鈕
-        ctrl_row_apache = ttk.Frame(pkg_frame, padding="2")
-        ctrl_row_apache.pack(fill=tk.X, pady=(6, 2))
+        ctrl_row_apache = ttk.Frame(right_ctrl_frame, padding="1")
+        ctrl_row_apache.pack(fill=tk.X, pady=(2, 2))
 
         self.chk_apache = ttk.Checkbutton(
             ctrl_row_apache,
@@ -1748,8 +2091,8 @@ class UpdaterApp:
         self.btn_rescan = ttk.Button(ctrl_row_apache, text="🔄 重新掃描", command=self.rescan, width=12)
         self.btn_rescan.pack(side=tk.RIGHT)
 
-        # 第 2 列：PM2 管理套件偵測與更新後重啟服務選項（置於 Apache 下方）
-        ctrl_row_pm2 = ttk.Frame(pkg_frame, padding="2")
+        # 第 2 列：PM2 管理套件偵測與更新後重啟服務選項
+        ctrl_row_pm2 = ttk.Frame(right_ctrl_frame, padding="1")
         ctrl_row_pm2.pack(fill=tk.X, pady=(1, 2))
 
         self.chk_pm2 = ttk.Checkbutton(
@@ -1761,16 +2104,14 @@ class UpdaterApp:
         )
         self.chk_pm2.pack(side=tk.LEFT)
 
-        # PM2 核心守護進程綁定狀態標籤
         self.lbl_pm2_status = tk.Label(
             ctrl_row_pm2,
             textvariable=self.pm2_daemon_status_var,
             font=("Microsoft JhengHei UI", 10, "bold"),
             fg="#555555"
         )
-        self.lbl_pm2_status.pack(side=tk.LEFT, padx=(10, 6))
+        self.lbl_pm2_status.pack(side=tk.LEFT, padx=(8, 4))
 
-        # 手動一鍵校正 PM2 核心按鈕
         self.btn_align_pm2 = ttk.Button(
             ctrl_row_pm2,
             text="⚡ 立即校正 PM2 核心",
@@ -1779,7 +2120,6 @@ class UpdaterApp:
         )
         self.btn_align_pm2.pack(side=tk.RIGHT, padx=(4, 0))
 
-        # PM2 開機自啟動管理按鈕
         self.btn_autostart_pm2 = ttk.Button(
             ctrl_row_pm2,
             text="⚙️ 開機自啟動設定",
@@ -1789,6 +2129,73 @@ class UpdaterApp:
         self.btn_autostart_pm2.pack(side=tk.RIGHT, padx=(4, 0))
 
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
+
+    def _create_pkg_card(self, parent_frame, pkg):
+        """建立單一更新包項目元件卡片（支援目標路徑自訂與附屬套件縮排）"""
+        p_id = pkg["id"]
+        v = self.pkg_vars[p_id]
+        is_sub = pkg.get("is_sub_package", False)
+
+        card_padding = (22, 1, 0, 1) if is_sub else (0, 1, 0, 1)
+        item_card = ttk.Frame(parent_frame, padding=card_padding)
+        item_card.pack(fill=tk.X, pady=1)
+
+        top_line = ttk.Frame(item_card)
+        top_line.pack(fill=tk.X)
+
+        chk = ttk.Checkbutton(
+            top_line,
+            text=pkg["title"],
+            variable=v["checked"]
+        )
+        chk.pack(side=tk.LEFT)
+        self.chk_widgets[p_id] = chk
+
+        status_lbl = tk.Label(
+            top_line,
+            textvariable=v["status_var"],
+            font=("Microsoft JhengHei UI", 11, "bold"),
+            anchor="e"
+        )
+        status_lbl.pack(side=tk.RIGHT, padx=4)
+        v["status_label_widget"] = status_lbl
+
+        bottom_line = ttk.Frame(item_card, padding=(24, 1, 0, 0))
+        bottom_line.pack(fill=tk.X)
+
+        ttk.Label(
+            bottom_line,
+            text="目標路徑：",
+            font=("Microsoft JhengHei UI", 10),
+            foreground="#555555"
+        ).pack(side=tk.LEFT)
+
+        path_entry = ttk.Entry(
+            bottom_line,
+            textvariable=v["target_path_var"],
+            font=("Consolas", 11)
+        )
+        path_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(2, 6))
+        path_entry.bind("<KeyRelease>", lambda e, pid=p_id: self._on_module_path_manual_edit(pid))
+        self.path_entries[p_id] = path_entry
+
+        btn_browse_pkg = ttk.Button(
+            bottom_line,
+            text="瀏覽...",
+            width=7,
+            command=lambda pid=p_id: self._browse_pkg_target_dir(pid)
+        )
+        btn_browse_pkg.pack(side=tk.LEFT, padx=(0, 4))
+        self.browse_buttons[p_id] = btn_browse_pkg
+
+        btn_reset_pkg = ttk.Button(
+            bottom_line,
+            text="↺ 重設",
+            width=6,
+            command=lambda pid=p_id: self._reset_pkg_target_dir(pid)
+        )
+        btn_reset_pkg.pack(side=tk.LEFT)
+        self.reset_buttons[p_id] = btn_reset_pkg
 
     def _show_release_notes_dialog(self):
         """彈出獨立視窗顯示版本更新說明內容"""
@@ -2425,6 +2832,102 @@ class UpdaterApp:
 
         threading.Thread(target=_worker, daemon=True).start()
 
+    def manual_apply_security_hardening(self):
+        """獨立功能按鈕：一鍵手動套用資安弱點防護（隱藏 Web 伺服器與 PHP 版本）"""
+        if self.is_updating:
+            messagebox.showwarning("提示", "系統正在執行更新作業，請稍候再進行資安防護設定！", parent=self.root)
+            return
+
+        root_dir = self.root_dir_var.get().strip()
+        apache_dir = os.path.normpath(self.pkg_vars["apache24"]["target_path_var"].get().strip()) if "apache24" in self.pkg_vars else os.path.join(root_dir, "Apache24")
+        php7_dir = os.path.normpath(self.pkg_vars["php7"]["target_path_var"].get().strip()) if "php7" in self.pkg_vars else os.path.join(root_dir, "php7")
+        php85_dir = os.path.normpath(self.pkg_vars["php85"]["target_path_var"].get().strip()) if "php85" in self.pkg_vars else os.path.join(root_dir, "php85")
+
+        httpd_conf = os.path.join(apache_dir, "conf", "httpd.conf")
+        php7_ini = os.path.join(php7_dir, "php.ini")
+        php85_ini = os.path.join(php85_dir, "php.ini")
+
+        found_any = os.path.isfile(httpd_conf) or os.path.isfile(php7_ini) or os.path.isfile(php85_ini)
+        if not found_any:
+            messagebox.showwarning(
+                "找不到設定檔",
+                f"在指定的安裝根目錄下未找到任何 Apache 或 PHP 設定檔：\n"
+                f"• {httpd_conf}\n"
+                f"• {php7_ini}\n"
+                f"• {php85_ini}\n\n請確認安裝根目錄路徑是否正確！",
+                parent=self.root
+            )
+            return
+
+        self._open_progress_dialog()
+        self.log("=" * 60, "info")
+        self.log("🛡️ 開始手動套用資安弱點防護（隱藏 Web 伺服器與 PHP 版本資訊）...", "info")
+
+        results = []
+
+        # 1. 處理 Apache httpd.conf
+        if os.path.isfile(httpd_conf):
+            self.log(f"正在檢查並設定 Apache: {httpd_conf}", "info")
+            ok, msg = apply_apache_security_hardening(httpd_conf, self.log)
+            if ok:
+                results.append("• Apache httpd.conf: 已設定 ServerTokens Prod 與 ServerSignature Off")
+                check_apache_syntax(apache_dir, self.log)
+            else:
+                results.append(f"• Apache httpd.conf: 套用失敗 ({msg})")
+        else:
+            self.log(f"ℹ️ 未偵測到 Apache 設定檔: {httpd_conf}（略過）", "info")
+
+        # 2. 處理 PHP 7 php.ini
+        if os.path.isfile(php7_ini):
+            self.log(f"正在檢查並設定 PHP 7: {php7_ini}", "info")
+            ok, msg = apply_php_security_hardening(php7_ini, self.log)
+            if ok:
+                results.append("• PHP 7 php.ini: 已設定 expose_php = Off")
+            else:
+                results.append(f"• PHP 7 php.ini: 套用失敗 ({msg})")
+        else:
+            self.log(f"ℹ️ 未偵測到 PHP 7 設定檔: {php7_ini}（略過）", "info")
+
+        # 3. 處理 PHP 8.5 php.ini
+        if os.path.isfile(php85_ini):
+            self.log(f"正在檢查並設定 PHP 8.5: {php85_ini}", "info")
+            ok, msg = apply_php_security_hardening(php85_ini, self.log)
+            if ok:
+                results.append("• PHP 8.5 php.ini: 已設定 expose_php = Off")
+            else:
+                results.append(f"• PHP 8.5 php.ini: 套用失敗 ({msg})")
+        else:
+            self.log(f"ℹ️ 未偵測到 PHP 8.5 設定檔: {php85_ini}（略過）", "info")
+
+        self.log("=" * 60, "success")
+        self.log("🎉 資安弱點防護設定套用完成！", "success")
+
+        # 若 Apache 正在運行，詢問是否重啟以生效
+        svc_name = self.apache_service_name or query_apache_service()
+        restarted_svc = False
+        if svc_name and is_service_running(svc_name):
+            do_restart = messagebox.askyesno(
+                "重啟服務以套用新設定",
+                f"資安弱點防護設定已更新完成！\n\n"
+                f"偵測到 Apache 服務 [{svc_name}] 正在運行中。\n"
+                f"是否立即重新啟動 Apache 服務，使隱藏版本設定立即生效？",
+                parent=self.root
+            )
+            if do_restart:
+                self.log(f"正在重啟 Apache 服務 [{svc_name}]...", "info")
+                stop_apache_service(svc_name, self.log)
+                start_apache_service(svc_name, self.log)
+                restarted_svc = True
+                self.log(f"✅ Apache 服務 [{svc_name}] 已成功重啟並套用資安設定！", "success")
+
+        res_text = "\n".join(results)
+        restart_hint = f"\n\n已成功重啟 Apache 服務 [{svc_name}]！" if restarted_svc else ("\n\n提示：若服務正在運行，請重啟 Apache 與 PM2 使設定生效。" if svc_name else "")
+        messagebox.showinfo(
+            "資安弱點防護套用完成",
+            f"🛡️ 資安弱點防護處理完成！\n\n{res_text}{restart_hint}",
+            parent=self.root
+        )
+
     def rescan(self):
         """重新掃描更新包與更新說明檔案"""
         self.log(f"正在掃描更新目錄：{self.app_dir} ...", "info")
@@ -2441,6 +2944,20 @@ class UpdaterApp:
             v = self.pkg_vars[p_id]
             candidates = [p_name] + pkg.get("alt_names", [])
             found_path = next((os.path.join(self.app_dir, name) for name in candidates if os.path.isfile(os.path.join(self.app_dir, name))), None)
+
+            # 支援 pattern 正則表達式模糊/萬用字元辨識
+            if not found_path and pkg.get("pattern"):
+                try:
+                    pat = re.compile(pkg["pattern"])
+                    for fname in os.listdir(self.app_dir):
+                        if pat.match(fname):
+                            full_f = os.path.join(self.app_dir, fname)
+                            if os.path.isfile(full_f):
+                                found_path = full_f
+                                break
+                except Exception:
+                    pass
+
             zip_path = found_path if found_path else os.path.join(self.app_dir, p_name)
 
             if os.path.isfile(zip_path):
@@ -2554,14 +3071,33 @@ class UpdaterApp:
                 messagebox.showwarning("提示", f"模組 [{p['name']}] 未設定目標路徑，請先輸入或選擇目標路徑！")
                 return
 
-        summary = "\n".join([f"• {p['name']} ➔ {self.pkg_vars[p['id']]['target_path_var'].get().strip()}" for p in selected_pkgs])
+        summary_env = []
+        summary_app = []
+        for p in selected_pkgs:
+            tgt = self.pkg_vars[p["id"]]["target_path_var"].get().strip()
+            fname = os.path.basename(self.pkg_vars[p["id"]]["filepath"]) or p["name"]
+            line = f"• {p['title']} [{fname}] ➔ {tgt}"
+            if p.get("is_base_env"):
+                summary_env.append(line)
+            else:
+                summary_app.append(line)
+
+        summary_parts = []
+        if summary_env:
+            summary_parts.append("【基礎環境與 Web 伺服器】：\n" + "\n".join(summary_env))
+        if summary_app:
+            summary_parts.append("【智慧控管系統模組】：\n" + "\n".join(summary_app))
+
+        summary = "\n\n".join(summary_parts)
         apache_note = f"\n• 更新前後將自動重啟 Apache 服務 ({self.apache_service_name or '自動搜尋'})" if self.restart_apache_var.get() else ""
         pm2_note = "\n• 更新完成後將自動重啟 PM2 服務 (pm2 restart all)" if self.restart_pm2_var.get() else ""
         node_note = "\n• 包含 Node.js 綠色執行環境或核心依賴套件更新，解壓前將安全暫停 Node/PM2 服務以釋放檔案鎖定" if any(p["id"] == "node" or p.get("is_sub_package", False) for p in selected_pkgs) else ""
+        sec_note = "\n• 基礎環境更新後將自動套用資安弱點防護 (隱藏 Apache / PHP 版本資訊)" if self.auto_security_hardening_var.get() and any(p.get("is_base_env") for p in selected_pkgs) else ""
+        apache_svc_note = "\n• 安裝後將自動檢查並註冊 Apache2.4 Windows 服務" if self.auto_register_apache_var.get() and any(p["id"] == "apache24" for p in selected_pkgs) else ""
 
         confirm = messagebox.askyesno(
             "確認開始更新",
-            f"即將開始更新以下項目：\n{summary}{apache_note}{pm2_note}{node_note}\n\n是否確認立即執行解壓縮覆蓋？"
+            f"即將開始更新以下項目：\n\n{summary}{apache_note}{pm2_note}{node_note}{sec_note}{apache_svc_note}\n\n是否確認立即執行解壓縮覆蓋？"
         )
         if not confirm:
             return
@@ -2578,19 +3114,24 @@ class UpdaterApp:
         self.log("🚀 開始執行自動更新作業...", "info")
         self.set_progress(0, "正在準備更新作業...")
 
+        # 優先將選取的更新包排序：is_base_env 基礎環境優先解壓縮
+        selected_pkgs.sort(key=lambda p: (0 if p.get("is_base_env") else 1))
+
         svc_name = self.apache_service_name or query_apache_service()
-        should_restart_apache = self.restart_apache_var.get()
+        has_base_env_update = any(p.get("is_base_env") for p in selected_pkgs)
+        has_apache_app_update = any(p["id"] in ("www", "lah_api") for p in selected_pkgs)
+        should_stop_apache = self.restart_apache_var.get() or has_base_env_update or has_apache_app_update
         apache_was_stopped = False
         apache_restarted = False
 
         try:
-            # 步驟 1：若有勾選，先停止 Apache 服務
-            if should_restart_apache:
-                if svc_name:
+            # 步驟 1：若需要，先停止 Apache 服務以防止 DLL 與執行檔鎖定
+            if should_stop_apache:
+                if svc_name and is_service_running(svc_name):
                     self.set_progress(2, f"正在停止 Apache 服務 [{svc_name}]...")
                     apache_was_stopped = stop_apache_service(svc_name, self.log)
                 else:
-                    self.log("ℹ️ 勾選了重啟 Apache，但系統未偵測到 Apache 服務，跳過停止步驟。", "warning")
+                    self.log("ℹ️ 準備更新相關服務，系統未偵測到運行中的 Apache 服務，跳過停止步驟。", "info")
 
             # 步驟 1.5：若有更新 node.zip 或 node_modules，執行階梯式安全防護釋放鎖定
             root_dir = self.root_dir_var.get().strip()
@@ -2719,9 +3260,72 @@ class UpdaterApp:
 
                 self.log(f"✅ {p_name} 解壓縮覆蓋完成 (共處理 {pkg_count} 個項目)。", "success")
 
+            # 步驟 3.5：若本次有更新 Apache 或 PHP，執行智慧配置、資安強化與服務註冊
+            has_apache = any(p["id"] == "apache24" for p in selected_pkgs)
+            has_php7 = any(p["id"] == "php7" for p in selected_pkgs)
+            has_php85 = any(p["id"] == "php85" for p in selected_pkgs)
+
+            apache_tgt = os.path.normpath(self.pkg_vars["apache24"]["target_path_var"].get().strip()) if "apache24" in self.pkg_vars else os.path.join(root_dir, "Apache24")
+            php7_tgt = os.path.normpath(self.pkg_vars["php7"]["target_path_var"].get().strip()) if "php7" in self.pkg_vars else os.path.join(root_dir, "php7")
+            php85_tgt = os.path.normpath(self.pkg_vars["php85"]["target_path_var"].get().strip()) if "php85" in self.pkg_vars else os.path.join(root_dir, "php85")
+
+            if has_apache or has_php7 or has_php85:
+                self.set_progress(90, "正在自動校正 Apache 與 PHP 設定檔...")
+                self.log("⏳ 正在檢查並自動校正 Apache 與 PHP 整合設定...", "info")
+
+                if has_apache and os.path.isdir(apache_tgt):
+                    conf_file = os.path.join(apache_tgt, "conf", "httpd.conf")
+                    if not os.path.isfile(conf_file):
+                        ref_conf = os.path.join(root_dir, "LAH-API", "httpd.conf-ref")
+                        if not os.path.isfile(ref_conf):
+                            ref_conf = os.path.join(self.app_dir, "httpd.conf-ref")
+                        if os.path.isfile(ref_conf):
+                            os.makedirs(os.path.join(apache_tgt, "conf"), exist_ok=True)
+                            shutil.copyfile(ref_conf, conf_file)
+                            self.log(f"  ✓ 已套用專案標準 httpd.conf 參考範本至 [{conf_file}]", "info")
+
+                    configure_apache_environment(
+                        apache_dir=apache_tgt,
+                        root_dir=root_dir,
+                        php7_dir=php7_tgt if os.path.isdir(php7_tgt) else None,
+                        php85_dir=php85_tgt if os.path.isdir(php85_tgt) else None,
+                        enable_security=self.auto_security_hardening_var.get(),
+                        log_func=self.log
+                    )
+
+                    if self.auto_register_apache_var.get():
+                        self.set_progress(92, "正在檢查並註冊 Apache Windows 服務...")
+                        install_apache_service(apache_tgt, "Apache2.4", self.log)
+                        self.apache_service_name = query_apache_service() or "Apache2.4"
+                        svc_name = self.apache_service_name
+
+                if has_php7 and os.path.isdir(php7_tgt):
+                    php7_ini = os.path.join(php7_tgt, "php.ini")
+                    if not os.path.isfile(php7_ini):
+                        for cand in ("php.ini-production", "php.ini-development"):
+                            cand_path = os.path.join(php7_tgt, cand)
+                            if os.path.isfile(cand_path):
+                                shutil.copyfile(cand_path, php7_ini)
+                                self.log(f"  ✓ 已依據 {cand} 產生 PHP 7 設定檔 (php.ini)", "info")
+                                break
+                    if os.path.isfile(php7_ini) and self.auto_security_hardening_var.get():
+                        apply_php_security_hardening(php7_ini, self.log)
+
+                if has_php85 and os.path.isdir(php85_tgt):
+                    php85_ini = os.path.join(php85_tgt, "php.ini")
+                    if not os.path.isfile(php85_ini):
+                        for cand in ("php.ini-production", "php.ini-development"):
+                            cand_path = os.path.join(php85_tgt, cand)
+                            if os.path.isfile(cand_path):
+                                shutil.copyfile(cand_path, php85_ini)
+                                self.log(f"  ✓ 已依據 {cand} 產生 PHP 8.5 設定檔 (php.ini)", "info")
+                                break
+                    if os.path.isfile(php85_ini) and self.auto_security_hardening_var.get():
+                        apply_php_security_hardening(php85_ini, self.log)
+
             # 若本次有更新 node.zip，自動將目標 node 目錄註冊至使用者 PATH 最前端
             if is_updating_node:
-                self.set_progress(92, "正在註冊綠色 Node.js 環境變數 PATH...")
+                self.set_progress(93, "正在註冊綠色 Node.js 環境變數 PATH...")
                 register_path_to_user_environment(node_tgt, self.log)
 
             # 若目標目錄存在 instantclient_11_2，自動註冊至使用者 PATH
@@ -2730,9 +3334,10 @@ class UpdaterApp:
                 register_path_to_user_environment(oci_dir, self.log)
 
             # 步驟 4：若更新前有停止 Apache，或勾選了重啟，在此重新啟動服務
-            if should_restart_apache and svc_name and apache_was_stopped and not apache_restarted:
-                self.set_progress(95, f"正在啟動 Apache 服務 [{svc_name}]...")
-                start_apache_service(svc_name, self.log)
+            target_svc = self.apache_service_name or svc_name
+            if should_stop_apache and target_svc and apache_was_stopped and not apache_restarted:
+                self.set_progress(95, f"正在啟動 Apache 服務 [{target_svc}]...")
+                start_apache_service(target_svc, self.log)
                 apache_restarted = True
 
             elapsed = time.time() - start_time
