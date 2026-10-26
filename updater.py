@@ -298,11 +298,22 @@ def apply_apache_security_hardening(conf_path, log_func=None, root_dir=None):
         root_fwd = root_dir.replace("\\", "/").rstrip("/")
 
         # 1. 確保啟用 rewrite_module (供 PHP2Shell RewriteCond 防護使用)
-        content = re.sub(
-            r'(?m)^\s*#\s*(LoadModule\s+rewrite_module\s+modules/mod_rewrite\.so)',
-            r'\1',
-            content
-        )
+        if re.search(r'(?m)^\s*#\s*LoadModule\s+rewrite_module\b', content):
+            content = re.sub(
+                r'(?m)^\s*#\s*(LoadModule\s+rewrite_module\s+modules/mod_rewrite\.so)',
+                r'\1',
+                content
+            )
+        elif not re.search(r'(?m)^\s*LoadModule\s+rewrite_module\b', content):
+            if re.search(r'(?m)^\s*LoadModule\b', content):
+                content = re.sub(
+                    r'(?m)^(\s*LoadModule\b)',
+                    r'LoadModule rewrite_module modules/mod_rewrite.so\n\1',
+                    content,
+                    count=1
+                )
+            else:
+                content = "LoadModule rewrite_module modules/mod_rewrite.so\n" + content
 
         # 2. 停用非必要之 ScriptAlias /cgi-bin/ (防止透過 CGI 別名執行腳本)
         content = re.sub(
@@ -351,15 +362,26 @@ def apply_apache_security_hardening(conf_path, log_func=None, root_dir=None):
             f'    <FilesMatch "\\.(php|php5|php7|php8|phtml|phar|cgi|pl|asp|aspx|jsp)$">\n'
             f'        Require all denied\n'
             f'    </FilesMatch>\n'
-            f'</Directory>'
+            f'</Directory>\n\n'
+            f'<Directory "{root_fwd}/www/import">\n'
+            f'    <FilesMatch "\\.(php|php5|php7|php8|phtml|phar|cgi|pl|asp|aspx|jsp)$">\n'
+            f'        Require all denied\n'
+            f'    </FilesMatch>\n'
+            f'</Directory>\n\n'
+            f'<Directory "{root_fwd}/www/uploads">\n'
+            f'    <FilesMatch "\\.(php|php5|php7|php8|phtml|phar|cgi|pl|asp|aspx|jsp)$">\n'
+            f'        Require all denied\n'
+            f'    </FilesMatch>\n'
+            f'</Directory>\n\n'
+            f'<Directory "{root_fwd}/www/log">\n'
+            f'    Require all denied\n'
+            f'</Directory>\n'
+            f'# === End PHP2Shell Mitigation ==='
         )
 
-        existing_p2s_pat = r'(?s)# =+\s*# PHP2Shell \(CVE-2024-4577.*?</Directory>'
+        existing_p2s_pat = r'(?s)# =+\s*# PHP2Shell \(CVE-2024-4577.*?(?:# === End PHP2Shell Mitigation ===|<Directory "[^"]*?/www/export">[\s\S]*?</Directory>)'
         if re.search(existing_p2s_pat, content):
-            # 替換既有 PHP2Shell 區塊至最新設定（注意贪婪匹配至最後一個 www/export 的 </Directory>）
-            p2s_full_pat = r'(?s)# =+\s*# PHP2Shell \(CVE-2024-4577.*?<Directory "[^"]*?/www/export">[\s\S]*?</Directory>'
-            if re.search(p2s_full_pat, content):
-                content = re.sub(p2s_full_pat, php2shell_block, content, count=1)
+            content = re.sub(existing_p2s_pat, lambda m: php2shell_block, content, count=1)
         else:
             content = content.rstrip() + "\n\n" + php2shell_block + "\n"
 
@@ -423,6 +445,12 @@ def apply_php_security_hardening(ini_path, log_func=None):
                     content = content.replace("[PHP]\n", f"[PHP]\n; {comment}\n{key} = {val}\n", 1)
                 else:
                     content += f"\n; {comment}\n{key} = {val}\n"
+
+        # 5. PHP2Shell / WebShell 防護：確保 auto_prepend_file 與 auto_append_file 未被惡意植入
+        for prep in ("auto_prepend_file", "auto_append_file"):
+            pat_active = rf"(?m)^\s*{re.escape(prep)}\s*=\s*\S+.*$"
+            if re.search(pat_active, content):
+                content = re.sub(pat_active, f";{prep} =", content)
 
         if content != orig_content:
             bak_path = ini_path + f".bak_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
@@ -3218,15 +3246,15 @@ class UpdaterApp:
 
         chk_sec = ttk.Checkbutton(
             left_sec_frame,
-            text="安裝/更新時自動套用資安防護 (ServerTokens Prod / expose_php = Off)",
+            text="安裝/更新時自動套用資安防護 (含 PHP2Shell 緩解 / 隱藏版本資訊)",
             variable=self.auto_security_hardening_var
         )
         chk_sec.pack(anchor=tk.W, pady=(1, 2))
 
-        # 獨立按鈕：手動一鍵套用資安弱點防護
+        # 獨立按鈕：手動一鍵套用資安弱點防護與 PHP2Shell 緩解措施
         self.btn_sec_harden = ttk.Button(
             left_sec_frame,
-            text="🛡️ 一鍵套用資安弱點防護 (隱藏 Apache / PHP 版本資訊)",
+            text="🛡️ 一鍵套用資安防護與 PHP2Shell 緩解 (CVE-2024-4577 / 隱藏版本)",
             command=self.manual_apply_security_hardening
         )
         self.btn_sec_harden.pack(fill=tk.X, pady=(3, 2))
@@ -4206,7 +4234,7 @@ class UpdaterApp:
         threading.Thread(target=_worker, daemon=True).start()
 
     def manual_apply_security_hardening(self):
-        """獨立功能按鈕：一鍵手動套用資安弱點防護（隱藏 Web 伺服器與 PHP 版本）"""
+        """獨立功能按鈕：一鍵手動套用資安弱點防護與 PHP2Shell 緩解措施 (CVE-2024-4577 / 隱藏版本資訊)"""
         if self.is_updating:
             messagebox.showwarning("提示", "系統正在執行更新作業，請稍候再進行資安防護設定！", parent=self.root)
             return
@@ -4234,7 +4262,7 @@ class UpdaterApp:
 
         self._open_progress_dialog()
         self.log("=" * 60, "info")
-        self.log("🛡️ 開始手動套用資安弱點防護（隱藏 Web 伺服器與 PHP 版本資訊）...", "info")
+        self.log("🛡️ 開始手動套用資安弱點防護與 PHP2Shell 緩解措施 (CVE-2024-4577 / 隱藏 Web 伺服器與 PHP 版本資訊)...", "info")
 
         results = []
 
@@ -4245,7 +4273,7 @@ class UpdaterApp:
                 configure_apache_mod_php7(apache_dir, root_dir, php7_dir=php7_dir, log_func=self.log)
             ok, msg = apply_apache_security_hardening(httpd_conf, self.log, root_dir=root_dir)
             if ok:
-                results.append("• Apache httpd.conf: 已套用 ServerTokens Prod、CVE-2024-4577 (PHP2Shell) 攔截與禁執行腳本防護")
+                results.append("• Apache httpd.conf: 已套用 ServerTokens Prod、CVE-2024-4577 (PHP2Shell) 攔截與靜態目錄禁執行腳本防護")
                 check_apache_syntax(apache_dir, self.log)
             else:
                 results.append(f"• Apache httpd.conf: 套用失敗 ({msg})")
@@ -4277,7 +4305,7 @@ class UpdaterApp:
             self.log(f"ℹ️ 未偵測到 PHP 8.5 設定檔: {php85_ini}（略過）", "info")
 
         self.log("=" * 60, "success")
-        self.log("🎉 資安弱點防護設定套用完成！", "success")
+        self.log("🎉 資安弱點防護與 PHP2Shell 緩解措施套用完成！", "success")
 
         # 若 Apache 正在運行，詢問是否重啟以生效
         svc_name = self.apache_service_name or query_apache_service()
@@ -4285,7 +4313,7 @@ class UpdaterApp:
         if svc_name and is_service_running(svc_name):
             do_restart = messagebox.askyesno(
                 "重啟服務以套用新設定",
-                f"資安弱點防護與 PHP 擴充模組設定已更新完成！\n\n"
+                f"資安弱點防護、PHP2Shell 緩解與 PHP 擴充模組設定已更新完成！\n\n"
                 f"偵測到 Apache 服務 [{svc_name}] 正在運行中。\n"
                 f"是否立即重新啟動 Apache 與 PHP 8.5 FastCGI 服務，使新設定立即生效？",
                 parent=self.root
@@ -4321,8 +4349,8 @@ class UpdaterApp:
         res_text = "\n".join(results)
         restart_hint = f"\n\n已成功重啟 Apache 服務 [{svc_name}]！" if restarted_svc else ("\n\n提示：若服務正在運行，請重啟 Apache 與 PM2 使設定生效。" if svc_name else "")
         messagebox.showinfo(
-            "資安弱點防護套用完成",
-            f"🛡️ 資安弱點防護處理完成！\n\n{res_text}{restart_hint}",
+            "資安防護與 PHP2Shell 緩解套用完成",
+            f"🛡️ 資安防護與 PHP2Shell (CVE-2024-4577) 緩解措施處理完成！\n\n{res_text}{restart_hint}",
             parent=self.root
         )
 
@@ -4525,7 +4553,7 @@ class UpdaterApp:
         apache_note = f"\n• 更新前後將自動重啟或啟動 Apache 服務 ({self.apache_service_name or 'Apache2.4'})" if (self.restart_apache_var.get() or any(p["id"] == "apache24" for p in selected_pkgs)) else ""
         pm2_note = "\n• 更新完成後將自動綁定綠色版 Node、拉起 PM2 核心服務並設定開機自動化" if (self.restart_pm2_var.get() or any(p.get("is_nodejs") for p in selected_pkgs)) else ""
         node_note = "\n• 包含 Node.js 綠色執行環境或核心依賴套件更新，解壓前將安全暫停 Node/PM2 服務以釋放檔案鎖定" if any(p["id"] == "node" or p.get("is_sub_package", False) for p in selected_pkgs) else ""
-        sec_note = "\n• 將自動套用資安弱點防護 (隱藏 Apache / PHP 版本資訊)" if self.auto_security_hardening_var.get() else ""
+        sec_note = "\n• 將自動套用資安防護與 PHP2Shell 緩解措施 (CVE-2024-4577 / 隱藏版本資訊)" if self.auto_security_hardening_var.get() else ""
         apache_svc_note = "\n• 將自動檢查並註冊啟動 Apache2.4 Windows 服務" if self.auto_register_apache_var.get() else ""
 
         confirm = messagebox.askyesno(

@@ -4,6 +4,19 @@
 
 ---
 
+## [v1.6.8] - 2026-10-26
+
+### 🛡️ 一鍵資安弱點防護與自動安裝核取方塊整合 PHP2Shell 緩解功能
+- **一鍵資安防護按鈕與安裝核取方塊文字明確納入 PHP2Shell 緩解**：
+  - 更新主畫面核取方塊標籤為「安裝/更新時自動套用資安防護 (含 PHP2Shell 緩解 / 隱藏版本資訊)」，讓管理師直觀掌握已包含防護。
+  - 更新獨立按鈕文字為「🛡️ 一鍵套用資安防護與 PHP2Shell 緩解 (CVE-2024-4577 / 隱藏版本)」，點擊即一鍵完整套用並重啟相關服務。
+- **全方位擴充 PHP2Shell (CVE-2024-4577) 與 WebShell 防護範圍**：
+  - **Apache (`httpd.conf`)**：除既有 `www/assets`、`www/export` 禁執行腳本與 `%ad` 注入攔截外，新增保護 `www/import`、`www/uploads` 上傳目錄（`<FilesMatch "\.(php|php5|php7|php8|phtml|phar|cgi|pl|asp|aspx|jsp)$"> Require all denied </FilesMatch>`）並阻斷對 `www/log` 的直接存取，修復替換區塊正規表示式轉義問題。
+  - **PHP (`php.ini`)**：新增清除潛在被惡意植入的 `auto_prepend_file` 與 `auto_append_file` 指令，杜絕 WebShell 透過全域前置載入掛馬。
+  - 更新 PyInstaller 單一可執行檔 `dist\智慧控管與監控系統 - 自動更新工具.exe`。
+
+---
+
 ## [v1.6.7] - 2026-10-25
 
 ### 📋 系統整合每週更新說明 (20261025_系統更新說明.txt) 支援與發布
