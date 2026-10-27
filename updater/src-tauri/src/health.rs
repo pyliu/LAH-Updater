@@ -2,6 +2,8 @@ use std::net::{SocketAddr, TcpStream};
 use std::path::Path;
 use std::thread::sleep;
 use std::time::Duration;
+use crate::pm2::resolve_pm2_command;
+use crate::system::run_cmd_hidden;
 
 pub fn is_port_listening(port: u16, host: &str, timeout_ms: u64) -> bool {
     let addr_str = format!("{}:{}", host, port);
@@ -41,7 +43,32 @@ pub fn verify_all_services_health(root_dir: &Path, apache_dir: Option<&Path>, lo
         }
     }
 
-    // 2. 前端網站 Port 8080 (LAH-NUXTJS)
+    // 2. PHP 8.5 FastCGI Port 8085 (lah-api-v85)
+    let has_php85 = root_dir.join("php85").join("php-cgi.exe").is_file() && root_dir.join("LAH-API").is_dir();
+    if has_php85 {
+        let mut port8085_ok = wait_for_port(8085, 3.0, "127.0.0.1");
+        if !port8085_ok {
+            let eco_path = root_dir.join("LAH-API").join("ecosystem.config.js");
+            if eco_path.is_file() {
+                if let Some(pm2) = resolve_pm2_command(root_dir) {
+                    log_fn("  🔄 偵測到 FastCGI (Port 8085) 尚未監聽，正在透過 PM2 嘗試拉起 lah-api-v85...", "warning");
+                    let _ = run_cmd_hidden(&pm2.to_string_lossy(), &["start", &eco_path.to_string_lossy(), "--no-color"]);
+                    port8085_ok = wait_for_port(8085, 4.0, "127.0.0.1");
+                }
+            }
+        }
+
+        if port8085_ok {
+            reports.push("  • PHP 8.5 FastCGI 核心 (Port 8085): 🟢 正常監聽 (Online)".to_string());
+            log_fn("  ✓ PHP 8.5 FastCGI 核心 (Port 8085) 連線正常！", "success");
+        } else {
+            all_ok = false;
+            reports.push("  • PHP 8.5 FastCGI 核心 (Port 8085): 🔴 連線逾時 (Offline / 待啟動)".to_string());
+            log_fn("  ⚠️ PHP 8.5 FastCGI (Port 8085) 連線失敗，請檢查 PM2 lah-api-v85 是否正常運作。", "warning");
+        }
+    }
+
+    // 3. 前端網站 Port 8080 (LAH-NUXTJS)
     let has_nuxt = root_dir.join("LAH-NUXTJS").is_dir();
     if has_nuxt {
         if wait_for_port(8080, 5.0, "127.0.0.1") {
@@ -54,7 +81,7 @@ pub fn verify_all_services_health(root_dir: &Path, apache_dir: Option<&Path>, lo
         }
     }
 
-    // 3. 即時通訊 WebSocket Port 8081
+    // 4. 即時通訊 WebSocket Port 8081
     let has_messenger = root_dir.join("lah-messenger-server").is_dir();
     if has_messenger {
         if wait_for_port(8081, 4.0, "127.0.0.1") {
@@ -64,7 +91,7 @@ pub fn verify_all_services_health(root_dir: &Path, apache_dir: Option<&Path>, lo
             reports.push("  • 即時通訊 WebSocket (Port 8081): 🟡 未就緒或離線".to_string());
         }
 
-        // 4. 即時通訊 HTTP 附件 Port 8082
+        // 5. 即時通訊 HTTP 附件 Port 8082
         if wait_for_port(8082, 3.0, "127.0.0.1") {
             reports.push("  • 即時通訊 HTTP 附件服務 (Port 8082): 🟢 正常監聽 (Online)".to_string());
             log_fn("  ✓ 即時通訊 HTTP 附件服務 (Port 8082) 連線正常！", "success");

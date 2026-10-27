@@ -1,4 +1,5 @@
 use crate::system::{run_cmd_hidden, run_powershell};
+use regex::Regex;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -25,22 +26,174 @@ pub fn ensure_portable_pm2_patched(root_dir: &Path, log_fn: &dyn Fn(&str, &str))
     }
 
     log_fn("🟢 正在配置綠色版 Node.js 與 PM2 執行期環境...", "info");
+    let mut patched_any = false;
 
-    // 確保 node/node_modules/pm2 存在
-    let pm2_cmd = node_dir.join("pm2.cmd");
-    if !pm2_cmd.is_file() {
-        // 若缺少 pm2.cmd，建立一個轉發至 node.exe + pm2 bin 的批次檔
-        let pm2_js = node_dir.join("node_modules").join("pm2").join("bin").join("pm2");
-        if pm2_js.is_file() {
-            let cmd_content = format!(
-                "@ECHO OFF\r\nSETLOCAL\r\nSET PATH=\"{}\";%PATH%\r\n\"{}\" \"{}\" %*\r\n",
-                node_dir.display(),
-                node_dir.join("node.exe").display(),
-                pm2_js.display()
-            );
-            let _ = fs::write(&pm2_cmd, cmd_content);
+    // 0. 確保統一的 <root_dir>\.pm2 目錄存在，若尚無 dump.pm2 則自動自現有使用者 .pm2 遷移
+    let unified_pm2_home = root_dir.join(".pm2");
+    let _ = fs::create_dir_all(&unified_pm2_home);
+    std::env::set_var("PM2_HOME", &unified_pm2_home);
+
+    let target_dump = unified_pm2_home.join("dump.pm2");
+    if !target_dump.is_file() {
+        if let Ok(user_profile) = std::env::var("USERPROFILE") {
+            let user_pm2 = PathBuf::from(user_profile).join(".pm2");
+            for fname in &["dump.pm2", "module_conf.json"] {
+                let src_f = user_pm2.join(fname);
+                let dst_f = unified_pm2_home.join(fname);
+                if src_f.is_file() && !dst_f.is_file() {
+                    let _ = fs::copy(&src_f, &dst_f);
+                }
+            }
+        }
+    }
+
+    // 1. 確保 pm2.cmd 自動將 %dp0% 注入該子程序 PATH 最前端
+    let pm2_cmd_path = node_dir.join("pm2.cmd");
+    let pm2_cmd_content = "@ECHO off\r\n\
+GOTO start\r\n\
+:find_dp0\r\n\
+SET dp0=%~dp0\r\n\
+EXIT /b\r\n\
+:start\r\n\
+SETLOCAL\r\n\
+CALL :find_dp0\r\n\r\n\
+IF EXIST \"%dp0%\\node.exe\" (\r\n\
+  SET \"_prog=%dp0%\\node.exe\"\r\n\
+) ELSE (\r\n\
+  SET \"_prog=node\"\r\n\
+  SET PATHEXT=%PATHEXT:;.JS;=;%\r\n\
+)\r\n\r\n\
+SET \"PATH=%dp0%;%PATH%\"\r\n\
+endLocal & goto #_undefined_# 2>NUL || title %COMSPEC% & SET \"PATH=%dp0%;%PATH%\" & \"%_prog%\"  \"%dp0%\\node_modules\\pm2\\bin\\pm2\" %*\r\n";
+
+    let need_write_cmd = match fs::read_to_string(&pm2_cmd_path) {
+        Ok(s) => !s.contains("PATH=%dp0%;%PATH%"),
+        Err(_) => true,
+    };
+    if need_write_cmd {
+        if fs::write(&pm2_cmd_path, pm2_cmd_content).is_ok() {
+            patched_any = true;
             log_fn("  ✓ 已建立可攜式 pm2.cmd 執行捷徑", "success");
         }
+    }
+
+    // 2. 修補 paths.js (主 pm2 與 pm2-logrotate 內嵌之 pm2)
+    //    將 Windows IPC 通訊由 Named Pipe 改為本機 Loopback TCP (127.0.0.1:42681/42682)，
+    //    根除未提權 CMD 視窗執行 pm2 時之 connect EPERM 權限錯誤
+    let paths_candidates = [
+        (node_dir.join("node_modules").join("pm2").join("paths.js"), "../.."),
+        (node_dir.join("node_modules").join("pm2-logrotate").join("node_modules").join("pm2").join("paths.js"), "../../../.."),
+    ];
+
+    for (p_file, rel_up) in &paths_candidates {
+        if !p_file.is_file() {
+            continue;
+        }
+        if let Ok(mut p_txt) = fs::read_to_string(p_file) {
+            let orig = p_txt.clone();
+            if !p_txt.contains("tcp://127.0.0.1:42681") {
+                let re_pipe = Regex::new(r"pm2_file_stucture\.DAEMON_RPC_PORT\s*=\s*'\\\\\\\\\.\\\\pipe\\\\rpc\.sock';\s*pm2_file_stucture\.DAEMON_PUB_PORT\s*=\s*'\\\\\\\\\.\\\\pipe\\\\pub\.sock';\s*pm2_file_stucture\.INTERACTOR_RPC_PORT\s*=\s*'\\\\\\\\\.\\\\pipe\\\\interactor\.sock';").unwrap();
+                let replacement_ports = "pm2_file_stucture.DAEMON_RPC_PORT = process.env.PM2_DAEMON_RPC_PORT || 'tcp://127.0.0.1:42681';\n    pm2_file_stucture.DAEMON_PUB_PORT = process.env.PM2_DAEMON_PUB_PORT || 'tcp://127.0.0.1:42682';\n    pm2_file_stucture.INTERACTOR_RPC_PORT = process.env.PM2_INTERACTOR_RPC_PORT || 'tcp://127.0.0.1:42683';";
+                p_txt = re_pipe.replace(&p_txt, replacement_ports).to_string();
+            }
+
+            if !p_txt.contains("p.basename(execDir).toLowerCase() === 'node'") {
+                let home_hook = format!(
+                    "  if (process.env.PM2_HOME)\n    return process.env.PM2_HOME;\n\n  try {{\n    var execDir = p.dirname(process.execPath || '');\n    if (p.basename(execDir).toLowerCase() === 'node') {{\n      return p.resolve(execDir, '..', '.pm2');\n    }}\n    var modNodeDir = p.resolve(__dirname, '{}');\n    if (p.basename(modNodeDir).toLowerCase() === 'node') {{\n      return p.resolve(modNodeDir, '..', '.pm2');\n    }}\n  }} catch (e) {{}}",
+                    rel_up
+                );
+                let re_home = Regex::new(r"if\s*\(process\.env\.PM2_HOME\)\s*return\s+process\.env\.PM2_HOME;").unwrap();
+                p_txt = re_home.replace(&p_txt, &home_hook).to_string();
+            }
+
+            if p_txt != orig {
+                let _ = fs::write(p_file, p_txt);
+                patched_any = true;
+            }
+        }
+    }
+
+    // 3. 修補 Daemon.js (避免在 Windows 對 tcp:// 或 pipe 執行 fs.chmod 報錯)
+    let daemon_file = node_dir.join("node_modules").join("pm2").join("lib").join("Daemon.js");
+    if daemon_file.is_file() {
+        if let Ok(mut d_txt) = fs::read_to_string(&daemon_file) {
+            let orig = d_txt.clone();
+            if !d_txt.contains("!/^(tcp:|") {
+                d_txt = d_txt
+                    .replace(
+                        "  this.pub_socket.once('bind', function() {\n    fs.chmod(that.pub_socket_file, '775', function(e) {",
+                        "  this.pub_socket.once('bind', function() {\n    if (!/^(tcp:|\\\\\\\\\\.\\\\pipe\\\\)/i.test(String(that.pub_socket_file))) fs.chmod(that.pub_socket_file, '775', function(e) {"
+                    )
+                    .replace(
+                        "  this.rpc_socket.once('bind', function() {\n    fs.chmod(that.rpc_socket_file, '775', function(e) {",
+                        "  this.rpc_socket.once('bind', function() {\n    if (!/^(tcp:|\\\\\\\\\\.\\\\pipe\\\\)/i.test(String(that.rpc_socket_file))) fs.chmod(that.rpc_socket_file, '775', function(e) {"
+                    );
+            }
+            if d_txt != orig {
+                let _ = fs::write(&daemon_file, d_txt);
+                patched_any = true;
+            }
+        }
+    }
+
+    // 4. 修補 Utility.js (支援 Windows 本機路徑解析 getCanonicModuleName)
+    let util_file = node_dir.join("node_modules").join("pm2").join("lib").join("Utility.js");
+    if util_file.is_file() {
+        if let Ok(mut u_txt) = fs::read_to_string(&util_file) {
+            let orig = u_txt.clone();
+            if !u_txt.contains("canonic_module_name.indexOf('\\\\') !== -1") {
+                let target_snip = "    else if(canonic_module_name.indexOf('file://') === 0) {\n      canonic_module_name = canonic_module_name.replace(/\\/$/, '').split('/').pop();\n    }";
+                let replacement_snip = "    else if(canonic_module_name.indexOf('file://') === 0) {\n      canonic_module_name = canonic_module_name.replace(/\\/$/, '').split('/').pop();\n    }\n\n    else if(canonic_module_name.indexOf('\\\\') !== -1 || /^[a-zA-Z]:/.test(canonic_module_name)) {\n      canonic_module_name = canonic_module_name.replace(/[\\\\\\/]+$/, '').split(/[\\\\\\/]/).pop();\n    }";
+                u_txt = u_txt.replace(target_snip, replacement_snip);
+            }
+            if u_txt != orig {
+                let _ = fs::write(&util_file, u_txt);
+                patched_any = true;
+            }
+        }
+    }
+
+    // 5. 修補 NPM.js (支援直接自 node\node_modules\<module> 離線複製安裝模組)
+    let npm_file = node_dir.join("node_modules").join("pm2").join("lib").join("API").join("Modules").join("NPM.js");
+    if npm_file.is_file() {
+        if let Ok(mut n_txt) = fs::read_to_string(&npm_file) {
+            let orig = n_txt.clone();
+            if !n_txt.contains("var local_src = null;") {
+                let target_npm = "  var canonic_module_name = Utility.getCanonicModuleName(module_name);\n  var install_path = path.join(cst.DEFAULT_MODULE_PATH, canonic_module_name);\n\n  fs.promises.mkdir(install_path, { recursive: true })";
+                let replacement_npm = "  var canonic_module_name = Utility.getCanonicModuleName(module_name);\n  var install_path = path.join(cst.DEFAULT_MODULE_PATH, canonic_module_name);\n\n  var local_src = null;\n  try {\n    if (fs.existsSync(module_name) && fs.statSync(module_name).isDirectory() && fs.existsSync(path.join(module_name, 'package.json'))) {\n      local_src = path.resolve(module_name);\n    } else {\n      var bundled_cand = path.resolve(__dirname, '../../../../', canonic_module_name);\n      if (fs.existsSync(path.join(bundled_cand, 'package.json'))) {\n        local_src = bundled_cand;\n      }\n    }\n  } catch (e) {}\n\n  if (local_src) {\n    var target_mod_dir = path.join(install_path, 'node_modules', canonic_module_name);\n    fs.promises.mkdir(target_mod_dir, { recursive: true })\n      .then(function() {\n        Common.printOut(cst.PREFIX_MSG_MOD + 'Installing bundled local module from ' + local_src + ' ...');\n        var src_pkg_path = path.join(local_src, 'package.json');\n        var dst_pkg_path = path.join(target_mod_dir, 'package.json');\n        fs.copyFileSync(src_pkg_path, dst_pkg_path);\n        var pkg_obj = JSON.parse(fs.readFileSync(src_pkg_path, 'utf8'));\n        var entry_rel = (pkg_obj.apps && pkg_obj.apps[0] && pkg_obj.apps[0].script) || pkg_obj.main || 'app.js';\n        var src_entry = path.join(local_src, entry_rel);\n        var dst_entry = path.join(target_mod_dir, entry_rel);\n        fs.mkdirSync(path.dirname(dst_entry), { recursive: true });\n        fs.writeFileSync(dst_entry, 'require(' + JSON.stringify(src_entry) + ');\\n', 'utf8');\n        finalizeInstall(0);\n      })\n      .catch(function(err) {\n        console.error(err.stack || err);\n        finalizeInstall(1);\n      });\n    return;\n  }\n\n  fs.promises.mkdir(install_path, { recursive: true })";
+                n_txt = n_txt.replace(target_npm, replacement_npm);
+            }
+
+            let old_backup = "    var module_path = path.join(cst.DEFAULT_MODULE_PATH, canonic_module_name);\n    copydirSync(module_path, path.join(tmpdir, canonic_module_name));";
+            let new_backup = "    var module_path = path.join(cst.DEFAULT_MODULE_PATH, canonic_module_name);\n    try { if (fs.existsSync(module_path)) copydirSync(module_path, path.join(tmpdir, canonic_module_name)); } catch (e) {}";
+            n_txt = n_txt.replace(old_backup, new_backup);
+
+            if n_txt != orig {
+                let _ = fs::write(&npm_file, n_txt);
+                patched_any = true;
+            }
+        }
+    }
+
+    // 6. 修補 pm2-logrotate/app.js 確保預設指向 <root_dir>\.pm2
+    let logrotate_app = node_dir.join("node_modules").join("pm2-logrotate").join("app.js");
+    if logrotate_app.is_file() {
+        if let Ok(mut lr_txt) = fs::read_to_string(&logrotate_app) {
+            let orig = lr_txt.clone();
+            if !lr_txt.contains("path.basename(path.dirname(process.execPath") {
+                let target_lr = "if (process.env.PM2_HOME)\n  PM2_ROOT_PATH = process.env.PM2_HOME;";
+                let replacement_lr = "if (process.env.PM2_HOME)\n  PM2_ROOT_PATH = process.env.PM2_HOME;\nelse if (path.basename(path.dirname(process.execPath || '')).toLowerCase() === 'node')\n  PM2_ROOT_PATH = path.resolve(path.dirname(process.execPath), '..', '.pm2');";
+                lr_txt = lr_txt.replace(target_lr, replacement_lr);
+            }
+            if lr_txt != orig {
+                let _ = fs::write(&logrotate_app, lr_txt);
+                patched_any = true;
+            }
+        }
+    }
+
+    if patched_any {
+        log_fn("  ✓ PM2 綠色環境、Loopback TCP IPC (Port 42681) 與離線日誌輪替模組修補完成", "success");
     }
 
     true

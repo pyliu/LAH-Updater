@@ -65,17 +65,38 @@ pub fn ensure_php_ini_configured(php_dir: &Path, is_php85: bool, log_fn: &dyn Fn
         content.push_str(&format!(r#"\nextension_dir = "{}"\n"#, ext_fwd));
     }
 
-    // 2. 常用擴充功能啟用
+    // 2. 常用與必備擴充功能啟用 (檢查 ext 目錄實際存在的 DLL)
     let target_exts = if is_php85 {
-        vec!["curl", "fileinfo", "gd", "mbstring", "mysqli", "openssl", "pdo_sqlite", "sqlite3"]
+        vec!["curl", "fileinfo", "gd", "imap", "intl", "ldap", "mbstring", "odbc", "openssl", "pdo_odbc", "pdo_sqlite", "sockets", "sqlite3", "zip"]
     } else {
-        vec!["curl", "fileinfo", "gd2", "mbstring", "mysqli", "openssl", "pdo_sqlite", "sqlite3", "oci8_11g"]
+        vec!["curl", "fileinfo", "gd2", "imap", "ldap", "mbstring", "openssl", "pdo_sqlite", "sqlite3", "oci8_11g"]
     };
 
+    let ext_dir = php_dir.join("ext");
     for ext in target_exts {
-        let pattern = format!(r"(?m)^\s*;\s*extension\s*=\s*{}\b", ext);
-        if let Ok(re) = Regex::new(&pattern) {
-            content = re.replace_all(&content, format!("extension={}", ext)).to_string();
+        let dll_path = ext_dir.join(format!("php_{}.dll", ext));
+        if !dll_path.is_file() {
+            continue;
+        }
+
+        let active_pat = format!(r"(?m)^\s*extension\s*=\s*(?:php_)?{}(?:\.dll)?\b", regex::escape(ext));
+        if let Ok(re_act) = Regex::new(&active_pat) {
+            if re_act.is_match(&content) {
+                continue;
+            }
+        }
+
+        let commented_pat = format!(r"(?m)^\s*;\s*extension\s*=\s*(?:php_)?{}(?:\.dll)?\s*(?:;.*)?$", regex::escape(ext));
+        let mut enabled = false;
+        if let Ok(re_com) = Regex::new(&commented_pat) {
+            if re_com.is_match(&content) {
+                content = re_com.replace(&content, format!("extension={}", ext)).to_string();
+                enabled = true;
+            }
+        }
+
+        if !enabled {
+            content.push_str(&format!("\nextension={}\n", ext));
         }
     }
 
@@ -83,6 +104,25 @@ pub fn ensure_php_ini_configured(php_dir: &Path, is_php85: bool, log_fn: &dyn Fn
     let re_tz = Regex::new(r"(?m)^\s*;?\s*date\.timezone\s*=.*$").unwrap();
     if re_tz.is_match(&content) {
         content = re_tz.replace(&content, r#"date.timezone = "Asia/Taipei""#).to_string();
+    } else {
+        content.push_str("\ndate.timezone = \"Asia/Taipei\"\n");
+    }
+
+    // 4. PHP 8.5 執行期資源參數調優
+    if is_php85 {
+        let re_met = Regex::new(r"(?m)^\s*;?\s*max_execution_time\s*=.*$").unwrap();
+        if re_met.is_match(&content) {
+            content = re_met.replace(&content, "max_execution_time = 300").to_string();
+        } else {
+            content.push_str("\nmax_execution_time = 300\n");
+        }
+
+        let re_mem = Regex::new(r"(?m)^\s*;?\s*memory_limit\s*=.*$").unwrap();
+        if re_mem.is_match(&content) {
+            content = re_mem.replace(&content, "memory_limit = 512M").to_string();
+        } else {
+            content.push_str("\nmemory_limit = 512M\n");
+        }
     }
 
     if content != orig {
