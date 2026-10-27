@@ -28,31 +28,88 @@ def get_app_dir():
 ---
 
 ### 2.2 更新包設定規範 (`PACKAGE_CONFIGS`) 與跨專案對應
-目前系統維護 4 種更新包，分別對應 `LAH-Workspace` 工作區內之子專案產出。若未來有新增或調整模組需求，僅需擴充 `PACKAGE_CONFIGS` 清單：
+目前系統維護 7 種更新包（包含 2 項附屬核心依賴套件），分別對應 `LAH-Workspace` 工作區內之子專案產出。若未來有新增或調整模組需求，僅需擴充 `PACKAGE_CONFIGS` 清單：
 ```python
 PACKAGE_CONFIGS = [
     {
         "id": "www",
         "name": "www.zip",
         "rel_target": "www",
-        "title": "前端 / 網站核心 (www.zip)",
+        "title": "後端 PHP7 更新包 (www.zip)",
         "expected_folder": "www",
         "is_nodejs": False
     },
-    ...
+    {
+        "id": "lah_api",
+        "name": "LAH-API.zip",
+        "rel_target": "LAH-API",
+        "title": "後端 PHP8 更新包 (LAH-API.zip)",
+        "expected_folder": "LAH-API",
+        "alt_folders": ["api"],
+        "is_nodejs": False
+    },
+    {
+        "id": "lah_nuxtjs",
+        "name": "LAH-NUXTJS.zip",
+        "rel_target": "LAH-NUXTJS",
+        "title": "前端網站 更新包 (LAH-NUXTJS.zip)",
+        "expected_folder": "LAH-NUXTJS",
+        "is_nodejs": True
+    },
+    {
+        "id": "lah_nuxtjs_modules",
+        "name": "LAH-NUXTJS-node_modules.zip",
+        "rel_target": os.path.join("LAH-NUXTJS", "node_modules"),
+        "title": "└─ 前端網站 核心套件 (LAH-NUXTJS-node_modules.zip)",
+        "expected_folder": "node_modules",
+        "alt_folders": ["lah-nuxtjs-node_modules", "LAH-NUXTJS-node_modules"],
+        "is_nodejs": True,
+        "is_sub_package": True
+    },
+    {
+        "id": "messenger",
+        "name": "lah-messenger-server.zip",
+        "rel_target": "lah-messenger-server",
+        "title": "即時通訊伺服器 (lah-messenger-server.zip)",
+        "expected_folder": "lah-messenger-server",
+        "is_nodejs": True
+    },
+    {
+        "id": "messenger_modules",
+        "name": "lah-messenger-server-node_modules.zip",
+        "rel_target": os.path.join("lah-messenger-server", "node_modules"),
+        "title": "└─ 即時通訊 核心套件 (lah-messenger-server-node_modules.zip)",
+        "expected_folder": "node_modules",
+        "alt_folders": ["lah-messenger-server-node_modules", "lah-messenger-server-node-modules"],
+        "is_nodejs": True,
+        "is_sub_package": True
+    },
+    {
+        "id": "node",
+        "name": "node.zip",
+        "rel_target": "node",
+        "title": "Node.js 綠色執行環境 (node.zip)",
+        "expected_folder": "node",
+        "is_nodejs": True
+    }
 ]
 ```
-- `name`：同目錄下比對的 zip 檔名。
+- `name`：同目錄下比對的 zip 檔名（嚴格偵測指定檔名）。
 - `rel_target`：相對於根目錄（如 `C:\AppServ`）的解壓縮路徑。
 - `expected_folder`：預期的頂層資料夾名稱（用於雙層目錄防呆對齊）。
-- `is_nodejs`：標記該更新包是否屬於由 PM2 託管的 Node.js 服務模組（`LAH-NUXTJS.zip`、`node_modules.zip`、`lah-messenger-server.zip` 均為 `True`；`www.zip` 為 `False`）。
+- `alt_folders`：備選頂層資料夾名稱清單。
+- `is_nodejs`：標記該更新包是否屬於由 PM2 託管的 Node.js 服務模組（包含 `LAH-NUXTJS.zip`、`LAH-NUXTJS-node_modules.zip`、`lah-messenger-server.zip`、`lah-messenger-server-node_modules.zip`、`node.zip`）。
+- `is_sub_package`：標記是否為附屬子套件；為 `True` 時介面卡片整塊向右縮排 `26px`，並在 Checkbutton 標籤帶上 `└─` 樹狀前綴。
 
-| 壓縮包檔名 | 對應工作區子專案 | `is_nodejs` | 目標部署說明 |
-| :--- | :--- | :---: | :--- |
-| `www.zip` | `./LAH-API/www` | `False` | Apache PHP 後端核心與舊版網頁 |
-| `LAH-NUXTJS.zip` | `./LAH-FE` | `True` | Nuxt 2 智慧管控前端與排程 (`LAH-FE`, `LAH-SCHEDULER`) |
-| `node_modules.zip` | `./LAH-FE/node_modules` | `True` | 前端執行期 Node.js 依賴套件 |
-| `lah-messenger-server.zip` | `./lah-messenger-server` | `True` | 即時通訊 WebSocket 伺服器 (`LAH-WSS`) |
+| 壓縮包檔名 | 對應工作區子專案 | `is_nodejs` | 階層屬性 | 目標部署說明 |
+| :--- | :--- | :---: | :---: | :--- |
+| `www.zip` | `./LAH-API/www` | `False` | 主模組 | Apache PHP7 後端核心與舊版網頁 (`C:\AppServ\www`) |
+| `LAH-API.zip` | `./LAH-API/API` | `False` | 主模組 | PHP8 FastCGI 現代化後端 API (`C:\AppServ\LAH-API`) |
+| `LAH-NUXTJS.zip` | `./LAH-FE` | `True` | 主模組 | Nuxt 2 智慧管控前端與排程 (`LAH-FE`, `LAH-SCHEDULER`) |
+| `LAH-NUXTJS-node_modules.zip` | `./LAH-FE/node_modules` | `True` | 附屬套件 (`└─`) | 前端執行期 Node.js 核心依賴套件 (`C:\AppServ\LAH-NUXTJS\node_modules`) |
+| `lah-messenger-server.zip` | `./lah-messenger-server` | `True` | 主模組 | 即時通訊 WebSocket 伺服器 (`LAH-WSS`) |
+| `lah-messenger-server-node_modules.zip` | `./lah-messenger-server/node_modules` | `True` | 附屬套件 (`└─`) | 即時通訊伺服端 Node.js 核心依賴套件 (`C:\AppServ\lah-messenger-server\node_modules`) |
+| `node.zip` | `C:\AppServ\node` | `True` | 獨立環境 | Node.js 綠色便攜執行環境 (含 npm, pm2, yarn) |
 
 ---
 
@@ -91,12 +148,16 @@ PACKAGE_CONFIGS = [
 
 ---
 
-### 2.6 PM2 Node.js 服務重啟機制 (`resolve_pm2_command` / `restart_pm2_services`)
-- **智慧觸發條件**：僅當本次勾選更新的項目包含 `is_nodejs=True` 之模組（`LAH-NUXTJS.zip`、`node_modules.zip`、`lah-messenger-server.zip`）時，於全部壓縮包解壓與 Apache 恢復完成後、彈出刪除壓縮包確認前，主動詢問使用者是否執行 `pm2 restart all`。
+### 2.6 PM2 Node.js 服務重啟與核心守護進程校正機制 (`resolve_pm2_command` / `query_pm2_daemon_info` / `align_pm2_daemon_to_portable`)
+- **智慧觸發條件**：僅當本次勾選更新的項目包含 `is_nodejs=True` 之模組（`LAH-NUXTJS.zip`、`LAH-NUXTJS-node_modules.zip`、`lah-messenger-server.zip`、`lah-messenger-server-node_modules.zip`、`node.zip`）時，於全部壓縮包解壓與 Apache 恢復完成後，自動執行 PM2 重啟作業。
+- **核心守護進程 (Daemon) 實體隔離檢測**：
+  - 在 PM2 的 `cluster` 模式下，子行程強制繼承啟動 PM2 Daemon 自身的 Node.js 執行期。
+  - 透過 `query_pm2_daemon_info()` 探測 `Daemon.js` 行程之 `ExecutablePath`；若發現現有 Daemon 是以全域舊 Node 運行，自動或手動執行 `align_pm2_daemon_to_portable`（`pm2 save` ➔ `pm2 kill` ➔ `<root_dir>\node\pm2.cmd resurrect` ➔ `pm2 save`），確保 100% 綁定專屬綠色 Node。
+  - 介面提供 `self.lbl_pm2_status` 即時燈號與「⚡ 立即校正 PM2 核心」按鈕，並於完成時透過 `check_pm2_autostart_config()` 檢視伺服器開機自啟動設定。
 - **Windows `pm2.cmd` 尋址與執行規範**：
-  - 在 Windows 下，`pm2` 為批次檔（`pm2.cmd`），不可直接以 `subprocess.run(["pm2", ...])` 呼叫（會拋出 `FileNotFoundError`）。
-  - 透過 `resolve_pm2_command()` 優先以 `shutil.which("pm2.cmd")` / `shutil.which("pm2")` 解析；若因 UAC 管理員提權導致 `PATH` 遺失，自動回退檢查 `%APPDATA%\npm\pm2.cmd`、`%USERPROFILE%\AppData\Roaming\npm\pm2.cmd`、`C:\Program Files\nodejs\pm2.cmd` 與 `C:\nvm4w\nodejs\pm2.cmd`。
-  - 執行時透過 `cmd.exe /d /s /c "... restart all --no-color"` 呼叫，設定 60 秒逾時與 `CREATE_NO_WINDOW`，並透過 `_decode_console_bytes` 進行 `utf-8` / `cp950` 解碼與 ANSI 控制碼剝除，將輸出即時寫入 GUI 日誌視窗。
+  - 在 Windows 下，`pm2` 為批次檔（`pm2.cmd`），不可直接以 `subprocess.run(["pm2", ...])`（無副檔名）呼叫（會拋出 `FileNotFoundError`）。
+  - 透過 `resolve_pm2_command()` 優先以 `shutil.which("pm2.cmd")` / `shutil.which("pm2")` 解析；若因 UAC 管理員提權導致 `PATH` 遺失，自動回退檢查 `%APPDATA%\npm\pm2.cmd`、`%LOCALAPPDATA%\Volta\bin\pm2.cmd`、`%USERPROFILE%\AppData\Roaming\npm\pm2.cmd`、`C:\Program Files\nodejs\pm2.cmd`、`C:\Program Files\Volta\pm2.cmd` 與 `C:\nvm4w\nodejs\pm2.cmd`。
+  - 執行時直接以 `[pm2_bin, "restart", "all", "--no-color"]` 串列傳入 `subprocess.run`（避免將含引號路徑字串包入 `cmd.exe /c` 串列時遭 `subprocess.list2cmdline` 轉義為 `\"` 導致命令解析失敗），設定 60 秒逾時與 `CREATE_NO_WINDOW`，並透過 `_decode_console_bytes` 進行 `utf-8` / `cp950` 解碼與 ANSI 控制碼剝除，將輸出即時寫入 GUI 日誌視窗。
 
 ---
 
@@ -143,7 +204,7 @@ python -m PyInstaller --noconfirm --onefile --windowed --uac-admin --name "智�
 # 方式 A：一鍵執行批次檔
 .\pack.bat
 
-# 方式 B：直接執行 Python 腳本（支援 --skip-build, --api-only, --fe-only, --output-dir 參數）
+# 方式 B：直接執行 Python 腳本（支援 --skip-build, --api-only, --api8-only, --fe-only, --messenger-only, --fe-modules, --server-modules, --with-modules, --modules-only, --output-dir 參數）
 python pack.py
 ```
 

@@ -1,56 +1,76 @@
 # 🚀 智慧控管與監控系統 - 自動更新工具 (System Auto Updater)
 
-一個專為 Windows 環境（包含 Windows 10/11 與 Windows Server）設計的自動化解壓縮更新輔助工具，基於 Python 標準庫 `tkinter` 開發，具備 Apache 服務自動重啟控制、雙層同名目錄防呆消除、UAC 管理員權限宣告以及多執行緒即時日誌進度呈現。
+一個專為 Windows 環境（包含 Windows 10/11 與 Windows Server）設計的自動化解壓縮更新輔助工具。本工具基於 Python 標準庫 `tkinter` 開發，具備雙欄更新包管理、Apache 服務自動控制、PM2 核心守護進程校正、雙層同名目錄防呆消除、UAC 管理員權限宣告以及一鍵資安弱點防護功能。
+
+> 📖 **版本修訂紀錄**：請參閱完整繁體中文 [版本修改歷程 (CHANGELOG.md)](./CHANGELOG.md)。
 
 ---
 
 ## 📌 系統需求與更新包規格
 
-本工具主要用於快速佈署與更新伺服器核心模組，預設安裝根目錄為 `C:\AppServ`。程式啟動時會自動偵測「與執行檔同目錄」下的 4 種更新壓縮包：
+本工具主要用於快速佈署與更新伺服器核心模組，預設安裝根目錄為 `C:\AppServ`。程式啟動時會自動偵測「與執行檔同目錄」下的 10 種更新壓縮包，並依功能劃分為左右雙欄呈現。
+
+### 1. 左欄：基礎環境與 Web 伺服器 (Apache / PHP)
+
+| 壓縮包檔名（支援萬用字元與簡寫） | 預設相對路徑 | 預設完整目標路徑 | 說明 |
+| :--- | :--- | :--- | :--- |
+| **`httpd-2.4.*.zip` / `Apache24.zip`** | `Apache24` | `C:\AppServ\Apache24` | Apache 2.4 網頁伺服器核心 |
+| **`php-7.4.*.zip` / `php7.zip`** | `php7` | `C:\AppServ\php7` | PHP 7.4 執行環境 (舊軌 API 依賴) |
+| **`php-8.*.zip` / `php85.zip`** | `php85` | `C:\AppServ\php85` | PHP 8.5 執行環境 (現代化 FastCGI 核心) |
+
+### 2. 右欄：智慧控管系統模組 (LAH 應用與套件)
 
 | 壓縮包檔名 | 預設相對路徑 | 預設完整目標路徑 | 說明 |
 | :--- | :--- | :--- | :--- |
-| **`www.zip`** | `www` | `C:\AppServ\www` | 後端API 更新包 |
-| **`LAH-NUXTJS.zip`** | `LAH-NUXTJS` | `C:\AppServ\LAH-NUXTJS` | 前端網站 更新包 |
-| **`node_modules.zip`** | `LAH-NUXTJS\node_modules` | `C:\AppServ\LAH-NUXTJS\node_modules` | 前端網站 核心套件 |
+| **`www.zip`** | `www` | `C:\AppServ\www` | 後端 PHP7 更新包 (舊軌 PHP 7) |
+| **`LAH-API.zip`** | `LAH-API` | `C:\AppServ\LAH-API` | 後端 PHP8 更新包 (新軌 PHP 8.5 / v1) |
+| **`LAH-NUXTJS.zip`** | `LAH-NUXTJS` | `C:\AppServ\LAH-NUXTJS` | 前端網站更新包 |
+| **`LAH-NUXTJS-node_modules.zip` / `node_modules.zip`** | `LAH-NUXTJS\node_modules` | `C:\AppServ\LAH-NUXTJS\node_modules` | 前端網站核心依賴套件 |
 | **`lah-messenger-server.zip`** | `lah-messenger-server` | `C:\AppServ\lah-messenger-server` | 即時通訊推播伺服器 |
+| **`lah-messenger-server-node_modules.zip`** | `lah-messenger-server\node_modules` | `C:\AppServ\lah-messenger-server\node_modules` | 即時通訊伺服端核心套件 |
+| **`node.zip`** | `node` | `C:\AppServ\node` | Node.js 綠色執行環境 (含 npm, pm2, yarn) |
 
 > 💡 **彈性安裝路徑機制**：
-> - **啟動自動檢查**：程式啟動時會主動檢測預設安裝目錄（`C:\AppServ`）是否存在，若不存在會主動跳出提示導引使用者立即瀏覽選取正確路徑。
-> - **各模組獨立自訂**：預設各模組目標路徑與安裝根目錄自動連動，但同時提供獨立的「輸入框」、「瀏覽...」與「↺ 重設」按鈕，允許個別指定特定模組的解壓縮目錄。
+> - **啟動自動檢查**：程式啟動時會主動檢測預設安裝目錄（`C:\AppServ`）是否存在。若不存在會主動跳出提示導引使用者立即瀏覽選取正確路徑。
+> - **各模組獨立自訂**：預設各模組目標路徑與安裝根目錄自動連動。介面提供獨立的輸入框、瀏覽按鈕與重設按鈕，允許個別指定特定模組的解壓縮目錄。
 
 ---
 
 ## ✨ 核心特色與防呆機制
 
 1. **零外部依賴執行庫 (Zero Dependency)**：
-   - 介面與核心邏輯完全採用 Python 3 標準庫 (`tkinter`, `ttk`, `zipfile`, `subprocess`, `threading`, `ctypes`)，不依賴龐大的第三方 GUI 套件。
-2. **預設目錄偵測與各模組獨立路徑**：
-   - 啟動時自動偵測預設目錄，若不存在會彈出確認視窗引導使用者選取根目錄。
-   - 介面採用清晰卡片式佈局，每個更新模組均提供獨立路徑輸入框、瀏覽按鈕與重設按鈕，既支援全域根目錄連動，又兼具個別模組自訂彈性。
-3. **【關鍵防呆機制】自動去除雙層同名目錄**：
-   - 解壓縮時會先解析 `.zip` 內部結構。
-   - 若壓縮包頂層含有與目標資料夾同名、壓縮檔同名或目標目錄結尾同名的單一資料夾（例如 `www.zip` 內第一層就是 `www/`，或 `node_modules.zip` 內為 `node_modules/`），程式會**自動對齊並剔除外層目錄**，徹底避免產生 `C:\AppServ\www\www` 的雙層目錄錯誤！
-   - 若頂層直接散落檔案，則直接覆蓋解壓至目標目錄。
-4. **Apache 服務管理與異常容錯**：
-   - 勾選「更新前後自動重啟 Apache 服務」後，自動偵測本機 Apache 服務（如 `Apache2.4`、`Apache`）。
-   - 解壓縮覆蓋前先停止服務釋放檔案鎖定，更新完成後自動重新啟動。
-   - **異常防護**：若解壓縮中途發生任何例外錯誤（如檔案鎖死），`finally` 區塊會**緊急強制嘗試重新啟動 Apache**，避免網站系統長時間中斷。
-5. **版本更新說明彈窗瀏覽（省空間緊湊設計）**：
-   - 支援彈性模糊比對：檔名只要包含「`更新說明`」的 `.txt` 檔案（例如 `★更新說明★.txt` 或 `1.9.5-★更新說明★.txt`）皆可自動讀取。
-   - 主畫面移除冗長文字框，於「開始更新」旁設置「📋 查看更新說明」按鈕，點擊即彈出獨立置中對話框供完整閱讀（支援 Esc 快速鍵關閉）；若未提供說明檔時按鈕自動反灰停用（顯示「📋 無更新說明」），大幅降低主視窗高度。
-   - 若同目錄下有多個符合的檔案（歷史殘留），**自動依檔案最後修改時間 (mtime) 優先載入最新發布的版本**，支援 UTF-8 / UTF-8-BOM / CP950 自動編碼容錯。
-6. **PM2 管理套件偵測與更新後自動重啟服務**：
-   - 於主畫面提供獨立 PM2 服務管理選項（位於 Apache 服務下方），啟動時自動偵測本機 PM2 指令路徑。
-   - 勾選後於更新完成自動執行 `pm2 restart all` 重啟所有 Node.js 服務（如 LAH-FE、LAH-SCHEDULER、lah-messenger-server），並將執行結果即時輸出至日誌視窗。
-7. **更新完成空間清理確認**：
-   - 更新全部順利完成後，會主動跳出詢問是否刪除本次已更新完成的 `.zip` 壓縮包以釋放磁碟空間（更新說明文字檔會完整保留）。
-8. **文字放大 25% 舒適排版與獨立大尺寸日誌彈窗**：
-   - 全介面標準字體與各區塊字級全數等比例放大 25%，視覺更加清晰好讀；主視窗隨之最佳化為 `980x620`，所有控制按鈕永遠置底清晰可見。
-   - 點擊「🚀 開始更新」時自動彈出獨立大尺寸視窗（`860x600`），提供平滑進度條（Progressbar）、即時處理項目狀態與寬敞的深色終端風格彩色執行日誌（INFO、SUCCESS、WARNING、ERROR）。
-   - 主畫面底部亦保留「📊 檢視執行日誌」按鈕，方便隨時開啟查看最新或歷史執行紀錄。
-9. **UAC 系統管理員權限**：
-   - 編譯時已內嵌 `--uac-admin` 清單，在 Windows 啟動時會主動要求系統管理員權限以確保有權控制 Windows 服務及修改受保護目錄。
+   - 介面與核心邏輯完全採用 Python 3 標準庫 (`tkinter`, `ttk`, `zipfile`, `subprocess`, `threading`, `ctypes`)。程式不依賴第三方 GUI 套件。
+2. **左右雙欄卡片式佈局與獨立路徑自訂**：
+   - 主視窗採用 `1260x760` 寬螢幕雙欄佈局。左欄專責 Web 基礎環境，右欄專責系統應用模組。
+   - 每個模組卡片均具備獨立路徑輸入框、瀏覽按鈕與重設按鈕。兩側底部控制列各自獨立排列（左欄底部配置全域開始更新與輔助按鈕雙列，右欄底部配置 PM2 守護與校正雙列），垂直高度精準齊平對稱，徹底消除長路徑與控制按鈕之擠壓截斷。
+3. **一鍵資安弱點防護（隱藏 Web 伺服器與 PHP 版本資訊）**：
+   - 左欄提供「🛡️ 一鍵套用資安弱點防護」專屬按鈕。
+   - 自動向 `Apache24/conf/httpd.conf` 寫入 `ServerTokens Prod` 與 `ServerSignature Off`，消除 HTTP Server 標頭與錯誤頁面版本洩漏。
+   - 自動向 `php7/php.ini` 與 `php85/php.ini` 寫入 `expose_php = Off`，消除 `X-Powered-By` 標頭。
+   - 寫入前自動建立帶時間戳記的備份檔，並主動調用 `httpd.exe -t` 進行語法校驗與服務重啟防護。
+4. **自動去除雙層同名目錄防呆**：
+   - 解壓縮前預先解析 ZIP 壓縮包內部結構。
+   - 若壓縮包頂層含有同名單一資料夾（例如 `www.zip` 內含 `www/`，`LAH-API.zip` 內含 `LAH-API/`），程式會自動對齊並剔除外層目錄，徹底防止產生雙層巢狀目錄。
+5. **Apache 與 PM2 服務自動重啟與核心校正**：
+   - 更新前先停止相關服務釋放檔案鎖定，解壓縮完成後自動安全重啟。
+   - 實時偵測 PM2 守護核心是否由本機綠色 Node.js 喚醒運行，提供「⚡ 立即校正 PM2 核心」與「⚙️ 開機自啟動設定」一鍵工具。
+6. **獨立大尺寸日誌彈窗與版本說明瀏覽**：
+   - 更新執行時自動彈出獨立進度視窗（`860x600`），內嵌彩色終端日誌與進度條。
+   - 支援模糊比對自動讀取最新發布之版本說明文字檔。
+7. **專屬自動移除工具支援 (`uninstaller.py`) 與獨立備份功能**：
+   - 專案內建專屬自動移除程式，支援服務解除安裝、開機腳本清除、環境變數還原、手動 PHP 目錄移除與刪除前關鍵資料備份。
+   - **獨立備份按鈕与連動取消勾選**：底部「🚨 開始執行移除作業」按鈕旁提供獨立的「📦 立即備份重要資料」按鈕，點擊即可透過另存新檔視窗將重要資料（含即時通 `db/`、`uploads/`、`www/assets/*`、`.pm2` 設定與狀態檔、各專案 `.env`、`AD.php`、`httpd.conf`、`php.ini`、`logs/`）備份至任意自訂位置，並於完成後自動取消勾選「執行前自動備份重要資料」。
+8. **未偵測到安裝包預設隱藏與動態展開**：
+   - 更新目錄下未偵測到實體壓縮包的項目預設自動隱藏其卡片，大幅簡化操作視圖。
+   - 畫面底部左側提供「👁️ 顯示全部安裝包 (含未偵測到項目)」核取方塊，勾選時可隨時展開所有 10 種規格供檢視。
+   - 當特定欄位未包含任何可用安裝包時，主動顯示指引橫幅消除使用者疑惑。
+9. **從備份壓縮包還原設定與資料 (`_LAH_Backup_*.zip`)**：
+   - 頂部提供「📦 安裝/更新後自動從備份包回復原始設定」勾選框與「⚡ 立即單獨還原備份」按鈕。
+   - 自動偵測移除工具產出之 `_LAH_Backup_*.zip`，一鍵還原 `.env`、`AD.php`、`www/assets/*`、`.pm2` 設定檔、即時通 `db/` 與 `uploads/`、`httpd.conf` 及 `php.ini`，並自動完成路徑校正與資安防護套用。
+10. **5 階段主機基礎環境自動化與「從 0 到 1 / 部分更新」雙向相容**：
+    - 解壓縮時若目標已存在 `httpd.conf` 或 `php.ini`，自動將壓縮包內原廠檔案另存為 `.default`，不覆寫既有設定。
+    - 依序自動執行：**[階段 1/5]** 建立 `Apache2.4` 服務並配置 PHP 7.4 (`mod_php` + 8 個依賴 `LoadFile` DLL 含 `libsasl.dll` + `php7/php.ini` 必備擴充模組 `gd2, ldap, imap, pdo_sqlite, sqlite3`) ➔ **[階段 2/5]** 配置 PHP 8.5 FastCGI（啟用 `gd, ldap, pdo_sqlite, sqlite3` 等擴充模組）與 Apache `/LAH-API` FCGI Proxy 轉發（由 PM2 `lah-api-v85` 保護執行 `127.0.0.1:8085`） ➔ **[階段 3/5]** 套用資安設定與 PHP2Shell (CVE-2024-4577) 緩解防護（Apache `ServerTokens Prod`、`ServerSignature Off`、`%ad` 軟連字號參數注入 `403` 攔截、`www/assets` 與 `www/export` 禁止執行腳本；PHP `expose_php = Off`、`allow_url_include = Off`、`cgi.force_redirect = 1`、`enable_dl = Off`）與 `httpd.exe -t` 語法檢驗 ➔ **[階段 4/5]** 設定綠色版 Node 環境（自動統一 `PM2_HOME` 至 `<安裝根目錄>\.pm2`、改用本機 Loopback TCP `127.0.0.1:42681/42682` 消除一般 CMD `connect EPERM` 權限衝突、離線秒級啟用 `pm2-logrotate`）並配置 `LAH_PM2_Service` 開機自啟動 ➔ **[階段 5/5]** 啟動所有服務並驗證各服務、連接埠（Port `80`, `8085`, `8080`, `8081/8082`）與 PHP 7.4 / 8.5 必備擴充模組健康狀態。
+    - 安裝完成後主動詢問使用者是否保留或刪除安裝壓縮包（預設保留不自動刪除），若選擇刪除則一併清除同模組所有別名壓縮檔。
 
 ---
 
@@ -65,8 +85,11 @@
 # 切換至專案目錄
 cd .\LAH-Updater
 
-# 直接啟動 GUI 程式
+# 啟動自動更新工具
 python updater.py
+
+# 啟動自動移除工具
+python uninstaller.py
 ```
 
 ---
@@ -81,73 +104,39 @@ pip install pyinstaller
 ```
 
 ### 步驟 2：執行打包指令
-您可直接在專案目錄執行一鍵打包批次檔（已內建 UTF-8 與 Python 原生防衝碼處理）：
 ```powershell
+# 一鍵打包自動更新工具
 .\build.bat
-```
-或手動執行 Python 打包腳本：
-```powershell
+
+# 或使用 Python 腳本打包
 python build.py
 ```
-或直接輸入完整 PyInstaller 指令：
+
+打包自動移除工具指令：
 ```powershell
-python -m PyInstaller --noconfirm --onefile --windowed --uac-admin --name "智慧控管與監控系統 - 自動更新工具" updater.py
+python -m PyInstaller --noconfirm --onefile --windowed --uac-admin --name "智慧控管與監控系統 - 自動移除工具" uninstaller.py
 ```
-
-**參數解析：**
-- `--noconfirm`：若已存在先前的輸出目錄，直接覆蓋不反覆詢問。
-- `--onefile`：將所有依賴庫打包為單一獨立執行檔 (`.exe`)。
-- `--windowed` (或 `-w`)：隱藏後台終端機黑視窗，僅顯示 GUI 視窗。
-- `--uac-admin`：在 exe 內建 Manifest 加入系統管理員權限要求 (`requireAdministrator`)，確保啟動時自動彈出 UAC 提權視窗。
-- `--name "智慧控管與監控系統 - 自動更新工具"`：指定產出檔名。
-
-### 步驟 3：產出確認
-打包完成後，執行檔將位於 `dist/` 目錄中：
-- `dist/智慧控管與監控系統 - 自動更新工具.exe`
 
 ---
 
-## 🗜️ 打包系統更新壓縮包 (`www.zip` & `LAH-NUXTJS.zip`)
+## 🗜️ 打包系統更新壓縮包 (`pack.py` / `pack.bat`)
 
-專案內建 `pack.bat` 與 `pack.py`，整合原 `zip_api.*` 與 `zip_fe.*` 打包規則：
-1. 自動進入 `LAH-FE` 執行 `yarn build` 並等待編譯完成。
-2. 將 `LAH-API/www` 打包為 `www.zip`（自動排除 `.env` 與 `include/config/AD*.php` 等機敏設定檔）。
-3. 將 `LAH-FE` 編譯後檔案打包為 `LAH-NUXTJS.zip`。
-4. 預設自動輸出至：`d:\DEV\@各所分享區\@智慧管控系統\@更新程式\`。
+專案內建 `pack.bat` 與 `pack.py` 輔助腳本：
+1. 自動進入 `LAH-FE` 執行 `yarn build` 編譯前端。
+2. 將 `LAH-API/www` 打包為 `www.zip`（自動排除 `.env` 與機敏設定檔）。
+3. 將現代化 PHP 8.5 後端打包為 `LAH-API.zip`。
+4. 將編譯後前端產物打包為 `LAH-NUXTJS.zip`。
+5. 支援獨立打包即時通伺服端與綠色 Node 環境。
 
 ```powershell
-# 一鍵執行完整流程（yarn build + 打包 www.zip 與 LAH-NUXTJS.zip）
+# 一鍵執行完整打包流程
 .\pack.bat
 
-# 或使用 Python 執行（支援選用參數）
-python pack.py
-python pack.py --skip-build   # 略過 yarn build 直接打包
-python pack.py --api-only     # 僅打包 www.zip
-python pack.py --fe-only      # 僅編譯並打包 LAH-NUXTJS.zip
+# 或使用 Python 執行特定模式
+python pack.py --skip-build   # 略過編譯直接打包
+python pack.py --api-only     # 僅打包後端 API
+python pack.py --fe-only      # 僅打包前端網站
 ```
-
----
-
-## 🚀 發布與使用者操作說明
-
-發布版本時，請將產出的執行檔與更新壓縮包放在**同一個資料夾**下打包提供給維運人員：
-
-```text
-📦 20261015-系統更新包/
- ├── 智慧控管與監控系統 - 自動更新工具.exe
- ├── ★更新說明★.txt                       (版本說明文件，非必填)
- ├── www.zip                              (本次更新內容，若有則放)
- ├── LAH-NUXTJS.zip                       (本次更新內容，若有則放)
- ├── node_modules.zip                     (視需求提供)
- └── lah-messenger-server.zip             (視需求提供)
-```
-
-### 操作步驟：
-1. 雙擊執行 `智慧控管與監控系統 - 自動更新工具.exe`（系統將跳出 UAC 管理員權限確認，請點選「是」）。
-2. 確認介面上偵測到的更新包狀態與目標路徑（若 Apache 安裝於非 C 槽，可按「瀏覽...」更改安裝根目錄，亦可為各模組個別自訂路徑）。
-3. 勾選需要更新的項目（預設已偵測到的檔案會自動勾選）。
-4. 點選 **「🚀 開始更新」**。
-5. 程式將自動停止 Apache、執行解壓對齊覆蓋、重新啟動 Apache；若包含 Node.js 相關模組，會詢問是否執行 `pm2 restart all`，最後可選擇是否清除已更新的壓縮包。
 
 ---
 
@@ -155,17 +144,16 @@ python pack.py --fe-only      # 僅編譯並打包 LAH-NUXTJS.zip
 
 ```text
 LAH-Updater/
- ├── updater.py                           # 主程式原始碼 (GUI、解壓防呆、Apache 與 PM2 控制)
- ├── build.bat                            # 一鍵打包安裝程式批次檔 (純 ASCII 轉發，避開 CMD 編碼與 BOM 衝碼)
- ├── build.py                             # Python 原生 PyInstaller 打包輔助腳本
- ├── pack.bat                             # 一鍵編譯前端並打包原始碼壓縮包批次檔 (純 ASCII 轉發)
- ├── pack.py                              # Python 原始碼打包腳本 (執行 yarn build 並產出 www.zip / LAH-NUXTJS.zip)
- ├── AGENTS.md                            # AI 代理人維護與架構指南
+ ├── updater.py                           # 自動更新工具主程式 (雙欄卡片、Apache/PHP/PM2 管理、資安防護)
+ ├── uninstaller.py                       # 自動移除工具主程式 (服務解除安裝、自啟動清理、前置備份)
+ ├── build.bat                            # 一鍵編譯自動更新工具執行檔批次檔
+ ├── build.py                             # Python 原生打包輔助腳本
+ ├── pack.bat                             # 一鍵編譯前端並打包全模組壓縮包批次檔
+ ├── pack.py                              # Python 原始碼打包腳本
+ ├── CHANGELOG.md                         # 完整繁體中文版本修改歷程文件
  ├── README.md                            # 專案說明與操作指南
- ├── .gitignore                           # Git 忽略檔案設定
- ├── build/                               # 打包過程暫存目錄 (Git 忽略)
- └── dist/                                # 打包最終產出目錄 (Git 忽略)
-      └── 智慧控管與監控系統 - 自動更新工具.exe
+ ├── AGENTS.md                            # AI 代理人架構指南與安全契約
+ └── service/                             # WinSW 原生服務守護套件與腳本
 ```
 
 ---
