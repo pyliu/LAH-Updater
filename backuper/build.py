@@ -55,14 +55,20 @@ def main():
 
             out_exe_name = "智慧控管與監控系統 - 備份與還原工具.exe"
             out_exe_path = os.path.join(dist_dir, out_exe_name)
-            out_std_path = os.path.join(dist_dir, "lah-backuper.exe")
 
             shutil.copy2(built_exe, out_exe_path)
-            shutil.copy2(built_exe, out_std_path)
+
+            # 確保 dist 目錄僅保留中文檔名之發布執行檔，若存在舊版英文檔名則主動清除
+            legacy_std_path = os.path.join(dist_dir, "lah-backuper.exe")
+            if os.path.isfile(legacy_std_path):
+                try:
+                    os.remove(legacy_std_path)
+                except Exception:
+                    pass
 
             size_mb = os.path.getsize(out_exe_path) / (1024 * 1024)
             print(f"[OK] 編譯成功！二進位檔案大小：{size_mb:.2f} MB")
-            print(f"[OK] 產出發布路徑：\n  -> {out_exe_path}\n  -> {out_std_path}")
+            print(f"[OK] 產出發布路徑：\n  -> {out_exe_path}")
         else:
             print("[WARN] 編譯指令成功，但在預期目標路徑未找到 lah-backuper.exe！")
     else:

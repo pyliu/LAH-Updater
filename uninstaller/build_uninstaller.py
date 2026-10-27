@@ -40,6 +40,14 @@ def main():
 
     ret = subprocess.run(cmd)
 
+    # 清理 PyInstaller 產出的暫存 spec 檔以保持目錄整潔
+    spec_path = os.path.join(script_dir, "智慧控管與監控系統 - 自動移除工具.spec")
+    if os.path.isfile(spec_path):
+        try:
+            os.remove(spec_path)
+        except Exception:
+            pass
+
     print("-" * 60)
     if ret.returncode == 0:
         exe_path = os.path.join(dist_dir, "智慧控管與監控系統 - 自動移除工具.exe")
