@@ -237,6 +237,8 @@ pub fn scan_packages(search_dirs: &[PathBuf], root_dir: &Path) -> Vec<PackageIte
             target_path: target_path.to_string_lossy().to_string(),
             target_exists,
             checked: exists, // 預設若有偵測到壓縮包則自動勾選
+            expected_folder: spec.expected_folder.to_string(),
+            alt_folders: spec.alt_folders.iter().map(|s| s.to_string()).collect(),
         });
     }
 
@@ -249,6 +251,7 @@ pub fn detect_strip_prefix(zip_path: &Path, expected_folder: &str, alt_folders: 
 
     let mut top_level_dirs = std::collections::HashSet::new();
     let mut has_root_files = false;
+    let mut sub_dirs_by_top: std::collections::HashMap<String, std::collections::HashSet<String>> = std::collections::HashMap::new();
 
     for i in 0..archive.len() {
         let Ok(file_entry) = archive.by_index(i) else { continue; };
@@ -262,14 +265,18 @@ pub fn detect_strip_prefix(zip_path: &Path, expected_folder: &str, alt_folders: 
             continue;
         }
 
-        if parts.len() == 1 && !file_entry.is_dir() {
+        if parts.len() == 1 && !file_entry.is_dir() && !file_entry.name().ends_with('/') {
             has_root_files = true;
         } else {
-            top_level_dirs.insert(parts[0].to_string());
+            let top_d = parts[0].to_string();
+            top_level_dirs.insert(top_d.clone());
+            if parts.len() >= 2 {
+                sub_dirs_by_top.entry(top_d).or_default().insert(parts[1].to_lowercase());
+            }
         }
     }
 
-    if !has_root_files && top_level_dirs.len() == 1 {
+    if top_level_dirs.len() == 1 {
         let only_dir = top_level_dirs.into_iter().next().unwrap();
         let lower = only_dir.to_lowercase();
         let mut valid_candidates = vec![expected_folder.to_lowercase()];
@@ -277,8 +284,22 @@ pub fn detect_strip_prefix(zip_path: &Path, expected_folder: &str, alt_folders: 
             valid_candidates.push(a.to_lowercase());
         }
 
-        if valid_candidates.iter().any(|c| lower.contains(c) || c.contains(&lower)) {
-            return Some(format!("{}/", only_dir));
+        let is_match = valid_candidates.iter().any(|c| lower == *c || lower.contains(c) || c.contains(&lower))
+            || lower.starts_with("httpd")
+            || lower.starts_with("apache")
+            || lower.starts_with("php")
+            || lower == "node_modules";
+
+        if is_match {
+            if !has_root_files {
+                return Some(format!("{}/", only_dir));
+            }
+            // 針對 Apache Lounge 等官方壓縮包：根目錄帶有 ReadMe.txt 散落說明檔，但內層具備 bin/conf/ext 核心目錄
+            let sub_set = sub_dirs_by_top.get(&only_dir);
+            let has_core = sub_set.map_or(false, |s| (s.contains("bin") && s.contains("conf")) || s.contains("ext"));
+            if valid_candidates.iter().any(|c| lower == *c) || has_core {
+                return Some(format!("{}/", only_dir));
+            }
         }
     }
 
@@ -384,6 +405,125 @@ pub fn restore_from_backup_zip(zip_path: &Path, root_dir: &Path, log_fn: &dyn Fn
         Err(e) => {
             log_fn(&format!("  ❌ 備份還原失敗: {}", e), "error");
             (false, e)
+        }
+    }
+}
+
+pub fn flatten_directory(src: &Path, dest: &Path) -> io::Result<()> {
+    if !src.is_dir() {
+        return Ok(());
+    }
+    fs::create_dir_all(dest)?;
+
+    if let Ok(entries) = fs::read_dir(src) {
+        for entry in entries.flatten() {
+            let s_path = entry.path();
+            let fname = entry.file_name();
+            let d_path = dest.join(&fname);
+
+            if s_path.is_dir() {
+                if !d_path.exists() {
+                    // 同磁碟分割區可直接秒級搬移目錄
+                    if fs::rename(&s_path, &d_path).is_err() {
+                        flatten_directory(&s_path, &d_path)?;
+                        let _ = fs::remove_dir_all(&s_path);
+                    }
+                } else {
+                    flatten_directory(&s_path, &d_path)?;
+                    let _ = fs::remove_dir_all(&s_path);
+                }
+            } else {
+                if d_path.exists() {
+                    let _ = fs::remove_file(&d_path);
+                }
+                if fs::rename(&s_path, &d_path).is_err() {
+                    fs::copy(&s_path, &d_path)?;
+                    let _ = fs::remove_file(&s_path);
+                }
+            }
+        }
+    }
+    let _ = fs::remove_dir_all(src);
+    Ok(())
+}
+
+pub fn auto_flatten_nested_dirs(root_dir: &Path, log_fn: &dyn Fn(&str, &str)) {
+    // 1. Apache24\Apache24 -> Apache24
+    let apache_dir = root_dir.join("Apache24");
+    let inner_apache = apache_dir.join("Apache24");
+    if inner_apache.is_dir() && !apache_dir.join("bin").join("httpd.exe").is_file() {
+        if inner_apache.join("bin").join("httpd.exe").is_file() {
+            log_fn("🛠️ 偵測到 Apache24 雙層巢狀目錄，正在自動攤平校正至目標目錄...", "warning");
+            if let Err(e) = flatten_directory(&inner_apache, &apache_dir) {
+                log_fn(&format!("  ⚠️ 攤平 Apache24 目錄警示: {}", e), "warning");
+            } else {
+                log_fn("  ✓ 已成功將雙層 Apache24 目錄攤平校正完畢！", "success");
+            }
+        }
+    }
+
+    // 2. LAH-NUXTJS\node_modules\node_modules -> LAH-NUXTJS\node_modules
+    let fe_nm = root_dir.join("LAH-NUXTJS").join("node_modules");
+    let inner_fe_nm = fe_nm.join("node_modules");
+    if inner_fe_nm.is_dir() {
+        log_fn("🛠️ 偵測到 LAH-NUXTJS node_modules 雙層巢狀目錄，正在自動攤平校正...", "warning");
+        if let Err(e) = flatten_directory(&inner_fe_nm, &fe_nm) {
+            log_fn(&format!("  ⚠️ 攤平 LAH-NUXTJS node_modules 警示: {}", e), "warning");
+        } else {
+            log_fn("  ✓ 已成功將 LAH-NUXTJS node_modules 雙層目錄攤平校正完畢！", "success");
+        }
+    }
+
+    // 3. lah-messenger-server\node_modules\node_modules -> lah-messenger-server\node_modules
+    let wss_nm = root_dir.join("lah-messenger-server").join("node_modules");
+    let inner_wss_nm = wss_nm.join("node_modules");
+    if inner_wss_nm.is_dir() {
+        log_fn("🛠️ 偵測到 lah-messenger-server node_modules 雙層巢狀目錄，正在自動攤平校正...", "warning");
+        if let Err(e) = flatten_directory(&inner_wss_nm, &wss_nm) {
+            log_fn(&format!("  ⚠️ 攤平 lah-messenger-server node_modules 警示: {}", e), "warning");
+        } else {
+            log_fn("  ✓ 已成功將 lah-messenger-server node_modules 雙層目錄攤平校正完畢！", "success");
+        }
+    }
+}
+
+pub fn ensure_default_env_files(root_dir: &Path, log_fn: &dyn Fn(&str, &str)) {
+    // 1. LAH-NUXTJS
+    let fe_env = root_dir.join("LAH-NUXTJS").join(".env");
+    let fe_example = root_dir.join("LAH-NUXTJS").join(".env.example");
+    if !fe_env.is_file() && fe_example.is_file() {
+        if fs::copy(&fe_example, &fe_env).is_ok() {
+            log_fn("  ✓ 已依據 .env.example 初始化建立 LAH-NUXTJS/.env (Port 8080)", "success");
+        }
+    }
+
+    // 2. lah-messenger-server
+    let wss_env = root_dir.join("lah-messenger-server").join(".env");
+    let wss_example = root_dir.join("lah-messenger-server").join(".env.example");
+    if !wss_env.is_file() && wss_example.is_file() {
+        if let Ok(content) = fs::read_to_string(&wss_example) {
+            let patched = content.replace("WEBSOCKET_HOST=XXX.XXX.XXX.XXX", "WEBSOCKET_HOST=0.0.0.0");
+            if fs::write(&wss_env, patched).is_ok() {
+                log_fn("  ✓ 已依據 .env.example 初始化建立 lah-messenger-server/.env (Port 8081/8082)", "success");
+            }
+        }
+    }
+
+    // 3. www
+    let www_env = root_dir.join("www").join(".env");
+    let www_example = root_dir.join("www").join(".env.example");
+    if !www_env.is_file() && www_example.is_file() {
+        if fs::copy(&www_example, &www_env).is_ok() {
+            log_fn("  ✓ 已依據 .env.example 初始化建立 www/.env", "success");
+        }
+    }
+
+    // 4. LAH-API
+    let api_env = root_dir.join("LAH-API").join(".env");
+    let api_example = root_dir.join("LAH-API").join(".env.example");
+    if !api_env.is_file() && api_example.is_file() {
+        if fs::copy(&api_example, &api_env).is_ok() {
+            log_fn("  ✓ 已依據 .env.example 初始化建立 LAH-API/.env", "success");
         }
     }
 }

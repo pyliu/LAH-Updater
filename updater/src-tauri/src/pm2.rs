@@ -160,3 +160,168 @@ pub fn setup_pm2_autostart(root_dir: &Path, log_fn: &dyn Fn(&str, &str)) -> (boo
 
     (true, "LAH_PM2_Service 已註冊".to_string())
 }
+
+pub fn audit_and_ensure_pm2_services(root_dir: &Path, log_fn: &dyn Fn(&str, &str)) -> (bool, String) {
+    let logs_dir = root_dir.join("logs");
+    let _ = fs::create_dir_all(&logs_dir);
+
+    let Some(pm2) = resolve_pm2_command(root_dir) else {
+        log_fn("⚠️ 系統未偵測到有效的 pm2.cmd，跳過 PM2 服務巡檢。", "warning");
+        return (false, "未偵測到 pm2.cmd".to_string());
+    };
+    let pm2_str = pm2.to_string_lossy().to_string();
+
+    log_fn("--------------------------------------------------", "info");
+    log_fn("🔍 正在執行 PM2 核心服務全方位狀態巡檢...", "info");
+
+    // 1. 取得現有 PM2 程序清單
+    let mut managed_apps: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+    let (ok_jlist, out_jlist, _) = run_cmd_hidden(&pm2_str, &["jlist"]);
+    if ok_jlist {
+        if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&out_jlist) {
+            if let Some(arr) = parsed.as_array() {
+                for item in arr {
+                    if let Some(name) = item.get("name").and_then(|v| v.as_str()) {
+                        let status = item.get("pm2_env")
+                            .and_then(|e| e.get("status"))
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("unknown");
+                        if !managed_apps.contains_key(name) || status == "online" {
+                            managed_apps.insert(name.to_string(), status.to_string());
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // 2. 定義 3 大生態系設定檔與所屬服務
+    struct EcosystemDef {
+        title: &'static str,
+        apps: &'static [&'static str],
+        candidates: Vec<PathBuf>,
+    }
+
+    let core_ecosystems = [
+        EcosystemDef {
+            title: "即時通訊伺服器 (LAH-WSS)",
+            apps: &["LAH-WSS"],
+            candidates: vec![
+                root_dir.join("lah-messenger-server").join("ecosystem.config.js"),
+            ],
+        },
+        EcosystemDef {
+            title: "智慧管控前端網站 (LAH-FE / LAH-SCHEDULER)",
+            apps: &["LAH-FE", "LAH-SCHEDULER"],
+            candidates: vec![
+                root_dir.join("LAH-NUXTJS").join("ecosystem.config.js"),
+                root_dir.join("LAH-FE").join("ecosystem.config.js"),
+            ],
+        },
+        EcosystemDef {
+            title: "現代化後端 API (lah-api-v85)",
+            apps: &["lah-api-v85"],
+            candidates: vec![
+                root_dir.join("LAH-API").join("ecosystem.config.js"),
+                root_dir.join("LAH-API").join("API").join("ecosystem.config.js"),
+            ],
+        },
+    ];
+
+    let mut need_save = false;
+
+    for eco in &core_ecosystems {
+        let eco_path_opt = eco.candidates.iter().find(|p| p.is_file());
+        let Some(eco_path) = eco_path_opt else { continue; };
+
+        let missing_apps: Vec<&&str> = eco.apps.iter().filter(|a| {
+            managed_apps.get(**a).map_or(true, |st| st != "online")
+        }).collect();
+
+        if !missing_apps.is_empty() {
+            let names = missing_apps.iter().map(|s| **s).collect::<Vec<&str>>().join(", ");
+            log_fn(&format!("⚡ 偵測到 [{}] 之服務 [{}] 尚未在線，正在啟動 [{}]...", eco.title, names, eco_path.display()), "warning");
+
+            let eco_str = eco_path.to_string_lossy().to_string();
+            let (start_ok, stdout, stderr) = run_cmd_hidden(&pm2_str, &["start", &eco_str, "--no-color"]);
+            if start_ok || stdout.contains("✓") {
+                log_fn(&format!("  ✅ 成功啟動 [{}]！", eco.title), "success");
+                need_save = true;
+            } else {
+                log_fn(&format!("  ⚠️ 啟動 [{}] 回傳警示: {} {}", eco_path.display(), stdout, stderr), "warning");
+            }
+        }
+    }
+
+    // 2.1 檢查並確保日誌輪替模組 (pm2-logrotate) 運作
+    if managed_apps.get("pm2-logrotate").map_or(true, |st| st != "online") {
+        log_fn("⚡ 偵測到日誌輪替模組 [pm2-logrotate] 尚未在線，正在嘗試啟動...", "warning");
+        let (restart_ok, _, _) = run_cmd_hidden(&pm2_str, &["restart", "pm2-logrotate", "--no-color"]);
+        if restart_ok {
+            log_fn("  ✅ 成功啟動 [pm2-logrotate] 模組！", "success");
+            need_save = true;
+        } else {
+            let local_mod = root_dir.join("node").join("node_modules").join("pm2-logrotate");
+            let target_pkg = if local_mod.is_dir() {
+                local_mod.to_string_lossy().to_string()
+            } else {
+                "pm2-logrotate".to_string()
+            };
+            let (inst_ok, stdout, stderr) = run_cmd_hidden(&pm2_str, &["install", &target_pkg, "--no-color"]);
+            if inst_ok {
+                log_fn("  ✅ 成功註冊並啟動 [pm2-logrotate] 模組！", "success");
+                let _ = run_cmd_hidden(&pm2_str, &["set", "pm2-logrotate:compress", "true"]);
+                need_save = true;
+            } else {
+                log_fn(&format!("  ⚠️ 啟動 [pm2-logrotate] 模組警示: {} {}", stdout, stderr), "warning");
+            }
+        }
+    }
+
+    // 3. 若有補啟動任何項目，自動持久化保存狀態
+    if need_save {
+        log_fn("💾 偵測到服務配置異動，正在執行 [pm2 save] 更新持久化存檔...", "info");
+        let _ = run_cmd_hidden(&pm2_str, &["save", "--force"]);
+    }
+
+    // 4. 重新查詢一次最新狀態印出摘要報告
+    let mut final_apps: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+    let (ok_final, out_final, _) = run_cmd_hidden(&pm2_str, &["jlist"]);
+    if ok_final {
+        if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&out_final) {
+            if let Some(arr) = parsed.as_array() {
+                for item in arr {
+                    if let Some(name) = item.get("name").and_then(|v| v.as_str()) {
+                        let status = item.get("pm2_env")
+                            .and_then(|e| e.get("status"))
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("unknown");
+                        if !final_apps.contains_key(name) || status == "online" {
+                            final_apps.insert(name.to_string(), status.to_string());
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    log_fn("📋 PM2 核心服務現況總覽：", "info");
+    let mut all_healthy = true;
+    for app_name in &["LAH-WSS", "LAH-FE", "LAH-SCHEDULER", "lah-api-v85", "pm2-logrotate"] {
+        let st = final_apps.get(*app_name).map(|s| s.as_str()).unwrap_or("未註冊 / 離線");
+        if st == "online" {
+            log_fn(&format!("  • {:<16} : ✅ {st}", app_name), "success");
+        } else {
+            all_healthy = false;
+            log_fn(&format!("  • {:<16} : ⚠️ {st}", app_name), "warning");
+        }
+    }
+
+    if all_healthy {
+        log_fn("🎉 全部 5 大核心服務與模組皆已成功在線運作！", "success");
+    } else {
+        log_fn("⚠️ 部分核心服務未能順利在線，請檢視上方日誌輸出或終端機 pm2 status。", "warning");
+    }
+
+    (all_healthy, "PM2 服務巡檢完成".to_string())
+}

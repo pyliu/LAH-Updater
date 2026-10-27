@@ -56,7 +56,20 @@ def main():
             out_exe_name = "智慧控管與監控系統 - 自動更新工具.exe"
             out_exe_path = os.path.join(dist_dir, out_exe_name)
 
-            shutil.copy2(built_exe, out_exe_path)
+            try:
+                shutil.copy2(built_exe, out_exe_path)
+            except PermissionError:
+                old_bak = out_exe_path + ".old"
+                if os.path.isfile(old_bak):
+                    try:
+                        os.remove(old_bak)
+                    except Exception:
+                        pass
+                try:
+                    os.rename(out_exe_path, old_bak)
+                    shutil.copy2(built_exe, out_exe_path)
+                except Exception as e:
+                    print(f"[WARN] 覆蓋執行檔時發生鎖定: {e}")
 
             # 確保 dist 目錄僅保留中文檔名之發布執行檔，若存在舊版英文檔名則主動清除
             legacy_std_path = os.path.join(dist_dir, "lah-updater.exe")

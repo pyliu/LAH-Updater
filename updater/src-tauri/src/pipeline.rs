@@ -1,5 +1,8 @@
 use crate::apache_conf::*;
-use crate::extractor::{detect_strip_prefix, extract_zip, restore_from_backup_zip};
+use crate::extractor::{
+    auto_flatten_nested_dirs, detect_strip_prefix, ensure_default_env_files, extract_zip,
+    restore_from_backup_zip, ALL_PACKAGE_SPECS,
+};
 use crate::health::verify_all_services_health;
 use crate::pm2::*;
 use crate::services::*;
@@ -15,7 +18,7 @@ where
     let start_time = Instant::now();
     let root_path = PathBuf::from(&options.root_dir);
 
-    let log_event = |level: &str, msg: &str| {
+    let log_event = |msg: &str, level: &str| {
         emit_fn(ProgressEvent {
             stage: "log".to_string(),
             percent: 0,
@@ -33,8 +36,8 @@ where
         });
     };
 
-    log_event("info", "============================================================");
-    log_event("info", "🚀 開始執行自動更新作業...");
+    log_event("============================================================", "info");
+    log_event("🚀 開始執行自動更新作業...", "info");
     set_prog(0, "正在準備更新作業...");
 
     let mut selected_pkgs = options.packages.clone();
@@ -53,7 +56,7 @@ where
             set_prog(2, &format!("正在停止 Apache 服務 [{svc_name}]..."));
             apache_was_stopped = stop_service(&svc_name, &log_event);
         } else {
-            log_event("info", "ℹ️ 系統未偵測到運行中的 Apache 服務，跳過停止步驟。");
+            log_event("ℹ️ 系統未偵測到運行中的 Apache 服務，跳過停止步驟。", "info");
         }
     }
 
@@ -65,9 +68,9 @@ where
         let node_exe = root_path.join("node").join("node.exe");
         let _ = kill_pm2_daemon(&root_path, &log_event);
         if is_file_locked(&node_exe) {
-            log_event("warning", &format!("⚠️ 警告：{} 仍處於鎖定狀態，若解壓失敗請確認行程已結束。", node_exe.display()));
+            log_event(&format!("⚠️ 警告：{} 仍處於鎖定狀態，若解壓失敗請確認行程已結束。", node_exe.display()), "warning");
         } else {
-            log_event("info", "✅ node.exe 檔案未受鎖定，可安全覆蓋解壓。");
+            log_event("✅ node.exe 檔案未受鎖定，可安全覆蓋解壓。", "info");
         }
     }
 
@@ -82,22 +85,28 @@ where
         let tgt_p = PathBuf::from(&pkg.target_path);
 
         if !zip_p.is_file() {
-            log_event("warning", &format!("⚠️ 找不到安裝包檔案: {}", zip_p.display()));
+            log_event(&format!("⚠️ 找不到安裝包檔案: {}", zip_p.display()), "warning");
             continue;
         }
 
         zips_to_clean.push(pkg.zip_path.clone());
 
         let pkg_num = idx + 1;
-        log_event("info", "--------------------------------------------------");
-        log_event("info", &format!("[{}/{}] 正在解壓縮：{} ➔ {}", pkg_num, total_pkgs, pkg.name, tgt_p.display()));
+        log_event("--------------------------------------------------", "info");
+        log_event(&format!("[{}/{}] 正在解壓縮：{} ➔ {}", pkg_num, total_pkgs, pkg.name, tgt_p.display()), "info");
 
-        let alt_slices: Vec<&str> = pkg.alt_folders.iter().map(|s| s.as_str()).collect();
-        let strip_prefix = detect_strip_prefix(&zip_p, &pkg.expected_folder, &alt_slices);
+        // 依據 PackageSpec 取得權威 expected_folder 與 alt_folders
+        let spec_opt = ALL_PACKAGE_SPECS.iter().find(|s| s.id == pkg.id);
+        let expected = spec_opt.map(|s| s.expected_folder).unwrap_or(&pkg.expected_folder);
+        let alt_vec: Vec<&str> = spec_opt
+            .map(|s| s.alt_folders.to_vec())
+            .unwrap_or_else(|| pkg.alt_folders.iter().map(|s| s.as_str()).collect());
+
+        let strip_prefix = detect_strip_prefix(&zip_p, expected, &alt_vec);
         if let Some(ref pfx) = strip_prefix {
-            log_event("warning", &format!("🛡️ [防呆觸發] 偵測到頂層包含 '{pfx}' 單一目錄，已自動對齊解壓至目標路徑！"));
+            log_event(&format!("🛡️ [防呆觸發] 偵測到頂層包含 '{pfx}' 單一目錄，已自動對齊解壓至目標路徑！"), "warning");
         } else {
-            log_event("info", "ℹ️ 壓縮包頂層為直接檔案結構，依照目標目錄直接解壓縮覆蓋。");
+            log_event("ℹ️ 壓縮包頂層為直接檔案結構，依照目標目錄直接解壓縮覆蓋。", "info");
         }
 
         let base_percent = 5 + (idx as u32 * 75 / total_pkgs.max(1) as u32);
@@ -111,11 +120,11 @@ where
         match extract_zip(&zip_p, &tgt_p, strip_prefix.as_deref(), &on_file) {
             Ok(count) => {
                 total_files_extracted += count;
-                log_event("success", &format!("✅ {} 解壓縮覆蓋完成 (處理 {} 個項目)。", pkg.name, count));
+                log_event(&format!("✅ {} 解壓縮覆蓋完成 (處理 {} 個項目)。", pkg.name, count), "success");
             }
             Err(e) => {
                 let err_msg = format!("❌ 解壓縮 {} 失敗: {}", pkg.name, e);
-                log_event("error", &err_msg);
+                log_event(&err_msg, "error");
                 return UpdateSummary {
                     success: false,
                     elapsed_secs: start_time.elapsed().as_secs_f64(),
@@ -128,6 +137,12 @@ where
             }
         }
     }
+
+    // 解壓後立即進行巢狀目錄防護檢查與自癒攤平
+    auto_flatten_nested_dirs(&root_path, &log_event);
+
+    // 確保各子專案 .env 基礎設定檔齊備
+    ensure_default_env_files(&root_path, &log_event);
 
     // 步驟 3：備份檔還原
     if options.restore_backup {
@@ -153,7 +168,7 @@ where
     if apache_tgt.is_dir() {
         set_prog(89, "[階段 1/5] 正在配置 Apache 2.4 + PHP 7.4 與註冊服務...");
         configure_apache_mod_php7(&apache_tgt, &root_path, if php7_tgt.is_dir() { Some(&php7_tgt) } else { None }, &log_event);
-        if options.auto_register_apache || has_base_env_update {
+        if options.auto_register_apache || has_base_env_update || query_apache_service().is_none() {
             install_apache_service(&apache_tgt, "Apache2.4", &log_event);
         }
     }
@@ -213,13 +228,20 @@ where
         }
 
         // 喚醒或重啟 PM2
-        let (res_ok, _) = resurrect_pm2_services(&root_path, &log_event);
-        if !res_ok && options.restart_pm2 {
+        if options.restart_pm2 {
             restart_pm2_services(&root_path, &log_event);
+        } else {
+            let (res_ok, _) = resurrect_pm2_services(&root_path, &log_event);
+            if !res_ok {
+                restart_pm2_services(&root_path, &log_event);
+            }
         }
 
         // 自動確認並配置 WinSW 服務 (LAH_PM2_Service)
         setup_pm2_autostart(&root_path, &log_event);
+
+        // 全方位巡檢與補齊 PM2 核心服務 (LAH-WSS, LAH-FE, LAH-SCHEDULER, lah-api-v85, pm2-logrotate)
+        audit_and_ensure_pm2_services(&root_path, &log_event);
     }
 
     // =========================================================================
@@ -232,7 +254,7 @@ where
             stop_service(&target_svc, &log_event);
             start_service(&target_svc, &log_event);
         }
-    } else {
+    } else if options.restart_apache || has_base_env_update || has_apache_app_update {
         set_prog(98, &format!("[階段 5/5] 正在啟動 Apache 服務 [{target_svc}]..."));
         start_service(&target_svc, &log_event);
     }
@@ -243,8 +265,8 @@ where
 
     let elapsed = start_time.elapsed().as_secs_f64();
     set_prog(100, &format!("✅ 全部安裝與服務啟動確認完成！(耗時 {:.1} 秒)", elapsed));
-    log_event("success", "============================================================");
-    log_event("success", &format!("🎉 全部選取的安裝包與 5 階段系統自動化配置已順利完成！(總耗時: {:.1} 秒)", elapsed));
+    log_event("============================================================", "success");
+    log_event(&format!("🎉 全部選取的安裝包與 5 階段系統自動化配置已順利完成！(總耗時: {:.1} 秒)", elapsed), "success");
 
     UpdateSummary {
         success: true,

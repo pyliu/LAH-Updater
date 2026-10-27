@@ -16,6 +16,8 @@ pub struct PackageItem {
     pub target_path: String,
     pub target_exists: bool,
     pub checked: bool,
+    pub expected_folder: String,
+    pub alt_folders: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

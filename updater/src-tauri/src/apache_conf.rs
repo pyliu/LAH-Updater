@@ -96,8 +96,28 @@ pub fn ensure_php_ini_configured(php_dir: &Path, is_php85: bool, log_fn: &dyn Fn
 pub fn configure_apache_mod_php7(apache_dir: &Path, root_dir: &Path, php7_dir: Option<&Path>, log_fn: &dyn Fn(&str, &str)) -> (bool, bool) {
     let conf_path = apache_dir.join("conf").join("httpd.conf");
     if !conf_path.is_file() {
-        log_fn(&format!("⚠️ 未找到 httpd.conf：{}", conf_path.display()), "warning");
-        return (false, false);
+        // 嘗試自範本檔初始化
+        let candidates = [
+            apache_dir.join("conf").join("httpd.conf.default"),
+            apache_dir.join("conf").join("original").join("httpd.conf"),
+            root_dir.join("LAH-API").join("httpd.conf-ref"),
+            root_dir.join("LAH-API").join("API").join("httpd.conf-ref"),
+        ];
+        let mut restored = false;
+        for c in &candidates {
+            if c.is_file() {
+                let _ = fs::create_dir_all(apache_dir.join("conf"));
+                if fs::copy(c, &conf_path).is_ok() {
+                    log_fn(&format!("  ✓ 已依據範本 [{}] 初始化建立 httpd.conf", c.display()), "info");
+                    restored = true;
+                    break;
+                }
+            }
+        }
+        if !restored {
+            log_fn(&format!("⚠️ 未找到 httpd.conf：{}", conf_path.display()), "warning");
+            return (false, false);
+        }
     }
 
     let Ok(mut content) = fs::read_to_string(&conf_path) else {
@@ -113,7 +133,7 @@ pub fn configure_apache_mod_php7(apache_dir: &Path, root_dir: &Path, php7_dir: O
     if re_srv.is_match(&content) {
         content = re_srv.replace(&content, format!(r#"Define SRVROOT "{}""#, apache_fwd)).to_string();
     } else {
-        content = format!(r#"Define SRVROOT "{}"`nServerRoot "${{SRVROOT}}"`n{}"#, apache_fwd, content);
+        content = format!("Define SRVROOT \"{}\"\nServerRoot \"${{SRVROOT}}\"\n{}", apache_fwd, content);
     }
 
     // 2. 模組載入 headers / rewrite
@@ -124,9 +144,28 @@ pub fn configure_apache_mod_php7(apache_dir: &Path, root_dir: &Path, php7_dir: O
         }
     }
 
-    // 3. DocumentRoot
+    // 2.1 ServerName (避免啟動時 AH00558 警告)
+    let re_sname = Regex::new(r#"(?m)^\s*#\s*ServerName\s+www\.example\.com:80.*$"#).unwrap();
+    if re_sname.is_match(&content) {
+        content = re_sname.replace(&content, "ServerName localhost:80").to_string();
+    }
+
+    // 3. DocumentRoot 與目錄權限
     let re_doc = Regex::new(r#"(?m)^\s*DocumentRoot\s+"[^"]*""#).unwrap();
     content = re_doc.replace(&content, format!(r#"DocumentRoot "{}""#, www_fwd)).to_string();
+
+    let www_dir_block = format!(
+        "<Directory \"{www_fwd}\">\n    Header set Access-Control-Allow-Origin \"*\"\n    Options -Indexes +FollowSymLinks\n    AllowOverride None\n    Require all granted\n</Directory>"
+    );
+    let re_htdocs = Regex::new(r#"(?s)<Directory\s+"\$\{SRVROOT\}/htdocs">.*?</Directory>"#).unwrap();
+    if re_htdocs.is_match(&content) {
+        content = re_htdocs.replace(&content, &www_dir_block).to_string();
+    } else {
+        let re_old_www = Regex::new(r#"(?s)<Directory\s+"[a-zA-Z]:/[^"]*?/www">.*?</Directory>"#).unwrap();
+        if re_old_www.is_match(&content) {
+            content = re_old_www.replace(&content, &www_dir_block).to_string();
+        }
+    }
 
     // 4. DirectoryIndex
     let re_idx = Regex::new(r#"(?m)^\s*DirectoryIndex\s+.*$"#).unwrap();
@@ -134,24 +173,48 @@ pub fn configure_apache_mod_php7(apache_dir: &Path, root_dir: &Path, php7_dir: O
         content = re_idx.replace(&content, "DirectoryIndex index.php index.html").to_string();
     }
 
-    // 5. mod_php7
+    // 5. mod_php7 與相依 DLL (php7ts, libcrypto, libssl, libssh2, nghttp2, libsqlite3, libsodium, libsasl)
     if let Some(p7) = php7_dir {
         if p7.is_dir() {
             let p7_fwd = p7.to_string_lossy().replace('\\', "/");
-            let php7_block = format!(
-                "\n# =====================================================================\n\
-                # PHP 7.4 (mod_php)\n\
-                # =====================================================================\n\
-                LoadModule php7_module \"{p7_fwd}/php7apache2_4.dll\"\n\
-                PHPIniDir \"{p7_fwd}\"\n\
-                <FilesMatch \\.php$>\n\
-                    SetHandler application/x-httpd-php\n\
-                </FilesMatch>\n"
-            );
+            let p7_dll = p7.join("php7apache2_4.dll");
+            if p7_dll.is_file() {
+                let preload_dlls = [
+                    "php7ts.dll",
+                    "libcrypto-1_1-x64.dll",
+                    "libssl-1_1-x64.dll",
+                    "libssh2.dll",
+                    "nghttp2.dll",
+                    "libsqlite3.dll",
+                    "libsodium.dll",
+                    "libsasl.dll",
+                ];
+                let mut load_lines = Vec::new();
+                for dll_name in &preload_dlls {
+                    if p7.join(dll_name).is_file() {
+                        load_lines.push(format!(r#"LoadFile "{}/{dll_name}""#, p7_fwd));
+                    }
+                }
+                let load_files_str = load_lines.join("\n");
+                let php7_block = format!(
+                    "\n# =====================================================================\n\
+                    # PHP 7.4 (mod_php7) Configuration\n\
+                    # =====================================================================\n\
+                    {load_files_str}\n\
+                    LoadModule php7_module \"{p7_fwd}/php7apache2_4.dll\"\n\
+                    PHPIniDir \"{p7_fwd}\"\n\
+                    <FilesMatch \\.php$>\n\
+                        SetHandler application/x-httpd-php\n\
+                    </FilesMatch>\n"
+                );
 
-            if !content.contains("php7_module") {
-                content.push_str(&php7_block);
-                log_fn("  ✓ 已向 Apache httpd.conf 掛載 PHP 7.4 mod_php 模組", "success");
+                let existing_p7_re = Regex::new(r#"(?s)# =+\s*# PHP 7\.4 \(mod_php7?\).*?</FilesMatch>"#).unwrap();
+                if existing_p7_re.is_match(&content) {
+                    content = existing_p7_re.replace(&content, &php7_block).to_string();
+                } else if !content.contains("php7_module") {
+                    content.push_str(&php7_block);
+                    log_fn("  ✓ 已向 Apache httpd.conf 掛載 PHP 7.4 mod_php 模組與相依程式庫", "success");
+                }
             }
         }
     }
