@@ -33,6 +33,24 @@ pub fn is_service_running(svc_name: &str) -> bool {
     ok_ps && stdout_ps.trim().eq_ignore_ascii_case("running")
 }
 
+pub fn is_service_installed(svc_name: &str) -> bool {
+    let (ok, _, _) = run_cmd_hidden("sc.exe", &["query", svc_name]);
+    if ok {
+        return true;
+    }
+    let ps = format!("(Get-Service '{}' -ErrorAction SilentlyContinue) -ne $null", svc_name);
+    let (ok_ps, stdout_ps, _) = run_powershell(&ps);
+    ok_ps && stdout_ps.trim().eq_ignore_ascii_case("true")
+}
+
+pub fn is_pm2_service_installed() -> bool {
+    is_service_installed("LAH_PM2_Service")
+}
+
+pub fn is_pm2_service_running() -> bool {
+    is_service_running("LAH_PM2_Service")
+}
+
 pub fn stop_service(svc_name: &str, log_fn: &dyn Fn(&str, &str)) -> bool {
     log_fn(&format!("⏳ 正在停止服務 [{}]...", svc_name), "info");
     let _ = run_cmd_hidden("net.exe", &["stop", svc_name]);

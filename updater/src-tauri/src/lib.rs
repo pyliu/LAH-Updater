@@ -125,6 +125,8 @@ fn scan_environment(root_dir: String) -> ScanSummary {
 
     let (pm2_running, pm2_info) = pm2::query_pm2_daemon_info(&root_path);
     let pm2_installed = pm2::resolve_pm2_command(&root_path).is_some();
+    let pm2_service_installed = services::is_pm2_service_installed();
+    let pm2_service_running = services::is_pm2_service_running();
 
     let backup_zip_found = extractor::find_latest_backup_zip(&search_dirs).map(|p| p.to_string_lossy().to_string());
     let release_notes = read_release_notes();
@@ -138,6 +140,8 @@ fn scan_environment(root_dir: String) -> ScanSummary {
         pm2_installed,
         pm2_running,
         pm2_daemon_info: pm2_info,
+        pm2_service_installed,
+        pm2_service_running,
         backup_zip_found,
         release_notes,
     }

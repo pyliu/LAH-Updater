@@ -28,6 +28,10 @@ pub struct RootDirCheck {
     pub is_dir: bool,
 }
 
+fn default_true() -> bool {
+    true
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ScanSummary {
     pub root_dir: String,
@@ -38,6 +42,8 @@ pub struct ScanSummary {
     pub pm2_installed: bool,
     pub pm2_running: bool,
     pub pm2_daemon_info: String,
+    pub pm2_service_installed: bool,
+    pub pm2_service_running: bool,
     pub backup_zip_found: Option<String>,
     pub release_notes: Option<String>,
 }
@@ -60,6 +66,8 @@ pub struct UpdateOptions {
     pub root_dir: String,
     pub packages: Vec<SelectedPackage>,
     pub auto_register_apache: bool,
+    #[serde(default = "default_true")]
+    pub auto_register_pm2: bool,
     pub auto_security_hardening: bool,
     pub restart_apache: bool,
     pub restart_pm2: bool,
@@ -71,6 +79,8 @@ pub struct UpdateOptions {
 pub struct SystemConfigOptions {
     pub root_dir: String,
     pub auto_register_apache: bool,
+    #[serde(default = "default_true")]
+    pub auto_register_pm2: bool,
     pub auto_security_hardening: bool,
     pub restart_apache: bool,
     pub restart_pm2: bool,

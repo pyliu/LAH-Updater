@@ -238,7 +238,11 @@ where
         }
 
         // 自動確認並配置 WinSW 服務 (LAH_PM2_Service)
-        setup_pm2_autostart(&root_path, &log_event);
+        if options.auto_register_pm2 {
+            setup_pm2_autostart(&root_path, &log_event);
+        } else {
+            log_event("  ℹ️ 未勾選註冊 PM2 系統服務，跳過 LAH_PM2_Service 註冊與自啟配置", "info");
+        }
 
         // 全方位巡檢與補齊 PM2 核心服務 (LAH-WSS, LAH-FE, LAH-SCHEDULER, lah-api-v85, pm2-logrotate)
         audit_and_ensure_pm2_services(&root_path, &log_event);
@@ -381,7 +385,11 @@ where
         if oci_dir.is_dir() {
             register_path_to_user_environment(&oci_dir, &log_event);
         }
-        setup_pm2_autostart(&root_path, &log_event);
+        if options.auto_register_pm2 {
+            setup_pm2_autostart(&root_path, &log_event);
+        } else {
+            log_event("  ℹ️ 未勾選註冊 PM2 系統服務，跳過 LAH_PM2_Service 註冊與自啟配置", "info");
+        }
         audit_and_ensure_pm2_services(&root_path, &log_event);
         if options.restart_pm2 {
             restart_pm2_services(&root_path, &log_event);

@@ -289,10 +289,18 @@ async function scanEnvironment() {
 
     // 服務狀態連動
     if (res.apache_service) {
+      document.getElementById("lbl_auto_apache").textContent = `自動註冊 Apache 為 Windows 系統服務 [${res.apache_service}] (${res.apache_running ? "運行中" : "已註冊"})`;
       document.getElementById("chk_restart_apache").checked = res.apache_running;
       document.getElementById("lbl_restart_apache").textContent = `更新後重新啟動 Apache 服務 [${res.apache_service}] (${res.apache_running ? "運行中" : "已停止"})`;
     } else {
+      document.getElementById("lbl_auto_apache").textContent = "自動註冊 Apache 為 Windows 系統服務 (Apache2.4 未安裝)";
       document.getElementById("lbl_restart_apache").textContent = "更新後重新啟動 Apache 服務 (未安裝)";
+    }
+
+    if (res.pm2_service_installed) {
+      document.getElementById("lbl_auto_pm2").textContent = `自動註冊 PM2 為 Windows 系統服務 (LAH_PM2_Service ${res.pm2_service_running ? "運行中" : "已註冊"})`;
+    } else {
+      document.getElementById("lbl_auto_pm2").textContent = "自動註冊 PM2 為 Windows 系統服務 (LAH_PM2_Service 未安裝)";
     }
 
     if (res.pm2_installed) {
@@ -452,6 +460,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const rootDir = document.getElementById("txt_root_dir").value.trim() || "C:\\AppServ";
     const autoRegisterApache = document.getElementById("chk_auto_apache").checked;
+    const autoRegisterPm2 = document.getElementById("chk_auto_pm2").checked;
     const autoSecurity = document.getElementById("chk_security_hardening").checked;
     const restartApache = document.getElementById("chk_restart_apache").checked;
     const restartPm2 = document.getElementById("chk_restart_pm2").checked;
@@ -472,6 +481,7 @@ document.addEventListener("DOMContentLoaded", () => {
         alt_folders: p.alt_folders || [],
       })),
       auto_register_apache: autoRegisterApache,
+      auto_register_pm2: autoRegisterPm2,
       auto_security_hardening: autoSecurity,
       restart_apache: restartApache,
       restart_pm2: restartPm2,
@@ -535,6 +545,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const rootDir = document.getElementById("txt_root_dir").value.trim() || "C:\\AppServ";
     const autoRegisterApache = document.getElementById("chk_auto_apache").checked;
+    const autoRegisterPm2 = document.getElementById("chk_auto_pm2").checked;
     const autoSecurity = document.getElementById("chk_security_hardening").checked;
     const restartApache = document.getElementById("chk_restart_apache").checked;
     const restartPm2 = document.getElementById("chk_restart_pm2").checked;
@@ -542,6 +553,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const options = {
       root_dir: rootDir,
       auto_register_apache: autoRegisterApache,
+      auto_register_pm2: autoRegisterPm2,
       auto_security_hardening: autoSecurity,
       restart_apache: restartApache,
       restart_pm2: restartPm2,
