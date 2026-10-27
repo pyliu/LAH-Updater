@@ -159,8 +159,23 @@ NODE_EXCLUDES = [
 
 
 def resolve_project_dirs(script_dir):
-    """自動探測 LAH-API/www (PHP7)、LAH-API/API (PHP8)、LAH-FE、lah-messenger-server 與 Node.js 綠色環境真實路徑（相容工作區 Junction 與獨立目錄）"""
-    workspace_dir = os.path.dirname(script_dir)
+    """自動探測 LAH-API/www (PHP7)、LAH-API/API (PHP8)、LAH-FE、lah-messenger-server 與 Node.js 綠色環境真實路徑（相容工作區 Junction、獨立目錄與 pack/ 子目錄）"""
+    # 自動探測工作區根目錄（向上尋找包含 LAH-API 與 LAH-FE 的工作區）
+    cur = os.path.abspath(script_dir)
+    workspace_dir = None
+    while cur:
+        if os.path.isdir(os.path.join(cur, "LAH-API")) and os.path.isdir(os.path.join(cur, "LAH-FE")):
+            workspace_dir = cur
+            break
+        parent = os.path.dirname(cur)
+        if parent == cur:
+            break
+        cur = parent
+
+    if not workspace_dir:
+        candidate_parent2 = os.path.dirname(os.path.dirname(os.path.abspath(script_dir)))
+        candidate_parent1 = os.path.dirname(os.path.abspath(script_dir))
+        workspace_dir = candidate_parent2 if os.path.isdir(os.path.join(candidate_parent2, "LAH-API")) else candidate_parent1
 
     api_candidates = [
         os.path.join(workspace_dir, "LAH-API", "www"),
@@ -516,7 +531,8 @@ def main():
     args = parser.parse_args()
 
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    dist_dir = os.path.join(script_dir, "dist")
+    root_dir = os.path.dirname(script_dir)
+    dist_dir = os.path.join(root_dir, "dist")
     api_dir, api8_dir, fe_dir, messenger_dir, node_dir = resolve_project_dirs(script_dir)
 
     # 決定輸出目錄：未指定且預設分享區不存在時自動回退至 dist

@@ -4,6 +4,32 @@
 
 ---
 
+## [未發布]
+
+### 🗂️ 專案維運工具模組化拆分至獨立子目錄 (`updater/`, `uninstaller/`, `pack/`, `backuper/`)
+- **檔案與依賴隔離至專屬資料夾**：
+  - `updater/`：收納 `updater.py`、`build.py`、WinSW 服務模板 `service/`、更新說明文字檔以及打包規格檔。
+  - `uninstaller/`：收納 `uninstaller.py`、`build_uninstaller.py`。
+  - `pack/`：收納系統原始碼打包腳本 `pack.py`。
+  - `backuper/`：收納重要資料備份與還原工具 (Tauri 2 / Rust)。
+- **產出路徑統一收納至根目錄 `dist/`**：
+  - `updater/build.py`、`uninstaller/build_uninstaller.py`、`pack/pack.py` 與 `backuper/build.py` 全數將執行檔產出目錄導向至專案根目錄 `dist/`（`LAH-Updater/dist/`），免去各子目錄分散尋找困擾。
+- **路徑動態探測強化與 BAT 轉發調校**：
+  - `pack/pack.py`：`resolve_project_dirs` 升級為向上自動探測包含 `LAH-API` 與 `LAH-FE` 的工作區根目錄，相容直接執行或自任何層級呼叫。
+  - `updater/updater.py`：WinSW `service` 模板搜尋路徑擴充 `updater/service`，`find_release_notes` 支援同時查找同層與上層目錄更新說明檔。
+  - 根目錄批次檔（`建立自動更新工具.bat`、`build_uninstaller.bat`、`打包智慧控管及監控系統.bat`）自動轉發至各子目錄執行檔，各子目錄內亦提供專屬 `.bat`。
+
+- **新增一鍵建置批次檔與發布腳本**：
+  - 於專案根目錄新增 `建立自動備份工具.bat`（相容別名 `建立backuper.bat`、`build_backuper.bat`），對齊 `建立自動更新工具.bat` 習慣。
+  - 新增 `backuper/build.py` 與 `backuper/build.bat`，自動執行 `cargo build --release` 並將產出直接輸出至專案根目錄 `dist/智慧控管與監控系統 - 備份與還原工具.exe`。
+
+### 📦 備份功能獨立為 `backuper/`（Tauri 2）
+- 新增 `backuper/`：以 Tauri 2 + 純靜態 HTML/JS 實作系統重要資料備份與還原，備份清單與原 uninstaller 一致；還原前檢查服務已停止、防 Zip Slip，並自動建立 `restore_undo_<時間>.zip` 復原點。
+- `uninstaller.py` 移除備份功能（`backup_critical_data`、備份進度視窗模式、「立即備份」按鈕、備份勾選框），改為提示使用者先使用 backuper；仍保留 `_LAH_Backup_*.zip` 於根目錄清理時不被刪除。
+- `.gitignore` 新增 `backuper/src-tauri/target/`、`backuper/src-tauri/gen/`。
+
+---
+
 ## [v1.6.8] - 2026-10-26
 
 ### 🛡️ 一鍵資安弱點防護與自動安裝核取方塊整合 PHP2Shell 緩解功能

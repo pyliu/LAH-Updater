@@ -2148,6 +2148,8 @@ def resolve_winsw_service_files(target_root):
         os.path.join(os.path.dirname(__file__), "service"),
         os.path.join(app_dir, "service"),
         os.path.join(os.path.dirname(app_dir), "service"),
+        os.path.join(app_dir, "updater", "service"),
+        os.path.join(os.path.dirname(app_dir), "updater", "service"),
     ]
     template_dir = next((d for d in template_candidates if os.path.isdir(d)), template_candidates[0])
 
@@ -2917,17 +2919,28 @@ def restore_from_backup_zip(zip_path, root_dir, log_func=None):
 
 def find_release_notes(app_dir):
     """
-    搜尋同目錄下檔名包含「更新說明」的文字檔。
+    搜尋同目錄或上層目錄下檔名包含「更新說明」的文字檔。
     若有多個符合檔案（例如歷史發布殘留），優先載入最後修改時間 (mtime) 最新的檔案。
     """
     try:
         candidates = []
-        for fname in os.listdir(app_dir):
-            if fname.lower().endswith('.txt') and '更新說明' in fname:
-                full_path = os.path.join(app_dir, fname)
-                if os.path.isfile(full_path):
-                    mtime = os.path.getmtime(full_path)
-                    candidates.append((mtime, fname, full_path))
+        search_dirs = [app_dir]
+        parent_dir = os.path.dirname(app_dir)
+        if parent_dir and parent_dir != app_dir and os.path.isdir(parent_dir):
+            search_dirs.append(parent_dir)
+
+        seen_paths = set()
+        for sdir in search_dirs:
+            if not os.path.isdir(sdir):
+                continue
+            for fname in os.listdir(sdir):
+                if fname.lower().endswith('.txt') and '更新說明' in fname:
+                    full_path = os.path.join(sdir, fname)
+                    norm_p = os.path.normcase(os.path.abspath(full_path))
+                    if norm_p not in seen_paths and os.path.isfile(full_path):
+                        seen_paths.add(norm_p)
+                        mtime = os.path.getmtime(full_path)
+                        candidates.append((mtime, fname, full_path))
 
         if not candidates:
             return None, None

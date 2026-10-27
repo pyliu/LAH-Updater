@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<title>智慧控管與監控系統 - 備份與還原工具</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    font-family: "Microsoft JhengHei UI", "Microsoft JhengHei", sans-serif;
+    margin: 0;
+    padding: 16px 20px;
+    background: #f4f6f9;
+    color: #212529;
+    user-select: none;
+  }
+  .header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #dde2e8;
+  }
+  .header h1 {
+    font-size: 16px;
+    margin: 0;
+    font-weight: 700;
+    color: #1a202c;
+  }
+  .card {
+    background: #fff;
+    border-radius: 8px;
+    padding: 14px 16px;
+    margin-bottom: 12px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    border: 1px solid #e2e8f0;
+  }
+  .card-title {
+    font-size: 14px;
+    font-weight: 700;
+    margin: 0 0 8px 0;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .card-title.backup { color: #0d6efd; }
+  .card-title.restore { color: #dc3545; }
+
+  label {
+    display: block;
+    margin: 8px 0 4px;
+    font-size: 12px;
+    font-weight: 600;
+    color: #4a5568;
+  }
+  .row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+  input[type=text] {
+    flex: 1;
+    padding: 6px 10px;
+    border: 1px solid #cbd5e1;
+    border-radius: 4px;
+    font-size: 13px;
+    font-family: Consolas, "Microsoft JhengHei UI", monospace;
+  }
+  input[type=text]:focus {
+    outline: none;
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 2px rgba(59,130,246,0.15);
+  }
+  button {
+    padding: 6px 14px;
+    cursor: pointer;
+    border: 1px solid #cbd5e1;
+    background: #fff;
+    border-radius: 4px;
+    font-size: 13px;
+    font-family: inherit;
+    transition: all 0.15s ease-in-out;
+  }
+  button:hover:not(:disabled) {
+    background: #f1f5f9;
+  }
+  button.primary {
+    background: #0d6efd;
+    color: #fff;
+    border-color: #0d6efd;
+    font-weight: 600;
+  }
+  button.primary:hover:not(:disabled) {
+    background: #0b5ed7;
+  }
+  button.danger {
+    background: #dc3545;
+    color: #fff;
+    border-color: #dc3545;
+    font-weight: 600;
+  }
+  button.danger:hover:not(:disabled) {
+    background: #bb2d3b;
+  }
+  button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  .btn-row {
+    margin-top: 10px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  small.tip {
+    color: #64748b;
+    font-size: 12px;
+    line-height: 1.4;
+  }
+
+  /* 彈出訊息視窗 (Modal Overlay) */
+  .modal-overlay {
+    display: none;
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(15, 23, 42, 0.55);
+    z-index: 1000;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+  }
+  .modal-overlay.active {
+    display: flex;
+  }
+  .modal-content {
+    background: #fff;
+    width: 100%;
+    max-width: 680px;
+    border-radius: 8px;
+    box-shadow: 0 12px 30px rgba(0,0,0,0.3);
+    padding: 16px 20px;
+    display: flex;
+    flex-direction: column;
+    max-height: 90vh;
+  }
+  .modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+  }
+  .modal-header h2 {
+    font-size: 15px;
+    margin: 0;
+    font-weight: 700;
+    color: #1e293b;
+  }
+  .progress-wrap {
+    margin: 6px 0 10px;
+  }
+  .progress-info {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+    color: #475569;
+    margin-bottom: 4px;
+    font-weight: 600;
+  }
+  progress {
+    width: 100%;
+    height: 16px;
+    border-radius: 4px;
+  }
+  #log {
+    flex: 1;
+    min-height: 200px;
+    max-height: 320px;
+    overflow-y: auto;
+    background: #0f172a;
+    color: #e2e8f0;
+    padding: 10px 12px;
+    font: 12px/1.55 Consolas, "Courier New", monospace;
+    white-space: pre-wrap;
+    border-radius: 6px;
+    border: 1px solid #1e293b;
+  }
+  .modal-footer {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 12px;
+  }
+</style>
+</head>
+<body>
+  <div class="header">
+    <h1>智慧控管與監控系統 - 備份與還原工具</h1>
+    <button id="showLogBtn" style="font-size:12px; padding:4px 10px;">📋 查看最新日誌</button>
+  </div>
+
+  <!-- 卡片 1：系統重要資料備份 -->
+  <div class="card">
+    <div class="card-title backup">📦 系統重要資料備份</div>
+    <label for="root">系統安裝根目錄</label>
+    <div class="row">
+      <input id="root" type="text" value="C:\AppServ">
+      <button id="pickRoot">瀏覽...</button>
+    </div>
+    <label for="dest">備份存放目的地 (資料夾或 .zip 路徑)</label>
+    <div class="row">
+      <input id="dest" type="text" value="C:\Temp">
+      <button id="pickDest">瀏覽...</button>
+    </div>
+    <div class="btn-row">
+      <button id="run" class="primary">📦 立即備份重要資料</button>
+      <small class="tip">自動打包 db/、uploads/、www/assets/、.pm2 設定、.env、AD.php 與 logs/ 至 ZIP 檔案。</small>
+    </div>
+  </div>
+
+  <!-- 卡片 2：從備份還原 -->
+  <div class="card">
+    <div class="card-title restore">🔄 從備份還原資料</div>
+    <label for="zip">選擇備份檔案 (.zip)</label>
+    <div class="row">
+      <input id="zip" type="text" placeholder="請選取 _LAH_Backup_*.zip 備份檔案路徑...">
+      <button id="pickZip">瀏覽...</button>
+    </div>
+    <div class="btn-row">
+      <button id="restore" class="danger">🚨 還原到安裝根目錄</button>
+      <small class="tip">還原前會先檢查服務已停止，覆蓋前自動將現有檔案建立為 restore_undo_*.zip 復原點。</small>
+    </div>
+  </div>
+
+  <!-- 彈現之進度與訊息日誌視窗 (Modal) -->
+  <div id="modalOverlay" class="modal-overlay">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 id="modalTitle">執行進度與訊息</h2>
+      </div>
+      <div class="progress-wrap">
+        <div class="progress-info">
+          <span id="statusText">準備就緒...</span>
+          <span id="percentText">0%</span>
+        </div>
+        <progress id="bar" value="0" max="100"></progress>
+      </div>
+      <div id="log"></div>
+      <div class="modal-footer">
+        <button id="closeModalBtn" class="primary">關閉視窗</button>
+      </div>
+    </div>
+  </div>
+
+<script src="app.js"></script>
+</body>
+</html>

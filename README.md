@@ -85,11 +85,14 @@
 # 切換至專案目錄
 cd .\LAH-Updater
 
-# 啟動自動更新工具
-python updater.py
+# 啟動自動更新工具（或進入 updater/ 執行）
+python updater\updater.py
 
-# 啟動自動移除工具
-python uninstaller.py
+# 啟動自動移除工具（或進入 uninstaller/ 執行）
+python uninstaller\uninstaller.py
+
+# 啟動原始碼打包腳本（或進入 pack/ 執行）
+python pack\pack.py
 ```
 
 ---
@@ -105,16 +108,22 @@ pip install pyinstaller
 
 ### 步驟 2：執行打包指令
 ```powershell
-# 一鍵打包自動更新工具
-.\build.bat
+# 一鍵打包自動更新工具（根目錄或進入 updater/ 執行 build.bat）
+.\建立自動更新工具.bat
 
-# 或使用 Python 腳本打包
+# 或進入 updater/ 使用 Python 腳本打包
+cd updater
 python build.py
 ```
 
 打包自動移除工具指令：
 ```powershell
-python -m PyInstaller --noconfirm --onefile --windowed --uac-admin --name "智慧控管與監控系統 - 自動移除工具" uninstaller.py
+# 根目錄一鍵打包
+.\build_uninstaller.bat
+
+# 或進入 uninstaller/ 目錄執行
+cd uninstaller
+python build_uninstaller.py
 ```
 
 ---
@@ -144,16 +153,32 @@ python pack.py --fe-only      # 僅打包前端網站
 
 ```text
 LAH-Updater/
- ├── updater.py                           # 自動更新工具主程式 (雙欄卡片、Apache/PHP/PM2 管理、資安防護)
- ├── uninstaller.py                       # 自動移除工具主程式 (服務解除安裝、自啟動清理、前置備份)
- ├── build.bat                            # 一鍵編譯自動更新工具執行檔批次檔
- ├── build.py                             # Python 原生打包輔助腳本
- ├── pack.bat                             # 一鍵編譯前端並打包全模組壓縮包批次檔
- ├── pack.py                              # Python 原始碼打包腳本
+ ├── updater/                             # 自動更新工具專屬目錄
+ │    ├── updater.py                      # 自動更新工具主程式 (雙欄卡片、Apache/PHP/PM2 管理、資安防護)
+ │    ├── build.py                        # PyInstaller 原生打包腳本
+ │    ├── build.bat                       # 一鍵打包批次檔 (建立自動更新工具.bat)
+ │    ├── 20261025_系統更新說明.txt        # 系統更新說明檔
+ │    └── service/                        # WinSW 原生服務守護套件與腳本
+ ├── uninstaller/                         # 自動移除工具專屬目錄
+ │    ├── uninstaller.py                  # 自動移除工具主程式 (服務解除安裝、自啟動清理)
+ │    ├── build_uninstaller.py            # PyInstaller 原生打包腳本
+ │    └── build_uninstaller.bat           # 一鍵打包批次檔 (build.bat)
+ ├── pack/                                # 系統原始碼更新包打包專屬目錄
+ │    ├── pack.py                         # Python 原始碼自動編譯與打包腳本
+ │    └── pack.bat                        # 一鍵打包批次檔 (打包智慧控管及監控系統.bat)
+ ├── backuper/                            # 重要資料備份與還原工具 (Tauri 2 / Rust)
+ │    ├── src-tauri/                      # Rust 核心備份還原邏輯 (backup.rs, restore.rs)
+ │    ├── ui/                             # 純靜態 HTML/JS 操作介面
+ │    ├── build.py                        # Rust release 編譯與 dist 輸出打包輔助腳本
+ │    ├── build.bat                       # 專屬打包批次檔 (建立自動備份工具.bat)
+ │    └── README.md                       # 備份還原工具操作說明
+ ├── 建立自動更新工具.bat                   # 根目錄更新工具打包轉發批次檔
+ ├── 建立自動備份工具.bat                   # 根目錄備份還原工具打包轉發批次檔 (build_backuper.bat, 建立backuper.bat)
+ ├── build_uninstaller.bat                # 根目錄移除工具打包轉發批次檔 (建立解除安裝工具.bat)
+ ├── 打包智慧控管及監控系統.bat             # 根目錄系統打包轉發批次檔
  ├── CHANGELOG.md                         # 完整繁體中文版本修改歷程文件
  ├── README.md                            # 專案說明與操作指南
- ├── AGENTS.md                            # AI 代理人架構指南與安全契約
- └── service/                             # WinSW 原生服務守護套件與腳本
+ └── AGENTS.md                            # AI 代理人架構指南與安全契約
 ```
 
 ---

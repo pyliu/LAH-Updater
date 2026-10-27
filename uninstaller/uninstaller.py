@@ -7,7 +7,7 @@ r"""
 2. 終止受控守護進程與殘留程序 (pm2 kill, 殘留 node.exe 與 php-cgi.exe)。
 3. 清除開機自啟動設定 (啟動資料夾 VBS 腳本、Windows 工作排程器、使用者環境變數 PATH 登錄)。
 4. 清除 PM2 快照狀態 (LocalSystem 與使用者目錄之 .pm2\dump.pm2)。
-5. 刪除前自動將關鍵持久化資料 (即時通 db/、uploads/、各專案 .env、AD.php、logs/) 打包為備份 ZIP。
+5. 不含備份功能；備份與還原已獨立至 backuper/ (Tauri)，移除前請先使用該工具備份。
 6. 安全刪除程式碼、Web 站點、執行環境 (node, php85, php7, instantclient_11_2) 與相關目錄。
 7. 提供現代化 Tkinter 繁體中文 GUI 介面，支援細緻項目勾選、雙重確認防護與即時進度日誌。
 """
@@ -21,7 +21,6 @@ import sys
 import threading
 import time
 import winreg
-import zipfile
 from datetime import datetime
 
 # 安全容錯：避免 Windows CMD 在 CP950 編碼下因 Emoji 符號噴 UnicodeEncodeError
@@ -521,131 +520,19 @@ def clean_pm2_dumps(log_func, root_dir=r"C:\AppServ"):
 
 
 # ==============================================================================
-# 自動備份常式
-# ==============================================================================
-
-def backup_critical_data(log_func, root_dir, backup_dest, progress_cb=None):
-    """
-    將系統關鍵持久化資料 (db/, uploads/, www/assets/*, .pm2 設定與狀態檔, .env, AD.php, php.ini, httpd.conf, logs/) 打包備份至 ZIP。
-    參數 backup_dest 可傳入「目標資料夾路徑」或「完整 .zip 檔案路徑」。
-    """
-    if str(backup_dest).lower().endswith(".zip"):
-        zip_path = os.path.normpath(backup_dest)
-        backup_dir = os.path.dirname(zip_path)
-        if backup_dir:
-            os.makedirs(backup_dir, exist_ok=True)
-    else:
-        backup_dir = os.path.normpath(backup_dest)
-        os.makedirs(backup_dir, exist_ok=True)
-        time_str = datetime.now().strftime("%Y%m%d_%H%M%S")
-        zip_name = f"_LAH_Backup_{time_str}.zip"
-        zip_path = os.path.join(backup_dir, zip_name)
-
-    log_func("=" * 60, "info")
-    log_func(f"📦 正在備份系統重要資料與設定至: {zip_path}...", "info")
-
-    # 決定 .pm2 來源目錄（優先使用 <root_dir>\.pm2，若尚不存在則向下相容檢查 %USERPROFILE%\.pm2）
-    pm2_src_dir = os.path.join(root_dir, ".pm2")
-    if not os.path.isdir(pm2_src_dir):
-        fallback_pm2 = os.path.join(os.environ.get("USERPROFILE", ""), ".pm2")
-        if os.path.isdir(fallback_pm2):
-            pm2_src_dir = fallback_pm2
-
-    backup_items = [
-        # (絕對路徑, 壓縮檔內部前綴)
-        (os.path.join(root_dir, "lah-messenger-server", "db"), "lah-messenger-server/db"),
-        (os.path.join(root_dir, "lah-messenger-server", "uploads"), "lah-messenger-server/uploads"),
-        (os.path.join(root_dir, "lah-messenger-server", ".env"), "lah-messenger-server/.env"),
-        (os.path.join(root_dir, "LAH-NUXTJS", ".env"), "LAH-NUXTJS/.env"),
-        (os.path.join(root_dir, "LAH-API", ".env"), "LAH-API/.env"),
-        (os.path.join(root_dir, "www", ".env"), "www/.env"),
-        (os.path.join(root_dir, "www", "include", "config", "AD.php"), "www/include/config/AD.php"),
-        (os.path.join(root_dir, "www", "assets"), "www/assets"),
-        (os.path.join(pm2_src_dir, "dump.pm2"), ".pm2/dump.pm2"),
-        (os.path.join(pm2_src_dir, "dump.pm2.bak"), ".pm2/dump.pm2.bak"),
-        (os.path.join(pm2_src_dir, "module_conf.json"), ".pm2/module_conf.json"),
-        (os.path.join(pm2_src_dir, "conf.js"), ".pm2/conf.js"),
-        (os.path.join(pm2_src_dir, "modules"), ".pm2/modules"),
-        (os.path.join(root_dir, "php85", "php.ini"), "php85/php.ini"),
-        (os.path.join(root_dir, "php7", "php.ini"), "php7/php.ini"),
-        (os.path.join(root_dir, "Apache24", "conf", "httpd.conf"), "Apache24/conf/httpd.conf"),
-        (os.path.join(root_dir, "logs"), "logs"),
-    ]
-
-    total_backed = 0
-    total_items = len(backup_items)
-    try:
-        with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
-            for idx, (src_path, arc_prefix) in enumerate(backup_items, 1):
-                if progress_cb:
-                    pct = 10.0 + (idx / total_items) * 85.0
-                    progress_cb(pct, f"正在打包備份: {arc_prefix}...")
-
-                if not os.path.exists(src_path):
-                    continue
-
-                if os.path.isfile(src_path):
-                    try:
-                        zf.write(src_path, arc_prefix)
-                        total_backed += 1
-                        log_func(f"  ✓ 已備份設定檔: {arc_prefix}", "info")
-                    except Exception as fe:
-                        log_func(f"  ⚠️ 備份檔案 [{arc_prefix}] 略過: {fe}", "warning")
-                elif os.path.isdir(src_path):
-                    dir_file_count = 0
-                    for root, _, files in os.walk(src_path):
-                        for file in files:
-                            full_path = os.path.join(root, file)
-                            # 避免當備份檔剛好存放在被掃描目錄下時發生自我遞迴打包
-                            if os.path.normpath(full_path).lower() == os.path.normpath(zip_path).lower():
-                                continue
-                            rel_path = os.path.relpath(full_path, src_path)
-                            arcname = os.path.join(arc_prefix, rel_path).replace("\\", "/")
-                            try:
-                                zf.write(full_path, arcname)
-                                total_backed += 1
-                                dir_file_count += 1
-                            except Exception:
-                                pass
-                    log_func(f"  ✓ 已備份目錄: {arc_prefix} (共 {dir_file_count} 個檔案)", "info")
-
-        if total_backed > 0:
-            size_mb = os.path.getsize(zip_path) / (1024 * 1024)
-            log_func(f"🎉 備份完成！共備份 {total_backed} 個檔案 (壓縮檔大小: {size_mb:.2f} MB)", "success")
-            return True, zip_path
-        else:
-            log_func("ℹ️ 未在目標根目錄偵測到需備份的現存資料，略過建立備份檔。", "info")
-            if os.path.exists(zip_path) and os.path.getsize(zip_path) < 1024:
-                try:
-                    os.remove(zip_path)
-                except Exception:
-                    pass
-            return True, None
-    except Exception as e:
-        msg = f"建立備份失敗: {e}"
-        log_func(f"❌ {msg}", "error")
-        return False, msg
-
-
-# ==============================================================================
 # 獨立彈出進度與日誌對話框 (ProgressDialog)
 # ==============================================================================
 
 class ProgressDialog(tk.Toplevel):
-    def __init__(self, parent, root_dir, mode="uninstall"):
+    def __init__(self, parent, root_dir):
         super().__init__(parent)
         self.parent = parent
         self.root_dir = root_dir
-        self.mode = mode
         self.is_running = True
         self.is_done = False
 
-        if self.mode == "backup":
-            self.title("智慧控管與監控系統 - 重要資料備份進度")
-            init_status = "正在準備備份系統重要資料..."
-        else:
-            self.title("智慧控管與監控系統 - 移除作業執行進度")
-            init_status = "正在準備移除作業..."
+        self.title("智慧控管與監控系統 - 移除作業執行進度")
+        init_status = "正在準備移除作業..."
 
         self.geometry("980x620")
         self.minsize(820, 500)
@@ -682,8 +569,8 @@ class ProgressDialog(tk.Toplevel):
         hdr_frame = ttk.Frame(container)
         hdr_frame.pack(fill=tk.X, pady=(0, 10))
 
-        hdr_text = "📦 系統重要資料與設定備份進行中..." if self.mode == "backup" else "🚨 系統移除清理作業進行中..."
-        hdr_color = "#1565c0" if self.mode == "backup" else "#c62828"
+        hdr_text = "🚨 系統移除清理作業進行中..."
+        hdr_color = "#c62828"
 
         title_lbl = tk.Label(
             hdr_frame,
@@ -768,38 +655,10 @@ class ProgressDialog(tk.Toplevel):
         else:
             self.after(0, _update)
 
-    def finish(self, success=True, elapsed=0, backup_path=None):
+    def finish(self, success=True, elapsed=0):
         def _done():
             self.is_running = False
             self.is_done = True
-            if self.mode == "backup":
-                if success and backup_path:
-                    self.set_progress(100, f"✅ 重要資料備份已順利完成！(耗時 {elapsed:.1f} 秒)")
-                    self.btn_close.configure(state="normal", text="完成並返回")
-                    messagebox.showinfo(
-                        "備份完成",
-                        f"🎉 系統重要資料與設定已成功打包備份！\n\n"
-                        f"📦 備份檔案位置：\n{backup_path}\n\n"
-                        f"• 包含即時通 db/、uploads/、www/assets/*、.pm2 設定檔、各模組 .env、AD.php、httpd.conf、php.ini 與 logs/\n"
-                        f"• 已自動為您取消勾選主畫面的「📦 執行前自動備份重要資料」選項，後續執行移除時不會重複備份。",
-                        parent=self
-                    )
-                elif success and not backup_path:
-                    self.set_progress(100, f"ℹ️ 未偵測到可備份資料 (耗時 {elapsed:.1f} 秒)")
-                    self.btn_close.configure(state="normal", text="關閉返回")
-                    messagebox.showinfo(
-                        "備份提示",
-                        "ℹ️ 未在指定之安裝根目錄偵測到需備份的現存資料或設定檔。",
-                        parent=self
-                    )
-                else:
-                    self.btn_close.configure(state="normal", text="關閉返回")
-                    messagebox.showerror(
-                        "備份失敗",
-                        f"⚠️ 建立備份壓縮檔時發生錯誤：\n{backup_path or '請詳閱日誌視窗紀錄'}",
-                        parent=self
-                    )
-                return
 
             if success:
                 self.set_progress(100, f"✅ 全部選取項目已成功移除！(耗時 {elapsed:.1f} 秒)")
@@ -828,13 +687,12 @@ class ProgressDialog(tk.Toplevel):
 
     def _on_close(self):
         if self.is_running:
-            op_name = "備份作業" if self.mode == "backup" else "移除作業"
+            op_name = "移除作業"
             messagebox.showwarning("警告", f"{op_name}正在背景進行中，請稍候完成再關閉視窗！", parent=self)
             return
         self.grab_release()
         self.destroy()
-        if self.mode != "backup":
-            self.parent.destroy()
+        self.parent.destroy()
 
 
 # ==============================================================================
@@ -850,7 +708,6 @@ class UninstallerApp:
 
         self.app_dir = get_app_dir()
         self.is_running = False
-        self.last_manual_backup_path = None
 
         # 文字放大 25%：縮放 Tkinter 內建字型
         for name in ("TkDefaultFont", "TkTextFont", "TkFixedFont", "TkMenuFont", "TkHeadingFont", "TkCaptionFont", "TkSmallCaptionFont", "TkIconFont", "TkTooltipFont"):
@@ -882,7 +739,6 @@ class UninstallerApp:
         self.root_dir_var = tk.StringVar(value=r"C:\AppServ")
 
         # 各項作業勾選變數（預設全選安全模式）
-        self.do_backup_var = tk.BooleanVar(value=True)
         self.do_services_var = tk.BooleanVar(value=True)
         self.do_autostart_var = tk.BooleanVar(value=True)
         self.do_kill_procs_var = tk.BooleanVar(value=True)
@@ -950,22 +806,6 @@ class UninstallerApp:
         )
         self.btn_start.pack(side=tk.RIGHT)
 
-        self.btn_backup = tk.Button(
-            bottom_frame,
-            text="📦 立即備份重要資料",
-            command=self.start_manual_backup,
-            font=("Microsoft JhengHei UI", 13, "bold"),
-            bg="#1976d2",
-            fg="#ffffff",
-            activebackground="#1565c0",
-            activeforeground="#ffffff",
-            relief=tk.FLAT,
-            padx=18,
-            pady=5,
-            cursor="hand2"
-        )
-        self.btn_backup.pack(side=tk.RIGHT, padx=(0, 10))
-
         # 2. 根目錄選擇區
         dir_frame = ttk.LabelFrame(main_frame, text=" 📁 系統安裝根目錄 ", padding="8")
         dir_frame.pack(fill=tk.X, pady=(0, 8))
@@ -1000,8 +840,8 @@ class UninstallerApp:
         grid_frame.columnconfigure(1, weight=1)
 
         # 第一行：資料備份與核心服務
-        chk_backup = ttk.Checkbutton(grid_frame, text="📦 執行前自動備份重要資料 (db/, uploads/, www/assets/, .pm2, .env, AD.php)", variable=self.do_backup_var)
-        chk_backup.grid(row=0, column=0, sticky="w", padx=8, pady=3)
+        lbl_backup_hint = ttk.Label(grid_frame, text="⚠️ 本工具不含備份功能，請先使用 backuper 備份重要資料", foreground="#c62828")
+        lbl_backup_hint.grid(row=0, column=0, sticky="w", padx=8, pady=3)
 
         chk_svc = ttk.Checkbutton(grid_frame, text="🛑 停止並解除安裝 Windows 服務 (LAH_PM2_Service, Apache2.4)", variable=self.do_services_var)
         chk_svc.grid(row=0, column=1, sticky="w", padx=8, pady=3)
@@ -1056,7 +896,6 @@ class UninstallerApp:
         chk_clean_root.grid(row=7, column=1, sticky="w", padx=8, pady=3)
 
     def _set_all_checks(self, state):
-        self.do_backup_var.set(state)
         self.do_services_var.set(state)
         self.do_autostart_var.set(state)
         self.do_kill_procs_var.set(state)
@@ -1084,68 +923,6 @@ class UninstallerApp:
             messagebox.showwarning("警告", "移除作業正在背景進行中，請稍候完成再關閉視窗！", parent=self.root)
             return
         self.root.destroy()
-
-    def start_manual_backup(self):
-        """獨立執行系統重要資料備份，讓使用者自由選擇儲存位置與檔名，完成後自動取消勾選執行前備份"""
-        if self.is_running:
-            return
-
-        root_dir = os.path.normpath(self.root_dir_var.get().strip())
-        if not os.path.isdir(root_dir):
-            messagebox.showerror("錯誤", f"指定之安裝根目錄不存在：\n{root_dir}\n請確認目錄路徑正確！", parent=self.root)
-            return
-
-        time_str = datetime.now().strftime("%Y%m%d_%H%M%S")
-        default_filename = f"_LAH_Backup_{time_str}.zip"
-        init_dir = r"C:\Temp" if os.path.isdir(r"C:\Temp") else root_dir
-
-        save_path = filedialog.asksaveasfilename(
-            parent=self.root,
-            title="請選擇重要資料備份壓縮檔儲存位置",
-            initialdir=init_dir,
-            initialfile=default_filename,
-            defaultextension=".zip",
-            filetypes=[("ZIP 備份壓縮檔", "*.zip"), ("所有檔案", "*.*")]
-        )
-        if not save_path:
-            return
-
-        save_path = os.path.normpath(save_path)
-        self.is_running = True
-        self.btn_backup.configure(state="disabled", text="備份進行中...")
-        self.btn_start.configure(state="disabled")
-        self.btn_exit.configure(state="disabled")
-
-        prog_dlg = ProgressDialog(self.root, root_dir, mode="backup")
-
-        def _backup_worker():
-            start_time = time.time()
-            try:
-                prog_dlg.set_progress(5, "正在掃描安裝根目錄並準備打包重要資料...")
-                b_ok, b_res = backup_critical_data(prog_dlg.log, root_dir, save_path, progress_cb=prog_dlg.set_progress)
-                elapsed = time.time() - start_time
-                if b_ok and b_res:
-                    self.last_manual_backup_path = b_res
-                    # 使用者已手動完成備份，自動取消勾選「執行前自動備份重要資料」
-                    self.root.after(0, lambda: self.do_backup_var.set(False))
-                    prog_dlg.finish(success=True, elapsed=elapsed, backup_path=b_res)
-                elif b_ok and not b_res:
-                    prog_dlg.finish(success=True, elapsed=elapsed, backup_path=None)
-                else:
-                    prog_dlg.finish(success=False, elapsed=elapsed, backup_path=b_res)
-            except Exception as ex:
-                elapsed = time.time() - start_time
-                prog_dlg.log(f"❌ 執行獨立備份時發生未預期例外錯誤: {ex}", "error")
-                prog_dlg.finish(success=False, elapsed=elapsed, backup_path=str(ex))
-            finally:
-                def _reset_ui():
-                    self.is_running = False
-                    self.btn_backup.configure(state="normal", text="📦 立即備份重要資料")
-                    self.btn_start.configure(state="normal", text="🚨 開始執行移除作業")
-                    self.btn_exit.configure(state="normal")
-                self.root.after(0, _reset_ui)
-
-        threading.Thread(target=_backup_worker, daemon=True).start()
 
     def start_uninstall_thread(self):
         if self.is_running:
@@ -1180,8 +957,6 @@ class UninstallerApp:
 
         # 整理即將執行的項目清單（單次確認對話框）
         items_summary = []
-        if self.do_backup_var.get():
-            items_summary.append("• 📦 執行前自動備份重要資料 (db/, uploads/, www/assets/, .pm2, .env, AD.php, php.ini, httpd.conf)")
         if self.do_services_var.get():
             items_summary.append("• 🛑 停止並解除安裝 Windows 系統服務 (LAH_PM2_Service, Apache2.4)")
         if self.do_kill_procs_var.get():
@@ -1214,12 +989,7 @@ class UninstallerApp:
             items_summary.append("• 🧹 深度清理安裝根目錄其餘殘留檔案 (僅保留備份檔)")
 
         items_text = "\n".join(items_summary)
-        if self.do_backup_var.get():
-            backup_hint = f"已勾選自動備份（備份檔將打包存放於 {root_dir}）"
-        elif self.last_manual_backup_path and os.path.isfile(self.last_manual_backup_path):
-            backup_hint = f"✅ 已手動完成備份（存放於 {self.last_manual_backup_path}），本次不重複備份"
-        else:
-            backup_hint = "⚠️ 【注意】未勾選備份，資料將被永久移除！"
+        backup_hint = "⚠️ 【注意】本工具不含備份功能，請確認已先使用 backuper 完成備份，資料將被永久移除！"
 
         confirm = messagebox.askyesno(
             "⚠️ 系統移除作業確認",
@@ -1235,12 +1005,11 @@ class UninstallerApp:
             return
 
         self.is_running = True
-        self.btn_backup.configure(state="disabled")
         self.btn_start.configure(state="disabled", text="移除作業進行中...")
         self.btn_exit.configure(state="disabled")
 
         # 彈出專屬執行進度與日誌視窗
-        prog_dlg = ProgressDialog(self.root, root_dir, mode="uninstall")
+        prog_dlg = ProgressDialog(self.root, root_dir)
 
         threading.Thread(target=self._uninstall_worker, args=(root_dir, prog_dlg), daemon=True).start()
 
@@ -1250,14 +1019,6 @@ class UninstallerApp:
             dlg.log("=" * 60, "info")
             dlg.log(f"🚨 開始執行系統自動移除清理作業... (目標: {root_dir})", "info")
             dlg.set_progress(5, "正在準備移除作業...")
-
-            # 階段 1：自動備份
-            if self.do_backup_var.get():
-                dlg.set_progress(10, "正在備份關鍵持久化資料...")
-                backup_target_dir = root_dir
-                b_ok, b_path = backup_critical_data(dlg.log, root_dir, backup_target_dir)
-                if not b_ok:
-                    dlg.log("⚠️ 自動備份過程發生警示，但依指示繼續執行後續移除程序...", "warning")
 
             # 階段 2：停止並解除安裝 Windows 服務
             if self.do_services_var.get():
@@ -1377,12 +1138,8 @@ class UninstallerApp:
                             item_path = os.path.join(root_dir, item)
                             norm_item = os.path.normpath(item_path).lower()
 
-                            # 1. 嚴格保護備份壓縮檔（含預設命名與使用者手動另存於根目錄之備份檔）
-                            is_manual_bkp = bool(
-                                self.last_manual_backup_path and
-                                norm_item == os.path.normpath(self.last_manual_backup_path).lower()
-                            )
-                            if (item.startswith("_LAH_Backup_") and item.endswith(".zip")) or is_manual_bkp:
+                            # 1. 嚴格保護 backuper 產出之備份壓縮檔
+                            if item.startswith("_LAH_Backup_") and item.endswith(".zip"):
                                 dlg.log(f"  📦 保留刪除前關鍵備份壓縮檔: [{item}]", "info")
                                 continue
 
@@ -1433,7 +1190,6 @@ class UninstallerApp:
         finally:
             def _reset_main_ui():
                 self.is_running = False
-                self.btn_backup.configure(state="normal", text="📦 立即備份重要資料")
                 self.btn_start.configure(state="normal", text="🚨 開始執行移除作業")
                 self.btn_exit.configure(state="normal")
             self.root.after(0, _reset_main_ui)

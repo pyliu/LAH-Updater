@@ -179,7 +179,7 @@ PACKAGE_CONFIGS = [
 
 ### 3.1 語法檢查（修改後必跑）
 ```powershell
-python -m py_compile updater.py
+python -m py_compile updater\updater.py
 ```
 
 ### 3.2 使用 PyInstaller 進行編譯（需人工授權）
@@ -189,7 +189,7 @@ python -m py_compile updater.py
 .\build.bat
 
 # 方式 B：直接執行 Python 打包腳本
-python build.py
+cd updater && python build.py
 
 # 方式 C：手動執行 PyInstaller 指令
 python -m PyInstaller --noconfirm --onefile --windowed --uac-admin --name "智慧控管與監控系統 - 自動更新工具" updater.py
@@ -205,7 +205,7 @@ python -m PyInstaller --noconfirm --onefile --windowed --uac-admin --name "智�
 .\pack.bat
 
 # 方式 B：直接執行 Python 腳本（支援 --skip-build, --api-only, --api8-only, --fe-only, --messenger-only, --fe-modules, --server-modules, --with-modules, --modules-only, --output-dir 參數）
-python pack.py
+python pack\pack.py
 ```
 
 ---
@@ -214,7 +214,7 @@ python pack.py
 
 當您修改或擴充本專案時，請逐項檢查：
 - [ ] 是否保持標準庫設計，未引入額外第三方執行期套件？
-- [ ] 是否執行過 `python -m py_compile updater.py` 確認語法無誤？
+- [ ] 是否執行過 `python -m py_compile updater\updater.py` 確認語法無誤？
 - [ ] 是否保持 `sys.frozen` 相容性？
 - [ ] 若更動解壓縮邏輯，是否維持 `detect_strip_prefix` 的雙層目錄防呆與 Zip Slip 安全防護？
 - [ ] 若更動服務管理，是否維持 `finally` 區塊的 Apache 自動緊急重啟與 PM2 背景非阻斷重啟？
