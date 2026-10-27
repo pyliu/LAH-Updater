@@ -32,3 +32,11 @@ $RECYCLE.BIN/
 # backuper (Tauri) build artifacts
 backuper/src-tauri/target/
 backuper/src-tauri/gen/
+
+# uninstaller (Tauri) build artifacts
+uninstaller/src-tauri/target/
+uninstaller/src-tauri/gen/
+
+# updater (Tauri) build artifacts
+updater/src-tauri/target/
+updater/src-tauri/gen/

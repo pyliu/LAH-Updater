@@ -1,0 +1,547 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<title>智慧控管與監控系統 - 自動更新工具</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    font-family: "Microsoft JhengHei UI", "Microsoft JhengHei", sans-serif;
+    margin: 0;
+    padding: 12px 16px;
+    background: #f8fafc;
+    color: #1e293b;
+    user-select: none;
+    font-size: 13px;
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+  .header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid #e2e8f0;
+  }
+  .header h1 {
+    font-size: 17px;
+    margin: 0;
+    font-weight: 700;
+    color: #0369a1;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .header-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .admin-badge {
+    font-size: 12px;
+    font-weight: 700;
+    padding: 3px 8px;
+    border-radius: 4px;
+  }
+  .admin-badge.is-admin {
+    color: #15803d;
+    background: #dcfce7;
+    border: 1px solid #bbf7d0;
+  }
+  .admin-badge.not-admin {
+    color: #b91c1c;
+    background: #fee2e2;
+    border: 1px solid #fecaca;
+  }
+
+  .card {
+    background: #ffffff;
+    border-radius: 8px;
+    padding: 10px 14px;
+    margin-bottom: 8px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    border: 1px solid #e2e8f0;
+  }
+  .card-title {
+    font-size: 13.5px;
+    font-weight: 700;
+    margin: 0 0 8px 0;
+    color: #334155;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+  input[type=text] {
+    flex: 1;
+    padding: 6px 10px;
+    border: 1px solid #cbd5e1;
+    border-radius: 4px;
+    font-size: 13px;
+    font-family: Consolas, "Microsoft JhengHei UI", monospace;
+  }
+  input[type=text]:focus {
+    outline: none;
+    border-color: #0284c7;
+    box-shadow: 0 0 0 2px rgba(2,132,199,0.15);
+  }
+
+  button {
+    padding: 6px 14px;
+    cursor: pointer;
+    border: 1px solid #cbd5e1;
+    background: #ffffff;
+    border-radius: 4px;
+    font-size: 13px;
+    font-family: inherit;
+    transition: all 0.15s ease-in-out;
+  }
+  button:hover:not(:disabled) {
+    background: #f1f5f9;
+  }
+  button.primary {
+    background: #0284c7;
+    color: #ffffff;
+    border-color: #0284c7;
+    font-weight: 700;
+    padding: 8px 22px;
+    font-size: 14px;
+  }
+  button.primary:hover:not(:disabled) {
+    background: #0369a1;
+  }
+  button.secondary {
+    background: #f8fafc;
+    border-color: #cbd5e1;
+  }
+  button.success {
+    background: #16a34a;
+    color: #ffffff;
+    border-color: #16a34a;
+    font-weight: 700;
+  }
+  button.success:hover:not(:disabled) {
+    background: #15803d;
+  }
+  button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  /* 雙欄主版面 */
+  .main-layout {
+    display: grid;
+    grid-template-columns: 1fr 1.15fr;
+    gap: 12px;
+  }
+
+  .options-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .checkbox-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12.5px;
+    cursor: pointer;
+    padding: 4px 6px;
+    border-radius: 4px;
+  }
+  .checkbox-item:hover {
+    background: #f8fafc;
+  }
+  .checkbox-item input[type=checkbox] {
+    cursor: pointer;
+    accent-color: #0284c7;
+    width: 15px;
+    height: 15px;
+  }
+
+  /* 套件項目卡片 */
+  .pkg-item {
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    padding: 5px 8px;
+    margin-bottom: 4px;
+    background: #ffffff;
+    transition: background 0.15s;
+  }
+  .pkg-item:hover {
+    background: #f8fafc;
+  }
+  .pkg-item.missing {
+    opacity: 0.55;
+    background: #fafafa;
+  }
+  .pkg-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .pkg-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .pkg-title {
+    font-weight: 600;
+    font-size: 13px;
+    color: #1e293b;
+  }
+  .pkg-badge {
+    font-size: 11px;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-weight: 600;
+  }
+  .pkg-badge.found {
+    background: #dcfce7;
+    color: #166534;
+  }
+  .pkg-badge.notfound {
+    background: #f1f5f9;
+    color: #64748b;
+  }
+  .pkg-meta {
+    font-size: 11.5px;
+    color: #64748b;
+    margin-top: 2px;
+    padding-left: 23px;
+  }
+
+  /* 底部固定列 */
+  .footer-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid #e2e8f0;
+  }
+  .status-text {
+    font-size: 12.5px;
+    color: #475569;
+  }
+  .footer-actions {
+    display: flex;
+    gap: 10px;
+  }
+
+  /* 彈出視窗 (Modal) */
+  .modal-overlay {
+    display: none;
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(15, 23, 42, 0.6);
+    z-index: 1000;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+  }
+  .modal-overlay.active {
+    display: flex;
+  }
+  .modal-content {
+    background: #ffffff;
+    width: 100%;
+    max-width: 820px;
+    border-radius: 8px;
+    box-shadow: 0 12px 30px rgba(0,0,0,0.35);
+    padding: 16px 20px;
+    display: flex;
+    flex-direction: column;
+    max-height: 92vh;
+  }
+  .modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #e2e8f0;
+  }
+  .modal-header h2 {
+    font-size: 16px;
+    margin: 0;
+    font-weight: 700;
+    color: #0369a1;
+  }
+  .progress-wrap {
+    margin: 4px 0 10px;
+  }
+  .progress-info {
+    display: flex;
+    justify-content: space-between;
+    font-size: 13px;
+    color: #334155;
+    margin-bottom: 6px;
+    font-weight: 600;
+  }
+  .progress-bar-bg {
+    width: 100%;
+    height: 18px;
+    background: #e2e8f0;
+    border-radius: 9px;
+    overflow: hidden;
+  }
+  .progress-bar-fill {
+    width: 0%;
+    height: 100%;
+    background: linear-gradient(90deg, #0284c7, #0ea5e9);
+    transition: width 0.2s ease;
+  }
+  .log-box {
+    background: #0f172a;
+    color: #e2e8f0;
+    font-family: Consolas, monospace;
+    font-size: 12px;
+    padding: 10px 12px;
+    border-radius: 6px;
+    min-height: 220px;
+    max-height: 320px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    word-break: break-all;
+    line-height: 1.5;
+  }
+  .log-entry.info { color: #93c5fd; }
+  .log-entry.success { color: #86efac; font-weight: 700; }
+  .log-entry.warning { color: #fde047; }
+  .log-entry.error { color: #fca5a5; font-weight: 700; }
+
+  /* 引導彈窗樣式 */
+  .guide-box {
+    background: #f0f9ff;
+    border: 1px solid #bae6fd;
+    border-radius: 6px;
+    padding: 14px 16px;
+    margin-bottom: 14px;
+    line-height: 1.6;
+    color: #0369a1;
+  }
+  .guide-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 10px;
+  }
+  .guide-btn {
+    text-align: left;
+    padding: 10px 14px;
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    background: #ffffff;
+    cursor: pointer;
+  }
+  .guide-btn:hover {
+    background: #f8fafc;
+    border-color: #0284c7;
+  }
+  .guide-btn.primary {
+    background: #0284c7;
+    color: #ffffff;
+    border-color: #0284c7;
+    font-weight: 700;
+  }
+  .guide-btn.primary:hover {
+    background: #0369a1;
+  }
+</style>
+</head>
+<body>
+
+  <!-- 頂部標題列 -->
+  <div class="header">
+    <h1>🔄 智慧控管與監控系統 - 自動更新工具</h1>
+    <div class="header-actions">
+      <span id="admin_badge" class="admin-badge">👑 權限檢查中</span>
+      <button id="btn_release_notes" class="secondary" title="檢視更新說明文件">📖 更新說明</button>
+      <button id="btn_rescan" class="secondary" title="重新掃描所有安裝包與服務狀態">🔄 重新整理</button>
+    </div>
+  </div>
+
+  <!-- 系統安裝根目錄卡片 -->
+  <div class="card">
+    <div class="card-title">
+      <span>📁 系統安裝根目錄</span>
+      <span id="root_status_badge" style="font-size:12px; font-weight:normal; color:#64748b;">檢查中...</span>
+    </div>
+    <div class="row">
+      <input type="text" id="txt_root_dir" value="C:\AppServ" placeholder="例如：C:\AppServ">
+      <button id="btn_browse_root">瀏覽...</button>
+    </div>
+  </div>
+
+  <!-- 雙欄主要工作區 -->
+  <div class="main-layout">
+    
+    <!-- 左欄：環境配置與自動化服務 -->
+    <div class="left-col">
+      <div class="card">
+        <div class="card-title">⚙️ 系統服務與自動化配置</div>
+        <div class="options-list">
+          <label class="checkbox-item">
+            <input type="checkbox" id="chk_auto_apache" checked>
+            <span>自動註冊 Apache 為 Windows 系統服務 (Apache2.4)</span>
+          </label>
+          <label class="checkbox-item">
+            <input type="checkbox" id="chk_security_hardening" checked>
+            <span>套用資安強化 (隱藏版本標頭、CVE-2024-4577 緩解防護)</span>
+          </label>
+          <label class="checkbox-item">
+            <input type="checkbox" id="chk_restart_apache">
+            <span id="lbl_restart_apache">更新後重新啟動 Apache 服務</span>
+          </label>
+          <label class="checkbox-item">
+            <input type="checkbox" id="chk_restart_pm2">
+            <span id="lbl_restart_pm2">更新後重新啟動 PM2 守護服務</span>
+          </label>
+          <label class="checkbox-item">
+            <input type="checkbox" id="chk_restore_backup">
+            <span>從備份檔案還原自訂配置與資料庫</span>
+          </label>
+          <div id="backup_zip_row" class="row" style="display:none; margin-top:4px; padding-left:22px;">
+            <input type="text" id="txt_backup_zip" placeholder="請選取 _LAH_Backup_*.zip">
+            <button id="btn_browse_backup" style="padding:4px 10px; font-size:12px;">瀏覽...</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 基礎環境安裝包 -->
+      <div class="card">
+        <div class="card-title">
+          <span>🏛️ 基礎環境安裝包</span>
+          <span style="font-size:11px; color:#64748b;">Apache / PHP</span>
+        </div>
+        <div id="base_pkg_list"></div>
+      </div>
+    </div>
+
+    <!-- 右欄：應用與系統模組更新包 -->
+    <div class="right-col">
+      <div class="card">
+        <div class="card-title">
+          <span>📦 應用模組更新包</span>
+          <div style="display:flex; gap:6px;">
+            <button id="btn_select_all" style="padding:2px 8px; font-size:11px;">全選</button>
+            <button id="btn_deselect_all" style="padding:2px 8px; font-size:11px;">全部取消</button>
+          </div>
+        </div>
+        <div id="app_pkg_list"></div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- 底部操作列 -->
+  <div class="footer-bar">
+    <div id="status_summary" class="status-text">準備就緒，請確認更新項目後點選「開始更新」</div>
+    <div class="footer-actions">
+      <button id="btn_exit" class="secondary">關閉離開</button>
+      <button id="btn_start_update" class="primary">🚀 開始執行更新作業</button>
+    </div>
+  </div>
+
+  <!-- 【新增需求】預設目錄不存在引導對話框 (Modal) -->
+  <div id="modal_root_missing" class="modal-overlay">
+    <div class="modal-content" style="max-width: 580px;">
+      <div class="modal-header">
+        <h2 style="color:#0284c7;">⚠️ 系統安裝目錄提示</h2>
+      </div>
+      <div class="guide-box">
+        <strong>偵測到預設安裝目錄不存在：</strong><br>
+        <span id="lbl_missing_dir" style="font-family:Consolas, monospace; font-size:13px; font-weight:bold;">C:\AppServ</span><br><br>
+        若您是在全新伺服器環境進行部署，您可以直接建立此目錄；或者瀏覽選取您目前實際安裝的目錄。
+      </div>
+      <div class="guide-actions">
+        <button id="btn_create_root" class="guide-btn primary">
+          📁 <strong>立即建立此預設目錄</strong>
+          <span style="font-size:11px; opacity:0.9;">（一鍵自動建立並取得存取權限）</span>
+        </button>
+        <button id="btn_modal_browse_root" class="guide-btn">
+          🔍 <strong>瀏覽選取其他磁碟／目錄</strong>
+          <span style="font-size:11px; color:#64748b;">（例如 D:\AppServ 或其他自訂路徑）</span>
+        </button>
+        <button id="btn_modal_skip_root" class="guide-btn">
+          ✏️ <strong>稍後於介面手動設定</strong>
+          <span style="font-size:11px; color:#64748b;">（關閉對話框，留在主畫面輸入）</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 更新執行進度視窗 (Modal) -->
+  <div id="modal_progress" class="modal-overlay">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 id="modal_progress_title">系統自動更新進行中...</h2>
+        <span id="badge_updating" style="font-size:12px; color:#0284c7; font-weight:600;">處理中</span>
+      </div>
+      <div class="progress-wrap">
+        <div class="progress-info">
+          <span id="lbl_progress_status">正在準備更新作業...</span>
+          <span id="lbl_progress_percent">0%</span>
+        </div>
+        <div class="progress-bar-bg">
+          <div id="bar_progress" class="progress-bar-fill"></div>
+        </div>
+      </div>
+      <div id="log_box" class="log-box"></div>
+      <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:12px;">
+        <button id="btn_modal_back" class="secondary" style="display:none;">返回主畫面</button>
+        <button id="btn_close_modal" class="primary" style="display:none;">完成並關閉程式</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 更新完成清理詢問彈窗 (Modal) -->
+  <div id="modal_cleanup" class="modal-overlay">
+    <div class="modal-content" style="max-width: 620px;">
+      <div class="modal-header">
+        <h2 style="color:#16a34a;">🎉 系統更新與服務驗證完成</h2>
+      </div>
+      <div style="margin:10px 0; font-size:13px; line-height:1.6;">
+        <div id="health_report_box" style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:6px; padding:10px 14px; margin-bottom:12px; font-size:12.5px;"></div>
+        <p style="margin:8px 0; font-weight:600; color:#1e293b;">
+          請問是否要刪除本次已安裝完成的更新壓縮包 (.zip) 以釋放磁碟空間？
+        </p>
+        <div id="cleanup_zip_list" style="font-family:Consolas, monospace; font-size:11.5px; color:#64748b; background:#f1f5f9; padding:8px 12px; border-radius:4px; max-height:120px; overflow-y:auto; margin-bottom:10px;"></div>
+        <p style="font-size:12px; color:#64748b; margin:0;">
+          • <strong>點選「保留」</strong>：完整保留所有安裝壓縮包。<br>
+          • <strong>點選「刪除壓縮包」</strong>：自動刪除上述 zip 檔（備份檔與說明檔仍會妥善保留）。
+        </p>
+      </div>
+      <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:14px;">
+        <button id="btn_cleanup_keep" class="secondary">保留壓縮包</button>
+        <button id="btn_cleanup_delete" class="primary">🗑️ 刪除安裝包並釋放空間</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 更新說明彈窗 (Modal) -->
+  <div id="modal_release_notes" class="modal-overlay">
+    <div class="modal-content" style="max-width: 720px;">
+      <div class="modal-header">
+        <h2>📖 系統更新說明文件</h2>
+        <button id="btn_close_notes" class="secondary" style="padding:3px 10px;">✕</button>
+      </div>
+      <div id="release_notes_content" style="font-family:Consolas, 'Microsoft JhengHei UI', monospace; font-size:12.5px; line-height:1.6; white-space:pre-wrap; background:#f8fafc; border:1px solid #e2e8f0; padding:12px; border-radius:6px; max-height:450px; overflow-y:auto; user-select:text;"></div>
+    </div>
+  </div>
+
+<script src="app.js"></script>
+</body>
+</html>

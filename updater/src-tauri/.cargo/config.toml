@@ -1,0 +1,6 @@
+[build]
+pipelining = false
+target-dir = "C:/Temp/cargo-target/lah-updater"
+
+[profile.dev]
+incremental = false

@@ -23,6 +23,29 @@
   - 於專案根目錄新增 `建立自動備份工具.bat`（相容別名 `建立backuper.bat`、`build_backuper.bat`），對齊 `建立自動更新工具.bat` 習慣。
   - 新增 `backuper/build.py` 與 `backuper/build.bat`，自動執行 `cargo build --release` 並將產出直接輸出至專案根目錄 `dist/智慧控管與監控系統 - 備份與還原工具.exe`。
 
+### 🦀 自動更新工具改以 Tauri 2 (Rust) 全新改寫 (`updater/`)
+- **底層核心完全改以 Rust 實作**：
+  - 以 Tauri 2 + 純靜態 HTML/JS 完整移植 Python 既有更新功能，包含 10 大更新壓縮包智慧對齊解壓（`detect_strip_prefix` 消除多餘頂層目錄）、5 階段系統自動化配置引擎（Apache mod_php7、PHP 8.5 FastCGI Proxy、CVE-2024-4577 資安強化、綠色 Node/PM2 設定與 WinSW 服務部署、服務重啟與全系統健康檢查）。
+  - 透過 `include_bytes!` 內嵌自包含 WinSW 核心（`lah-service.exe` 與相關腳本），免除外部資料夾遺失相依性問題。
+  - Windows 單一執行檔體積約 11.5 MB，冷啟動縮減至 0.3 秒以內。
+- **初次安裝智慧引導**：
+  - 程式啟動時自動檢測預設安裝目錄（`C:\AppServ`）；若不存在即刻彈出引導對話框，提供「一鍵建立預設目錄」、「瀏覽選取其他磁碟」或「稍後手動設定」。
+- **介面效能與版面調校**：
+  - 實作初始清單 0 延遲同步渲染，啟動瞬間立即可見完整版面，消除背景非同步掃描造成的延遲感。
+  - 視窗預設高度設定為 665px，密合卡片與底端操作按鈕，消除多餘空白。
+- **建置管線對齊規範**：
+  - 更新 `updater/build.py` 與 `updater/build.bat`，自動執行 `cargo build --release` 並發布至 `dist/智慧控管與監控系統 - 自動更新工具.exe`。
+  - `.gitignore` 新增 `updater/src-tauri/target/`、`updater/src-tauri/gen/`。
+
+### 🦀 自動移除工具改以 Tauri 2 (Rust) 全新改寫 (`uninstaller/`)
+- **底層核心完全改以 Rust 實作**：
+  - 以 Tauri 2 + 純靜態 HTML/JS 完整移植 Python 既有移除功能，包含停止/刪除 Windows 服務（`LAH_PM2_Service`、`Apache2.4`）、精確終止殘留進程（`pm2 kill` 與 PowerShell 樹狀行程刪除）、清理開機自啟動與工作排程、自系統與使用者 `PATH` 環境變數剔除並廣播 `WM_SETTINGCHANGE`、Apache PHP 轉發設定防護性註銷與語法驗證、解除檔案唯讀屬性強健刪除、以及安裝根目錄深度清理（嚴格保護 `_LAH_Backup_*.zip`）。
+  - 產出之 Windows 單一執行檔體積縮減至 10.68 MB，免去 Python 解壓暫存目錄，達成隨點隨開與零防毒誤判。
+- **建置管線對齊 backuper 規範**：
+  - 新增 `uninstaller/build.py` 與 `uninstaller/build.bat`，自動執行 `cargo build --release` 並將二進位檔直接發布為 `dist/智慧控管與監控系統 - 自動移除工具.exe`。
+  - 專案根目錄之 `建立解除安裝工具.bat` 與 `build_uninstaller.bat` 同步轉發至最新 Rust 建置腳本。
+  - `.gitignore` 新增 `uninstaller/src-tauri/target/`、`uninstaller/src-tauri/gen/`。
+
 ### 📦 備份功能獨立為 `backuper/`（Tauri 2）
 - 新增 `backuper/`：以 Tauri 2 + 純靜態 HTML/JS 實作系統重要資料備份與還原，備份清單與原 uninstaller 一致；還原前檢查服務已停止、防 Zip Slip，並自動建立 `restore_undo_<時間>.zip` 復原點。
 - `uninstaller.py` 移除備份功能（`backup_critical_data`、備份進度視窗模式、「立即備份」按鈕、備份勾選框），改為提示使用者先使用 backuper；仍保留 `_LAH_Backup_*.zip` 於根目錄清理時不被刪除。
