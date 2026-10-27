@@ -220,12 +220,20 @@
 
   /* 底部固定列 */
   .footer-bar {
+    position: sticky;
+    bottom: 0;
+    background: #f8fafc;
+    z-index: 50;
     display: flex;
     justify-content: space-between;
     align-items: center;
     margin-top: 8px;
-    padding-top: 8px;
+    padding: 10px 0 6px 0;
     border-top: 1px solid #e2e8f0;
+  }
+  #btn_apply_config_now:hover:not(:disabled) {
+    background: #e0f2fe !important;
+    border-color: #7dd3fc !important;
   }
   .status-text {
     font-size: 12.5px;
@@ -417,6 +425,9 @@
             <input type="text" id="txt_backup_zip" placeholder="請選取 _LAH_Backup_*.zip">
             <button id="btn_browse_backup" style="padding:4px 10px; font-size:12px;">瀏覽...</button>
           </div>
+          <button id="btn_apply_config_now" class="secondary" style="width: 100%; margin-top: 6px; padding: 6px 12px; font-size: 12.5px; font-weight: 600; color: #0369a1; border-color: #bae6fd; background: #f0f9ff; display: flex; align-items: center; justify-content: center; gap: 6px;">
+            ⚡ 立即套用配置與註冊服務
+          </button>
         </div>
       </div>
 

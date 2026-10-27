@@ -10,7 +10,7 @@ pub mod types;
 use std::fs;
 use std::path::PathBuf;
 use tauri::{AppHandle, Emitter};
-use types::{PackageItem, RootDirCheck, ScanSummary, UpdateOptions, UpdateSummary};
+use types::{PackageItem, RootDirCheck, ScanSummary, SystemConfigOptions, UpdateOptions, UpdateSummary};
 
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
 pub struct LogPayload {
@@ -174,6 +174,36 @@ async fn run_update(app: AppHandle, options: UpdateOptions) -> Result<UpdateSumm
 }
 
 #[tauri::command]
+async fn apply_system_config(app: AppHandle, options: SystemConfigOptions) -> Result<UpdateSummary, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let app_handle = app.clone();
+        let emit_fn = move |event: types::ProgressEvent| {
+            if event.stage == "log" {
+                let _ = app_handle.emit(
+                    "log",
+                    LogPayload {
+                        level: event.level,
+                        message: event.message,
+                    },
+                );
+            } else if event.stage == "progress" {
+                let _ = app_handle.emit(
+                    "progress",
+                    ProgressPayload {
+                        percent: event.percent,
+                        message: event.message,
+                    },
+                );
+            }
+        };
+
+        pipeline::apply_system_configurations(options, emit_fn)
+    })
+    .await
+    .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 fn delete_installed_zips(zip_paths: Vec<String>) -> Result<usize, String> {
     let mut count = 0;
     for zp in zip_paths {
@@ -198,6 +228,7 @@ pub fn run() {
             read_release_notes,
             scan_environment,
             run_update,
+            apply_system_config,
             delete_installed_zips,
             exit_app
         ])

@@ -68,6 +68,15 @@ pub struct UpdateOptions {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SystemConfigOptions {
+    pub root_dir: String,
+    pub auto_register_apache: bool,
+    pub auto_security_hardening: bool,
+    pub restart_apache: bool,
+    pub restart_pm2: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProgressEvent {
     pub stage: String,
     pub percent: u32,

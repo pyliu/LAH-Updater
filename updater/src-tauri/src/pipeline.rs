@@ -7,7 +7,7 @@ use crate::health::verify_all_services_health;
 use crate::pm2::*;
 use crate::services::*;
 use crate::system::*;
-use crate::types::{ProgressEvent, UpdateOptions, UpdateSummary};
+use crate::types::{ProgressEvent, SystemConfigOptions, UpdateOptions, UpdateSummary};
 use std::path::PathBuf;
 use std::time::Instant;
 
@@ -275,6 +275,149 @@ where
         total_files: total_files_extracted,
         health_report,
         zips_to_clean,
+        error_message: None,
+    }
+}
+
+pub fn apply_system_configurations<F>(options: SystemConfigOptions, emit_fn: F) -> UpdateSummary
+where
+    F: Fn(ProgressEvent) + Send + Sync,
+{
+    let start_time = Instant::now();
+    let root_path = PathBuf::from(&options.root_dir);
+
+    let log_event = |msg: &str, level: &str| {
+        emit_fn(ProgressEvent {
+            stage: "log".to_string(),
+            percent: 0,
+            message: msg.to_string(),
+            level: level.to_string(),
+        });
+    };
+
+    let set_prog = |percent: u32, msg: &str| {
+        emit_fn(ProgressEvent {
+            stage: "progress".to_string(),
+            percent,
+            message: msg.to_string(),
+            level: "info".to_string(),
+        });
+    };
+
+    log_event("============================================================", "info");
+    log_event("⚡ 開始即時套用系統服務設定與資安強化配置...", "info");
+    set_prog(0, "正在檢查系統環境...");
+
+    let apache_tgt = root_path.join("Apache24");
+    let php7_tgt = root_path.join("php7");
+    let php85_tgt = root_path.join("php85");
+    let node_tgt = root_path.join("node");
+
+    // 1. 雙層巢狀目錄自癒攤平
+    set_prog(10, "正在檢查目錄結構...");
+    auto_flatten_nested_dirs(&root_path, &log_event);
+
+    // 2. 確保環境檔存在
+    ensure_default_env_files(&root_path, &log_event);
+
+    // 3. 配置 PHP 7.4 與 Apache mod_php
+    if php7_tgt.is_dir() {
+        set_prog(25, "正在配置 PHP 7.4 (php.ini)...");
+        ensure_php_ini_configured(&php7_tgt, false, &log_event);
+    }
+    if apache_tgt.is_dir() {
+        set_prog(35, "正在配置 Apache 2.4 (httpd.conf) 與 mod_php7 模組...");
+        configure_apache_mod_php7(&apache_tgt, &root_path, if php7_tgt.is_dir() { Some(&php7_tgt) } else { None }, &log_event);
+        if options.auto_register_apache || query_apache_service().is_none() {
+            set_prog(45, "正在註冊 Apache 系統服務...");
+            install_apache_service(&apache_tgt, "Apache2.4", &log_event);
+        }
+    }
+
+    // 4. 配置 PHP 8.5 與 FCGI Proxy
+    if php85_tgt.is_dir() || root_path.join("LAH-API").is_dir() {
+        set_prog(55, "正在配置 PHP 8.5 與 FCGI Proxy...");
+        if php85_tgt.is_dir() {
+            ensure_php_ini_configured(&php85_tgt, true, &log_event);
+        }
+        if apache_tgt.is_dir() {
+            configure_apache_fcgi_proxy(&apache_tgt, &root_path, if php85_tgt.is_dir() { Some(&php85_tgt) } else { None }, &log_event);
+        }
+    }
+
+    // 5. 套用資安強化
+    if options.auto_security_hardening {
+        set_prog(65, "正在套用資安強化 (隱藏版本標頭、CVE-2024-4577 緩解防護)...");
+        if apache_tgt.is_dir() {
+            let conf_f = apache_tgt.join("conf").join("httpd.conf");
+            if conf_f.is_file() {
+                apply_apache_security_hardening(&conf_f, &root_path, &log_event);
+            }
+        }
+        if php7_tgt.is_dir() {
+            let ini7 = php7_tgt.join("php.ini");
+            if ini7.is_file() {
+                apply_php_security_hardening(&ini7, &log_event);
+            }
+        }
+        if php85_tgt.is_dir() {
+            let ini85 = php85_tgt.join("php.ini");
+            if ini85.is_file() {
+                apply_php_security_hardening(&ini85, &log_event);
+            }
+        }
+    }
+
+    if apache_tgt.is_dir() {
+        check_apache_syntax(&apache_tgt, &log_event);
+    }
+
+    // 6. Node.js 與 PM2 核心巡檢
+    if node_tgt.is_dir() {
+        set_prog(75, "正在巡檢與配置 PM2 核心服務...");
+        register_path_to_user_environment(&node_tgt, &log_event);
+        ensure_portable_pm2_patched(&root_path, &log_event);
+        let oci_dir = root_path.join("instantclient_11_2");
+        if oci_dir.is_dir() {
+            register_path_to_user_environment(&oci_dir, &log_event);
+        }
+        setup_pm2_autostart(&root_path, &log_event);
+        audit_and_ensure_pm2_services(&root_path, &log_event);
+        if options.restart_pm2 {
+            restart_pm2_services(&root_path, &log_event);
+        }
+    }
+
+    // 7. 重啟 Apache 服務 (若勾選)
+    let target_svc = query_apache_service().unwrap_or_else(|| "Apache2.4".to_string());
+    if options.restart_apache {
+        set_prog(88, &format!("正在重啟 Apache 服務 [{target_svc}]..."));
+        if is_service_running(&target_svc) {
+            stop_service(&target_svc, &log_event);
+        }
+        start_service(&target_svc, &log_event);
+    }
+
+    // 8. 全方位服務健康確認
+    set_prog(95, "正在進行系統服務健康確認...");
+    let (_, health_report) = verify_all_services_health(
+        &root_path,
+        if apache_tgt.is_dir() { Some(&apache_tgt) } else { None },
+        &log_event,
+    );
+
+    let elapsed = start_time.elapsed().as_secs_f64();
+    set_prog(100, &format!("✅ 系統服務與資安配置套用完成！(耗時 {:.1} 秒)", elapsed));
+    log_event("============================================================", "success");
+    log_event(&format!("🎉 系統服務與資安強化配置已即時生效！(耗時 {:.1} 秒)", elapsed), "success");
+
+    UpdateSummary {
+        success: true,
+        elapsed_secs: elapsed,
+        processed_packages: 0,
+        total_files: 0,
+        health_report,
+        zips_to_clean: Vec::new(),
         error_message: None,
     }
 }

@@ -529,6 +529,62 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
+  // 立即套用配置與註冊服務
+  document.getElementById("btn_apply_config_now").addEventListener("click", async () => {
+    if (state.isUpdating) return;
+
+    const rootDir = document.getElementById("txt_root_dir").value.trim() || "C:\\AppServ";
+    const autoRegisterApache = document.getElementById("chk_auto_apache").checked;
+    const autoSecurity = document.getElementById("chk_security_hardening").checked;
+    const restartApache = document.getElementById("chk_restart_apache").checked;
+    const restartPm2 = document.getElementById("chk_restart_pm2").checked;
+
+    const options = {
+      root_dir: rootDir,
+      auto_register_apache: autoRegisterApache,
+      auto_security_hardening: autoSecurity,
+      restart_apache: restartApache,
+      restart_pm2: restartPm2,
+    };
+
+    // 重設日誌與進度視窗
+    document.getElementById("log_box").innerHTML = "";
+    document.getElementById("bar_progress").style.width = "0%";
+    document.getElementById("lbl_progress_percent").textContent = "0%";
+    document.getElementById("lbl_progress_status").textContent = "正在準備套用系統配置與註冊服務...";
+    document.getElementById("modal_progress_title").textContent = "⚡ 正在即時套用系統配置與註冊服務...";
+    document.getElementById("badge_updating").textContent = "套用中";
+    document.getElementById("badge_updating").style.color = "#0284c7";
+    document.getElementById("btn_modal_back").style.display = "none";
+    document.getElementById("btn_close_modal").style.display = "none";
+    document.getElementById("modal_progress").classList.add("active");
+
+    state.isUpdating = true;
+
+    try {
+      const summary = await invoke("apply_system_config", { options });
+      state.isUpdating = false;
+
+      if (summary.success) {
+        document.getElementById("modal_progress_title").textContent = "🎉 系統配置套用完成！";
+        document.getElementById("badge_updating").textContent = "已完成";
+        document.getElementById("badge_updating").style.color = "#16a34a";
+        document.getElementById("btn_modal_back").style.display = "inline-block";
+        document.getElementById("btn_close_modal").style.display = "inline-block";
+      } else {
+        document.getElementById("modal_progress_title").textContent = "⚠️ 套用未完全成功";
+        document.getElementById("badge_updating").textContent = "有警告";
+        document.getElementById("badge_updating").style.color = "#d97706";
+        document.getElementById("btn_modal_back").style.display = "inline-block";
+      }
+    } catch (e) {
+      state.isUpdating = false;
+      document.getElementById("modal_progress_title").textContent = "❌ 套用發生錯誤";
+      appendLog("error", `套用設定過程發生異常錯誤: ${e}`);
+      document.getElementById("btn_modal_back").style.display = "inline-block";
+    }
+  });
+
   // 清理彈窗按鈕
   document.getElementById("btn_cleanup_keep").addEventListener("click", () => {
     document.getElementById("modal_cleanup").classList.remove("active");
