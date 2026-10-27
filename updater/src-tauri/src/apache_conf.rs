@@ -269,7 +269,7 @@ pub fn configure_apache_fcgi_proxy(apache_dir: &Path, root_dir: &Path, php85_dir
                 Require all denied\n\
             </FilesMatch>\n\
             <FilesMatch \"\\.php$\">\n\
-                <If \"-f %{{%REQUEST_FILENAME}}\">\n\
+                <If \"-f %{{REQUEST_FILENAME}}\">\n\
                     SetHandler \"proxy:fcgi://127.0.0.1:8085/\"\n\
                 </If>\n\
             </FilesMatch>\n\
@@ -279,7 +279,13 @@ pub fn configure_apache_fcgi_proxy(apache_dir: &Path, root_dir: &Path, php85_dir
         </Proxy>\n"
     );
 
-    if !content.contains("proxy:fcgi://127.0.0.1:8085/") {
+    // 清理舊版本可能遺留之重複百分比符號語法錯誤
+    content = content.replace("%{%REQUEST_FILENAME}", "%{REQUEST_FILENAME}");
+
+    let existing_fcgi_re = Regex::new(r#"(?s)# =+\s*# LAH-API \(PHP 8\.5 FastCGI.*?</Proxy>\s*"#).unwrap();
+    if existing_fcgi_re.is_match(&content) {
+        content = existing_fcgi_re.replace(&content, &fcgi_block).to_string();
+    } else if !content.contains("proxy:fcgi://127.0.0.1:8085/") {
         content.push_str(&fcgi_block);
         log_fn("  ✓ 已向 Apache 注入 LAH-API (PHP 8.5 FastCGI 127.0.0.1:8085) 轉發設定", "success");
     }
@@ -381,8 +387,8 @@ pub fn apply_apache_security_hardening(conf_path: &Path, root_dir: &Path, log_fn
         # =====================================================================\n\
         <IfModule rewrite_module>\n\
             RewriteEngine On\n\
-            RewriteCond %{{%QUERY_STRING}} (?:^|&)%ad [NC,OR]\n\
-            RewriteCond %{{%THE_REQUEST}} \\s/+(?:cgi-bin|php-cgi)/ [NC]\n\
+            RewriteCond %{{QUERY_STRING}} (?:^|&)%ad [NC,OR]\n\
+            RewriteCond %{{THE_REQUEST}} \\s/+(?:cgi-bin|php-cgi)/ [NC]\n\
             RewriteRule ^ - [F,L]\n\
         </IfModule>\n\
         <Directory \"{root_fwd}/www/assets\">\n\
@@ -402,7 +408,16 @@ pub fn apply_apache_security_hardening(conf_path: &Path, root_dir: &Path, log_fn
         </Directory>\n"
     );
 
-    if !content.contains("PHP2Shell (CVE-2024-4577") {
+    // 清理舊版本可能遺留之重複百分比符號語法錯誤
+    content = content
+        .replace("%{%QUERY_STRING}", "%{QUERY_STRING}")
+        .replace("%{%THE_REQUEST}", "%{THE_REQUEST}")
+        .replace("%{%REQUEST_FILENAME}", "%{REQUEST_FILENAME}");
+
+    let existing_sec_re = Regex::new(r#"(?s)# =+\s*# PHP2Shell \(CVE-2024-4577.*?</Directory>\s*"#).unwrap();
+    if existing_sec_re.is_match(&content) {
+        content = existing_sec_re.replace(&content, &php2shell_block).to_string();
+    } else if !content.contains("PHP2Shell (CVE-2024-4577") {
         content.push_str(&php2shell_block);
         log_fn("  ✓ Apache httpd.conf 已套用資安防護與 CVE-2024-4577 PHP2Shell 緩解設定", "success");
     }
