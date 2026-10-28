@@ -90,19 +90,52 @@ fn create_root_dir(path: String) -> Result<String, String> {
 #[tauri::command]
 fn read_release_notes() -> Option<String> {
     let app_dir = system::get_app_dir();
-    if let Ok(entries) = fs::read_dir(&app_dir) {
-        for entry in entries.flatten() {
-            let p = entry.path();
-            if p.is_file() {
-                let name = p.file_name().and_then(|s| s.to_str()).unwrap_or("").to_lowercase();
-                if (name.contains("更新說明") || name.contains("readme") || name.contains("release")) && name.ends_with(".txt") {
-                    if let Ok(content) = fs::read_to_string(&p) {
-                        return Some(content);
+    let mut search_dirs = Vec::new();
+
+    // 優先策略：優先至 patch/ 子資料夾尋找最新更新說明
+    let patch_dir = app_dir.join("patch");
+    if patch_dir.is_dir() {
+        search_dirs.push(patch_dir);
+    }
+    search_dirs.push(app_dir.clone());
+    if let Some(parent) = app_dir.parent() {
+        if parent != app_dir && parent.is_dir() {
+            search_dirs.push(parent.to_path_buf());
+        }
+    }
+
+    let mut candidates: Vec<(std::time::SystemTime, PathBuf)> = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+
+    for d in search_dirs {
+        if let Ok(entries) = fs::read_dir(d) {
+            for entry in entries.flatten() {
+                let p = entry.path();
+                if p.is_file() {
+                    let name = p.file_name().and_then(|s| s.to_str()).unwrap_or("").to_lowercase();
+                    if (name.contains("更新說明") || name.contains("readme") || name.contains("release")) && name.ends_with(".txt") {
+                        let norm = p.to_string_lossy().to_lowercase();
+                        if !seen.contains(&norm) {
+                            seen.insert(norm);
+                            let mtime = fs::metadata(&p).and_then(|m| m.modified()).unwrap_or(std::time::SystemTime::UNIX_EPOCH);
+                            candidates.push((mtime, p));
+                        }
                     }
                 }
             }
         }
     }
+
+    // 依最後修改時間降序排列 (最新者優先)
+    candidates.sort_by(|a, b| b.0.cmp(&a.0));
+
+    for (_, p) in candidates {
+        if let Ok(bytes) = fs::read(&p) {
+            // 嘗試 UTF-8 容錯解碼，必要時替換非法字元
+            return Some(String::from_utf8_lossy(&bytes).to_string());
+        }
+    }
+
     None
 }
 

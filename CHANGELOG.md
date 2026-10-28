@@ -24,6 +24,12 @@
   - 新增 `backuper/build.py` 與 `backuper/build.bat`，自動執行 `cargo build --release` 並將產出直接輸出至專案根目錄 `dist/智慧控管與監控系統 - 備份與還原工具.exe`。
 
 ### 🦀 自動更新工具改以 Tauri 2 (Rust) 全新改寫 (`updater/`)
+- **安裝包依分類分流優先搜尋與回退相容（雙軌支援 Tauri 2 與 Python）**：
+  - 基礎服務安裝包（`apache24`、`php7`、`php85`、`node`）優先至執行目錄下之 `base/` 資料夾探測。
+  - 程式更新包（`lah_nuxtjs`、`lah_api`、`www`、`lah_messenger_server`）優先至執行目錄下之 `patch/` 資料夾探測。
+  - 依賴套件包（`lah_nuxtjs_node_modules`、`lah_messenger_server_node_modules`）優先至執行目錄下之 `node_modules/` 資料夾探測。
+  - 若各專屬子資料夾不存在或未偵測到相應壓縮包，自動平滑回退至執行目錄、`C:\Temp` 與安裝根目錄搜尋，100% 維持既有使用習慣與相容性。
+  - 更新說明文字檔（`*更新說明*.txt`）亦優先探測 `patch/` 目錄，並依最後修改時間排序載入最新檔案。
 - **底層核心完全改以 Rust 實作**：
   - 以 Tauri 2 + 純靜態 HTML/JS 完整移植 Python 既有更新功能，包含 10 大更新壓縮包智慧對齊解壓（`detect_strip_prefix` 消除多餘頂層目錄）、5 階段系統自動化配置引擎（Apache mod_php7、PHP 8.5 FastCGI Proxy、CVE-2024-4577 資安強化、綠色 Node/PM2 設定與 WinSW 服務部署、服務重啟與全系統健康檢查）。
   - 透過 `include_bytes!` 內嵌自包含 WinSW 核心（`lah-service.exe` 與相關腳本），免除外部資料夾遺失相依性問題。

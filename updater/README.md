@@ -6,6 +6,7 @@
 
 1. **多模組套件自動對齊解壓 (Smart Extractor)**：
    - 支援 10 大更新壓縮包（`Apache24.zip`, `php7.zip`, `php85.zip`, `www.zip`, `LAH-API.zip`, `LAH-NUXTJS.zip`, `LAH-NUXTJS-node_modules.zip`, `lah-messenger-server.zip`, `lah-messenger-server-node_modules.zip`, `node.zip`）。
+   - **分流目錄優先搜尋**：基礎服務優先至 `base/`、程式更新包優先至 `patch/`、依賴套件包優先至 `node_modules/` 探測，若無則自動平滑回退至執行目錄與既有搜尋路徑。
    - 內建智慧頂層目錄對齊機制（`detect_strip_prefix`），自動去除 Apache Lounge 等多餘一層資料夾。
    - Zip Slip 安全跨越防護與檔案鎖定檢查。
 2. **5 階段自動化系統配置引擎 (5-Stage Automation Pipeline)**：

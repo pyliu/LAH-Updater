@@ -2920,11 +2920,17 @@ def restore_from_backup_zip(zip_path, root_dir, log_func=None):
 def find_release_notes(app_dir):
     """
     搜尋同目錄或上層目錄下檔名包含「更新說明」的文字檔。
-    若有多個符合檔案（例如歷史發布殘留），優先載入最後修改時間 (mtime) 最新的檔案。
+    優先探測 patch/ 子目錄，若有多個符合檔案，優先載入最後修改時間 (mtime) 最新的檔案。
     """
     try:
         candidates = []
-        search_dirs = [app_dir]
+        search_dirs = []
+        # 1. 優先策略：先檢查 patch/ 子資料夾
+        patch_dir = os.path.join(app_dir, "patch")
+        if os.path.isdir(patch_dir):
+            search_dirs.append(patch_dir)
+        # 2. 回退策略：檢查 app_dir 與上層目錄
+        search_dirs.append(app_dir)
         parent_dir = os.path.dirname(app_dir)
         if parent_dir and parent_dir != app_dir and os.path.isdir(parent_dir):
             search_dirs.append(parent_dir)
@@ -4377,36 +4383,60 @@ class UpdaterApp:
         # 更新各壓縮包目標路徑
         self._on_root_dir_changed()
 
+        def get_preferred_subfolder(pkg_id):
+            if pkg_id in ("apache24", "php7", "php85", "node"):
+                return "base"
+            elif pkg_id in ("lah_nuxtjs", "lah_api", "www", "lah_messenger_server"):
+                return "patch"
+            elif pkg_id in ("lah_nuxtjs_node_modules", "lah_messenger_server_node_modules"):
+                return "node_modules"
+            return None
+
+        def find_matching_zips(target_dir, package_spec):
+            if not os.path.isdir(target_dir):
+                return []
+            cand_names = [package_spec["name"]] + package_spec.get("alt_names", [])
+            matches = []
+            seen = set()
+
+            for name in cand_names:
+                cp = os.path.join(target_dir, name)
+                if os.path.isfile(cp):
+                    np = os.path.normpath(cp).lower()
+                    if np not in seen:
+                        seen.add(np)
+                        matches.append(cp)
+
+            if package_spec.get("pattern"):
+                try:
+                    pat = re.compile(package_spec["pattern"])
+                    for fname in os.listdir(target_dir):
+                        if pat.match(fname):
+                            full_f = os.path.join(target_dir, fname)
+                            if os.path.isfile(full_f):
+                                np = os.path.normpath(full_f).lower()
+                                if np not in seen:
+                                    seen.add(np)
+                                    matches.append(full_f)
+                except Exception:
+                    pass
+            return matches
+
         for pkg in PACKAGE_CONFIGS:
             p_id = pkg["id"]
             p_name = pkg["name"]
             v = self.pkg_vars[p_id]
-            candidates = [p_name] + pkg.get("alt_names", [])
             matched_paths = []
-            seen_norm = set()
 
-            for name in candidates:
-                cp = os.path.join(self.app_dir, name)
-                if os.path.isfile(cp):
-                    np = os.path.normpath(cp).lower()
-                    if np not in seen_norm:
-                        seen_norm.add(np)
-                        matched_paths.append(cp)
+            # 1. 優先策略：先至分類專屬子目錄 (base/、patch/、node_modules/) 搜尋
+            sub = get_preferred_subfolder(p_id)
+            if sub:
+                sub_dir = os.path.join(self.app_dir, sub)
+                matched_paths = find_matching_zips(sub_dir, pkg)
 
-            # 支援 pattern 正則表達式模糊/萬用字元辨識
-            if pkg.get("pattern"):
-                try:
-                    pat = re.compile(pkg["pattern"])
-                    for fname in os.listdir(self.app_dir):
-                        if pat.match(fname):
-                            full_f = os.path.join(self.app_dir, fname)
-                            if os.path.isfile(full_f):
-                                np = os.path.normpath(full_f).lower()
-                                if np not in seen_norm:
-                                    seen_norm.add(np)
-                                    matched_paths.append(full_f)
-                except Exception:
-                    pass
+            # 2. 回退策略：若專屬子目錄未找到，維持至主執行目錄 self.app_dir 搜尋
+            if not matched_paths:
+                matched_paths = find_matching_zips(self.app_dir, pkg)
 
             found_path = matched_paths[0] if matched_paths else None
             zip_path = found_path if found_path else os.path.join(self.app_dir, p_name)

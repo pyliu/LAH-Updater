@@ -154,54 +154,94 @@ pub const ALL_PACKAGE_SPECS: &[PackageSpec] = &[
     },
 ];
 
-pub fn scan_packages(search_dirs: &[PathBuf], root_dir: &Path) -> Vec<PackageItem> {
-    let mut items = Vec::new();
+/// 判斷各安裝包所屬之分類專屬優先子目錄
+pub fn get_preferred_subfolder(pkg_id: &str) -> Option<&'static str> {
+    match pkg_id {
+        // 基礎服務類：APACHE24, PHP7, PHP85, node -> base/
+        "apache24" | "php7" | "php85" | "node" => Some("base"),
+        // 程式更新包：LAH-NUXTJS, LAH-API, www, lah-messenger-server -> patch/
+        "lah_nuxtjs" | "lah_api" | "www" | "lah_messenger_server" => Some("patch"),
+        // node_modules 依賴類：LAH-NUXTJS-node_modules, lah-messenger-server-node_modules -> node_modules/
+        "lah_nuxtjs_node_modules" | "lah_messenger_server_node_modules" => Some("node_modules"),
+        _ => None,
+    }
+}
 
-    // 收集所有 search_dirs 下的 .zip 檔案
-    let mut available_zips: Vec<PathBuf> = Vec::new();
-    for d in search_dirs {
-        if let Ok(entries) = fs::read_dir(d) {
-            for entry in entries.flatten() {
-                let p = entry.path();
-                if p.is_file() {
-                    let ext = p.extension().and_then(|s| s.to_str()).unwrap_or("").to_lowercase();
-                    if ext == "zip" {
-                        available_zips.push(p);
-                    }
+fn collect_zips_in_dir(dir: &Path) -> Vec<PathBuf> {
+    let mut zips = Vec::new();
+    if let Ok(entries) = fs::read_dir(dir) {
+        for entry in entries.flatten() {
+            let p = entry.path();
+            if p.is_file() {
+                let ext = p.extension().and_then(|s| s.to_str()).unwrap_or("").to_lowercase();
+                if ext == "zip" {
+                    zips.push(p);
                 }
             }
         }
+    }
+    zips
+}
+
+fn match_package_zips(zips: &[PathBuf], spec: &PackageSpec) -> Vec<PathBuf> {
+    let mut matched = Vec::new();
+    let compiled_re = spec.pattern.and_then(|pat| Regex::new(pat).ok());
+
+    for zp in zips {
+        let fname = zp.file_name().and_then(|s| s.to_str()).unwrap_or("");
+        let fname_lower = fname.to_lowercase();
+
+        let mut is_match = fname_lower == spec.name.to_lowercase();
+        if !is_match {
+            for alt in spec.alt_names {
+                if fname_lower == alt.to_lowercase() {
+                    is_match = true;
+                    break;
+                }
+            }
+        }
+        if !is_match {
+            if let Some(re) = &compiled_re {
+                if re.is_match(fname) {
+                    is_match = true;
+                }
+            }
+        }
+
+        if is_match {
+            matched.push(zp.clone());
+        }
+    }
+    matched
+}
+
+pub fn scan_packages(search_dirs: &[PathBuf], root_dir: &Path) -> Vec<PackageItem> {
+    let mut items = Vec::new();
+
+    // 執行檔主目錄通常為 search_dirs 的第一個元素
+    let app_dir = search_dirs.first().cloned().unwrap_or_else(|| PathBuf::from("."));
+
+    // 收集所有 search_dirs 下的常規 .zip 檔案 (既有備援路徑)
+    let mut available_zips: Vec<PathBuf> = Vec::new();
+    for d in search_dirs {
+        available_zips.extend(collect_zips_in_dir(d));
     }
 
     for spec in ALL_PACKAGE_SPECS {
         let mut matched_files: Vec<PathBuf> = Vec::new();
 
-        for zp in &available_zips {
-            let fname = zp.file_name().and_then(|s| s.to_str()).unwrap_or("");
-            let fname_lower = fname.to_lowercase();
+        // 1. 優先策略：先至執行目錄下的分類專屬子資料夾 (base/、patch/、node_modules/) 搜尋
+        if let Some(sub) = get_preferred_subfolder(spec.id) {
+            let sub_dir = app_dir.join(sub);
+            if sub_dir.is_dir() {
+                let sub_zips = collect_zips_in_dir(&sub_dir);
+                matched_files = match_package_zips(&sub_zips, spec);
+            }
+        }
 
-            let mut is_match = fname_lower == spec.name.to_lowercase();
-            if !is_match {
-                for alt in spec.alt_names {
-                    if fname_lower == alt.to_lowercase() {
-                        is_match = true;
-                        break;
-                    }
-                }
-            }
-            if !is_match {
-                if let Some(pat) = spec.pattern {
-                    if let Ok(re) = Regex::new(pat) {
-                        if re.is_match(fname) {
-                            is_match = true;
-                        }
-                    }
-                }
-            }
-
-            if is_match {
-                matched_files.push(zp.clone());
-            }
+        // 2. 回退策略：若專屬子資料夾不存在或未找到匹配檔案，則維持既有 search_dirs 搜尋
+        if matched_files.is_empty() {
+            matched_files = match_package_zips(&available_zips, spec);
         }
 
         let exists = !matched_files.is_empty();
