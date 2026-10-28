@@ -8,6 +8,17 @@
 
 ## [未發布]
 
+### 📦 原始碼打包工具 (pack.py) 支援分流輸出 (`patch/`、`node_modules/`、`base/`)
+- **預設輸出基底導向專案 `dist/` 並分流歸檔**：
+  - 業務程式更新包（`www.zip`、`LAH-API.zip`、`LAH-NUXTJS.zip`、`lah-messenger-server.zip`）自動輸出至 `dist/patch/`。
+  - 核心依賴套件包（`LAH-NUXTJS-node_modules.zip` 與 `lah-messenger-server-node_modules.zip`）自動輸出至 `dist/node_modules/`。
+  - 基礎服務環境包（`node.zip`）自動輸出至 `dist/base/`。
+  - 自動將最新版 `*更新說明*.txt` 複製同步至 `dist/patch/`。
+  - 支援 `--output-dir` 參數自訂基底目錄時維持同等分流架構。
+
+
+## [未發布]
+
 ### 🧹 全面移除舊版 Python 原始碼，邁向純 Rust (Tauri 2) 架構
 - **移除舊版 Tkinter 主程式原始碼**：
   - 徹底移除 `updater/updater.py`（原 5,074 行 Python 更新工具）與歷史 `.spec` 打包設定檔。

@@ -527,7 +527,7 @@ def main():
     parser.add_argument("--node-only", action="store_true", help="僅打包可攜式 Node.js 綠色環境 (node.zip)")
     parser.add_argument("--with-node", action="store_true", help="常規打包時一併打包可攜式 Node.js 綠色環境 (node.zip)")
     parser.add_argument("--node", action="store_true", dest="do_node_pkg", help="打包可攜式 Node.js 綠色環境 (node.zip)")
-    parser.add_argument("--output-dir", default=None, help=f"指定輸出目錄（若未指定且預設分享區不存在，將自動輸出至腳本同層 dist 目錄）")
+    parser.add_argument("--output-dir", default=None, help="指定輸出基底目錄（預設為專案根目錄之 dist 目錄，自動分流至 patch/、node_modules/ 與 base/）")
     args = parser.parse_args()
 
     script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -535,17 +535,20 @@ def main():
     dist_dir = os.path.join(root_dir, "dist")
     api_dir, api8_dir, fe_dir, messenger_dir, node_dir = resolve_project_dirs(script_dir)
 
-    # 決定輸出目錄：未指定且預設分享區不存在時自動回退至 dist
+    # 決定輸出基底目錄：預設直接指向專案 dist/ 目錄，支援命令列 --output-dir 覆寫
     if args.output_dir:
-        output_dir = os.path.abspath(args.output_dir)
+        output_base_dir = os.path.abspath(args.output_dir)
     else:
-        if os.path.isdir(DEFAULT_OUTPUT_DIR):
-            output_dir = os.path.abspath(DEFAULT_OUTPUT_DIR)
-        else:
-            output_dir = dist_dir
-            print(f"[提示] 預設分享區不存在（{DEFAULT_OUTPUT_DIR}），自動導向本機輸出目錄：{output_dir}")
+        output_base_dir = dist_dir
 
-    os.makedirs(output_dir, exist_ok=True)
+    # 分流目標子目錄配置
+    patch_dir = os.path.join(output_base_dir, "patch")
+    node_modules_dir = os.path.join(output_base_dir, "node_modules")
+    base_dir = os.path.join(output_base_dir, "base")
+
+    os.makedirs(patch_dir, exist_ok=True)
+    os.makedirs(node_modules_dir, exist_ok=True)
+    os.makedirs(base_dir, exist_ok=True)
 
     # 決定打包項目：
     # 1. 若無傳入任何命令列參數，進入互動選單模式供使用者自由勾選
@@ -599,7 +602,10 @@ def main():
     print(f"LAH-FE                 來源：{fe_dir}")
     print(f"lah-messenger-server   來源：{messenger_dir}")
     print(f"Node.js (綠色環境)     來源：{node_dir}")
-    print(f"ZIP 輸出目錄                ：{output_dir}")
+    print(f"ZIP 輸出基底目錄            ：{output_base_dir}")
+    print(f"  ├─ 程式更新包 (patch)     ：{patch_dir}")
+    print(f"  ├─ 核心依賴包 (node_modules)：{node_modules_dir}")
+    print(f"  └─ 基礎環境包 (base)      ：{base_dir}")
 
     overall_start = time.time()
 
@@ -608,41 +614,41 @@ def main():
         if not run_fe_build(fe_dir):
             sys.exit(1)
 
-    # 2. 打包 LAH-API (PHP7) -> www.zip
+    # 2. 打包 LAH-API (PHP7) -> patch/www.zip
     if do_api:
-        www_zip_path = os.path.join(output_dir, "www.zip")
-        if not build_zip_package("LAH-API (PHP7) 後端更新包 (www.zip)", api_dir, www_zip_path, API_INCLUDES, API_EXCLUDES):
+        www_zip_path = os.path.join(patch_dir, "www.zip")
+        if not build_zip_package("LAH-API (PHP7) 後端更新包 (patch/www.zip)", api_dir, www_zip_path, API_INCLUDES, API_EXCLUDES):
             sys.exit(1)
 
-    # 3. 打包 LAH-API (PHP8) -> LAH-API.zip
+    # 3. 打包 LAH-API (PHP8) -> patch/LAH-API.zip
     if do_api8:
-        api8_zip_path = os.path.join(output_dir, "LAH-API.zip")
-        if not build_zip_package("LAH-API (PHP8) 後端更新包 (LAH-API.zip)", api8_dir, api8_zip_path, API8_INCLUDES, API8_EXCLUDES):
+        api8_zip_path = os.path.join(patch_dir, "LAH-API.zip")
+        if not build_zip_package("LAH-API (PHP8) 後端更新包 (patch/LAH-API.zip)", api8_dir, api8_zip_path, API8_INCLUDES, API8_EXCLUDES):
             sys.exit(1)
 
-    # 4. 打包 LAH-FE -> LAH-NUXTJS.zip
+    # 4. 打包 LAH-FE -> patch/LAH-NUXTJS.zip
     if do_fe:
-        fe_zip_path = os.path.join(output_dir, "LAH-NUXTJS.zip")
-        if not build_zip_package("LAH-FE 前端更新包 (LAH-NUXTJS.zip)", fe_dir, fe_zip_path, FE_INCLUDES, FE_EXCLUDES):
+        fe_zip_path = os.path.join(patch_dir, "LAH-NUXTJS.zip")
+        if not build_zip_package("LAH-FE 前端更新包 (patch/LAH-NUXTJS.zip)", fe_dir, fe_zip_path, FE_INCLUDES, FE_EXCLUDES):
             sys.exit(1)
 
-    # 5. 打包 即時通訊伺服器 -> lah-messenger-server.zip
+    # 5. 打包 即時通訊伺服器 -> patch/lah-messenger-server.zip
     if do_messenger:
-        ms_zip_path = os.path.join(output_dir, "lah-messenger-server.zip")
-        if not build_zip_package("即時通訊伺服器 (lah-messenger-server.zip)", messenger_dir, ms_zip_path, MESSENGER_INCLUDES, MESSENGER_EXCLUDES):
+        ms_zip_path = os.path.join(patch_dir, "lah-messenger-server.zip")
+        if not build_zip_package("即時通訊伺服器 (patch/lah-messenger-server.zip)", messenger_dir, ms_zip_path, MESSENGER_INCLUDES, MESSENGER_EXCLUDES):
             sys.exit(1)
 
-    # 6. 打包 前端核心套件 -> LAH-NUXTJS-node_modules.zip (與別名 LAH-FE-node_modules.zip)
+    # 6. 打包 前端核心套件 -> node_modules/LAH-NUXTJS-node_modules.zip (與別名 LAH-FE-node_modules.zip)
     if do_fe_modules:
         fe_mod_dir = os.path.join(fe_dir, "node_modules")
         if not os.path.isdir(fe_mod_dir):
             print(f"[WARN] 找不到前端 node_modules 目錄：{fe_mod_dir}，跳過打包。")
         else:
-            fe_mod_zip = os.path.join(output_dir, "LAH-NUXTJS-node_modules.zip")
-            if not build_zip_package("前端核心套件 (LAH-NUXTJS-node_modules.zip)", fe_dir, fe_mod_zip, ["node_modules"], NODE_MODULES_EXCLUDES):
+            fe_mod_zip = os.path.join(node_modules_dir, "LAH-NUXTJS-node_modules.zip")
+            if not build_zip_package("前端核心套件 (node_modules/LAH-NUXTJS-node_modules.zip)", fe_dir, fe_mod_zip, ["node_modules"], NODE_MODULES_EXCLUDES):
                 sys.exit(1)
             # 同步建立別名 LAH-FE-node_modules.zip，相容直接以 LAH-FE 命名的使用場景
-            fe_alias_zip = os.path.join(output_dir, "LAH-FE-node_modules.zip")
+            fe_alias_zip = os.path.join(node_modules_dir, "LAH-FE-node_modules.zip")
             try:
                 if os.path.exists(fe_alias_zip):
                     os.remove(fe_alias_zip)
@@ -654,46 +660,58 @@ def main():
             except Exception as e:
                 print(f"[WARN] 建立別名檔案失敗：{e}")
 
-    # 7. 打包 即時通伺服器核心套件 -> lah-messenger-server-node_modules.zip
+    # 7. 打包 即時通伺服器核心套件 -> node_modules/lah-messenger-server-node_modules.zip
     if do_server_modules:
         server_mod_dir = os.path.join(messenger_dir, "node_modules")
         if not os.path.isdir(server_mod_dir):
             print(f"[WARN] 找不到即時通伺服器 node_modules 目錄：{server_mod_dir}，跳過打包。")
         else:
-            server_mod_zip = os.path.join(output_dir, "lah-messenger-server-node_modules.zip")
-            if not build_zip_package("即時通訊核心套件 (lah-messenger-server-node_modules.zip)", messenger_dir, server_mod_zip, ["node_modules"], NODE_MODULES_EXCLUDES):
+            server_mod_zip = os.path.join(node_modules_dir, "lah-messenger-server-node_modules.zip")
+            if not build_zip_package("即時通訊核心套件 (node_modules/lah-messenger-server-node_modules.zip)", messenger_dir, server_mod_zip, ["node_modules"], NODE_MODULES_EXCLUDES):
                 sys.exit(1)
 
-    # 8. 打包 可攜式 Node.js 綠色環境 -> node.zip
+    # 8. 打包 可攜式 Node.js 綠色環境 -> base/node.zip
     if do_node:
         if not os.path.isdir(node_dir):
             print(f"[WARN] 找不到 Node.js 綠色環境目錄：{node_dir}，跳過打包。")
         else:
-            node_zip_path = os.path.join(output_dir, "node.zip")
+            node_zip_path = os.path.join(base_dir, "node.zip")
             node_parent = os.path.dirname(node_dir)
             node_folder = os.path.basename(node_dir)
-            if not build_zip_package("可攜式 Node.js 綠色環境 (node.zip)", node_parent, node_zip_path, [node_folder], NODE_EXCLUDES):
+            if not build_zip_package("可攜式 Node.js 綠色環境 (base/node.zip)", node_parent, node_zip_path, [node_folder], NODE_EXCLUDES):
                 sys.exit(1)
+
+    # 9. 自動同步更新說明文件至 patch/ 子資料夾
+    notes_candidates = glob.glob(os.path.join(root_dir, "updater", "*更新說明*.txt")) + glob.glob(os.path.join(root_dir, "*更新說明*.txt"))
+    if notes_candidates:
+        notes_candidates.sort(key=os.path.getmtime, reverse=True)
+        latest_note = notes_candidates[0]
+        dest_note = os.path.join(patch_dir, os.path.basename(latest_note))
+        try:
+            shutil.copy2(latest_note, dest_note)
+            print(f"[INFO] 已同步最新更新說明文件至 patch/：{os.path.basename(latest_note)}")
+        except Exception as e:
+            print(f"[WARN] 複製更新說明文件失敗：{e}")
 
     total_elapsed = time.time() - overall_start
     print("=" * 60)
     print(f"[SUCCESS] 全部打包作業順利完成！（總耗時 {total_elapsed:.1f} 秒）")
-    print(f"輸出位置：{output_dir}")
+    print(f"輸出基底目錄：{output_base_dir}")
     if do_api:
-        print(f"  - {os.path.join(output_dir, 'www.zip')}")
+        print(f"  - [patch]        {www_zip_path}")
     if do_api8:
-        print(f"  - {os.path.join(output_dir, 'LAH-API.zip')}")
+        print(f"  - [patch]        {api8_zip_path}")
     if do_fe:
-        print(f"  - {os.path.join(output_dir, 'LAH-NUXTJS.zip')}")
+        print(f"  - [patch]        {fe_zip_path}")
     if do_messenger:
-        print(f"  - {os.path.join(output_dir, 'lah-messenger-server.zip')}")
+        print(f"  - [patch]        {ms_zip_path}")
     if do_fe_modules:
-        print(f"  - {os.path.join(output_dir, 'LAH-NUXTJS-node_modules.zip')}")
-        print(f"  - {os.path.join(output_dir, 'LAH-FE-node_modules.zip')} (別名)")
+        print(f"  - [node_modules] {fe_mod_zip}")
+        print(f"  - [node_modules] {fe_alias_zip} (別名)")
     if do_server_modules:
-        print(f"  - {os.path.join(output_dir, 'lah-messenger-server-node_modules.zip')}")
+        print(f"  - [node_modules] {server_mod_zip}")
     if do_node:
-        print(f"  - {os.path.join(output_dir, 'node.zip')}")
+        print(f"  - [base]         {node_zip_path}")
     print("=" * 60)
 
 
