@@ -1149,4 +1149,56 @@ mod tests {
 
         let _ = fs::remove_dir_all(&tmp);
     }
+
+    #[test]
+    fn test_wire_bundled_pm2_logrotate_idempotent() {
+        let tmp = std::env::temp_dir().join(format!("lah_updater_lr_test_{}", std::process::id()));
+        let _ = fs::remove_dir_all(&tmp);
+        let bundled = tmp.join("node").join("node_modules").join("pm2-logrotate");
+        fs::create_dir_all(&bundled).unwrap();
+        fs::write(
+            bundled.join("package.json"),
+            r#"{"name":"pm2-logrotate","version":"3.0.0","main":"app.js"}"#,
+        )
+        .unwrap();
+        fs::write(bundled.join("app.js"), "// mock logrotate").unwrap();
+
+        // 模擬自舊版 pm2-installer 遷移之 module_conf.json (含 @jessety 與不存在的 ghost-module)
+        let pm2_dir = tmp.join(".pm2");
+        fs::create_dir_all(&pm2_dir).unwrap();
+        fs::write(
+            pm2_dir.join("module_conf.json"),
+            r#"{
+              "@jessety/pm2-logrotate": { "retain": "45", "max_size": "25M" },
+              "module-db-v2": {
+                "@jessety/pm2-logrotate": {},
+                "ghost-module": {}
+              }
+            }"#,
+        )
+        .unwrap();
+
+        assert_eq!(logrotate_bundled_version(&tmp).as_deref(), Some("3.0.0"));
+        assert!(is_logrotate_installed(&tmp));
+        assert!(!is_logrotate_configured(&tmp));
+
+        assert!(wire_bundled_pm2_logrotate(&tmp, &|_, _| {}));
+        assert!(is_logrotate_configured(&tmp));
+
+        let conf_str = fs::read_to_string(tmp.join(".pm2").join("module_conf.json")).unwrap();
+        let conf: serde_json::Value = serde_json::from_str(&conf_str).unwrap();
+
+        // 驗證舊模組與孤立模組已自動自 module-db-v2 剔除
+        assert!(conf["module-db-v2"]["@jessety/pm2-logrotate"].is_null());
+        assert!(conf["module-db-v2"]["ghost-module"].is_null());
+        assert!(conf["@jessety/pm2-logrotate"].is_null());
+
+        // 驗證新模組已註冊，且舊自訂參數成功遷移並啟用壓縮
+        assert!(conf["module-db-v2"]["pm2-logrotate"].is_object());
+        assert_eq!(conf["pm2-logrotate"]["retain"], serde_json::json!("45"));
+        assert_eq!(conf["pm2-logrotate"]["max_size"], serde_json::json!("25M"));
+        assert_eq!(conf["pm2-logrotate"]["compress"], serde_json::json!(true));
+
+        let _ = fs::remove_dir_all(&tmp);
+    }
 }

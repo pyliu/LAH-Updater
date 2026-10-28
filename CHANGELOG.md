@@ -6,6 +6,23 @@
 
 ## [未發布]
 
+### 📖 新增全系統架構純離線手冊 (README.html) 與更新工具單元測試擴充
+
+- **背景與目的**：
+  - 為使維運與開發人員能於無外部網路連線（Zero-CDN）的伺服器與隔離網路環境中，完整查閱工作區 5 大平級 Git 專案拓撲、LAH-Updater 5 大維運工具實作細節、打包分流目錄規範以及實機崩潰根因防禦機制。
+  - 將前次針對舊全域模組殘留崩潰之修復與單元測試防禦完整覆蓋至自動更新工具（updater），並重新編譯產出最新 Release 二進位檔。
+- **具體改進項目**：
+  - **純離線技術手冊 (`README.html` & `generate_readme_html.py`)**：
+    - 於 `LAH-Updater/` 根目錄新增純 HTML5/CSS3/Vanilla JS 打造之獨立技術手冊 `README.html`，100% 離線可用，絕無外部 CDN、遠端字型或腳本依賴。
+    - 內嵌 4 大向量 SVG 架構圖：工作區全域系統拓撲圖（圖 1）、資產打包與更新部署流向圖（圖 2）、自動更新管線 5 階段流程圖（圖 3）、可攜 Node 16 與全域升級四重安全隔離架構圖（圖 4）。
+    - 完整解析 5 大平級 Git 子專案（`LAH-API`、`LAH-FE`、`lah-messenger-server`、`lah-messenger`、`LAH-Updater`）之職責、邊界與通訊契約。
+    - 深入說明 LAH-Updater 5 大工具（`updater`、`node-portable`、`uninstaller`、`backuper`、`pack.py`）之功能、參數規格、自癒機制與本機快捷腳本。
+    - 內建側邊欄即時關鍵字篩選、目錄滾動監聽（ScrollSpy）、模組頁籤切換與命令一鍵複製等現代化原生互動體驗。
+  - **自動更新工具防護與單元測試擴充 (`updater/src-tauri/src/pm2.rs`)**：
+    - 將 `test_wire_bundled_pm2_logrotate_idempotent` 單元測試擴充納入 `updater` 測試套件，斷言舊版 `@jessety/pm2-logrotate` 殘留參數繼承與孤立幽靈模組清理 100% 正確通過。
+    - 通過全部 6 項 Rust 單元測試（`cargo test --lib`）。
+    - 重新編譯發布 `dist/智慧控管與監控系統 - 自動更新工具.exe`（11.82 MB）。
+
 ### 🐛 修復舊全域殘留 @jessety/pm2-logrotate 導致 PM2 啟動 MODULE_NOT_FOUND 錯誤
 
 - **根本原因排查**：
