@@ -6,6 +6,17 @@
 
 ## [未發布]
 
+### 🐛 修復自動更新工具分流探測 ID 不一致問題 (Issue: 3 個安裝包未偵測到)
+- **根本原因排查**：
+  - `ALL_PACKAGE_SPECS` 中定義的套件識別代碼分別為 `messenger`（即時通伺服器）、`lah_nuxtjs_modules`（前端核心套件）與 `messenger_modules`（即時通核心套件）。
+  - `get_preferred_subfolder` 優先分類子資料夾比對時，原本寫入長命名（`lah_messenger_server`、`lah_nuxtjs_node_modules`、`lah_messenger_server_node_modules`），導致比對失效回傳 `None`，未進入 `patch/` 與 `node_modules/` 優先探測路徑。
+  - 由於未在分流資料夾被偵測到，且更新包已分流不在根目錄，因而前端顯示為「未找到壓縮包」。
+- **修復與健全性強化**：
+  - 同步更新 `get_preferred_subfolder` 模式匹配，同時支援標準 ID（`messenger`、`lah_nuxtjs_modules`、`messenger_modules`）與長命名別名。
+  - 將專屬子資料夾優先探測升級為遍歷所有 `search_dirs`，確保在各搜尋目錄下的 `base/`、`patch/`、`node_modules/` 皆能自動優先探測。
+  - 補齊單元測試確保所有 10 大安裝包之分類目錄配置 100% 覆蓋。
+  - 重新編譯產出 Release 二進位執行檔至 `dist/智慧控管與監控系統 - 自動更新工具.exe`。
+
 ### 🧹 移除舊版英文建置批次檔 (build_uninstaller.bat)
 - **統一使用標準繁體中文建置指令**：
   - 移除專案根目錄之舊英文別名批次檔 `build_uninstaller.bat`，全面統一使用標準繁體中文命名 `建立解除安裝工具.bat`。

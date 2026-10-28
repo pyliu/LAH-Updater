@@ -160,9 +160,9 @@ pub fn get_preferred_subfolder(pkg_id: &str) -> Option<&'static str> {
         // 基礎服務類：APACHE24, PHP7, PHP85, node -> base/
         "apache24" | "php7" | "php85" | "node" => Some("base"),
         // 程式更新包：LAH-NUXTJS, LAH-API, www, lah-messenger-server -> patch/
-        "lah_nuxtjs" | "lah_api" | "www" | "lah_messenger_server" => Some("patch"),
+        "lah_nuxtjs" | "lah_api" | "www" | "messenger" | "lah_messenger_server" => Some("patch"),
         // node_modules 依賴類：LAH-NUXTJS-node_modules, lah-messenger-server-node_modules -> node_modules/
-        "lah_nuxtjs_node_modules" | "lah_messenger_server_node_modules" => Some("node_modules"),
+        "lah_nuxtjs_modules" | "lah_nuxtjs_node_modules" | "messenger_modules" | "lah_messenger_server_node_modules" => Some("node_modules"),
         _ => None,
     }
 }
@@ -218,9 +218,6 @@ fn match_package_zips(zips: &[PathBuf], spec: &PackageSpec) -> Vec<PathBuf> {
 pub fn scan_packages(search_dirs: &[PathBuf], root_dir: &Path) -> Vec<PackageItem> {
     let mut items = Vec::new();
 
-    // 執行檔主目錄通常為 search_dirs 的第一個元素
-    let app_dir = search_dirs.first().cloned().unwrap_or_else(|| PathBuf::from("."));
-
     // 收集所有 search_dirs 下的常規 .zip 檔案 (既有備援路徑)
     let mut available_zips: Vec<PathBuf> = Vec::new();
     for d in search_dirs {
@@ -230,12 +227,18 @@ pub fn scan_packages(search_dirs: &[PathBuf], root_dir: &Path) -> Vec<PackageIte
     for spec in ALL_PACKAGE_SPECS {
         let mut matched_files: Vec<PathBuf> = Vec::new();
 
-        // 1. 優先策略：先至執行目錄下的分類專屬子資料夾 (base/、patch/、node_modules/) 搜尋
+        // 1. 優先策略：遍歷 search_dirs 下的分類專屬子資料夾 (base/、patch/、node_modules/) 搜尋
         if let Some(sub) = get_preferred_subfolder(spec.id) {
-            let sub_dir = app_dir.join(sub);
-            if sub_dir.is_dir() {
-                let sub_zips = collect_zips_in_dir(&sub_dir);
-                matched_files = match_package_zips(&sub_zips, spec);
+            for d in search_dirs {
+                let sub_dir = d.join(sub);
+                if sub_dir.is_dir() {
+                    let sub_zips = collect_zips_in_dir(&sub_dir);
+                    let m = match_package_zips(&sub_zips, spec);
+                    if !m.is_empty() {
+                        matched_files = m;
+                        break;
+                    }
+                }
             }
         }
 
@@ -565,5 +568,42 @@ pub fn ensure_default_env_files(root_dir: &Path, log_fn: &dyn Fn(&str, &str)) {
         if fs::copy(&api_example, &api_env).is_ok() {
             log_fn("  ✓ 已依據 .env.example 初始化建立 LAH-API/.env", "success");
         }
+    }
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_all_specs_have_preferred_subfolder() {
+        for spec in ALL_PACKAGE_SPECS {
+            let sub = get_preferred_subfolder(spec.id);
+            assert!(
+                sub.is_some(),
+                "PackageSpec id '{}' 必須配置所屬之分類優先目錄 (base, patch, 或 node_modules)",
+                spec.id
+            );
+        }
+    }
+
+    #[test]
+    fn test_preferred_subfolders_correctness() {
+        assert_eq!(get_preferred_subfolder("apache24"), Some("base"));
+        assert_eq!(get_preferred_subfolder("php7"), Some("base"));
+        assert_eq!(get_preferred_subfolder("php85"), Some("base"));
+        assert_eq!(get_preferred_subfolder("node"), Some("base"));
+
+        assert_eq!(get_preferred_subfolder("www"), Some("patch"));
+        assert_eq!(get_preferred_subfolder("lah_api"), Some("patch"));
+        assert_eq!(get_preferred_subfolder("lah_nuxtjs"), Some("patch"));
+        assert_eq!(get_preferred_subfolder("messenger"), Some("patch"));
+        assert_eq!(get_preferred_subfolder("lah_messenger_server"), Some("patch"));
+
+        assert_eq!(get_preferred_subfolder("lah_nuxtjs_modules"), Some("node_modules"));
+        assert_eq!(get_preferred_subfolder("lah_nuxtjs_node_modules"), Some("node_modules"));
+        assert_eq!(get_preferred_subfolder("messenger_modules"), Some("node_modules"));
+        assert_eq!(get_preferred_subfolder("lah_messenger_server_node_modules"), Some("node_modules"));
     }
 }
