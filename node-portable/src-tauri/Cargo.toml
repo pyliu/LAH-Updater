@@ -1,0 +1,31 @@
+[package]
+name = "lah-node-portable"
+version = "0.1.0"
+description = "智慧控管與監控系統 - 可攜 Node 安裝工具"
+edition = "2021"
+
+[lib]
+name = "lah_node_portable_lib"
+crate-type = ["rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+zip = { version = "2", default-features = false, features = ["deflate"] }
+regex = "1"
+winreg = "0.56"
+windows-sys = { version = "0.61", features = [
+    "Win32_UI_WindowsAndMessaging",
+    "Win32_Foundation",
+    "Win32_UI_Shell",
+    "Win32_Security"
+] }
+
+[profile.dev]
+incremental = false
+

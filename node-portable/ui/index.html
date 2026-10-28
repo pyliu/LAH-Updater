@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<title>智慧控管與監控系統 - 可攜 Node 安裝工具</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    font-family: "Microsoft JhengHei UI", "Microsoft JhengHei", sans-serif;
+    margin: 0;
+    padding: 16px 20px;
+    background: #f8fafc;
+    color: #1e293b;
+    user-select: none;
+    font-size: 13px;
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+  .header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #e2e8f0;
+  }
+  .header h1 {
+    font-size: 17px;
+    margin: 0;
+    font-weight: 700;
+    color: #166534;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .admin-badge {
+    font-size: 12px;
+    font-weight: 700;
+    padding: 3px 8px;
+    border-radius: 4px;
+  }
+  .admin-badge.is-admin {
+    color: #15803d;
+    background: #dcfce7;
+    border: 1px solid #bbf7d0;
+  }
+  .admin-badge.not-admin {
+    color: #166534;
+    background: #dcfce7;
+    border: 1px solid #fecaca;
+  }
+
+  .card {
+    background: #ffffff;
+    border-radius: 8px;
+    padding: 12px 16px;
+    margin-bottom: 12px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    border: 1px solid #e2e8f0;
+  }
+  .card-title {
+    font-size: 14px;
+    font-weight: 700;
+    margin: 0 0 10px 0;
+    color: #334155;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+  input[type=text] {
+    flex: 1;
+    padding: 7px 10px;
+    border: 1px solid #cbd5e1;
+    border-radius: 4px;
+    font-size: 13px;
+    font-family: Consolas, "Microsoft JhengHei UI", monospace;
+  }
+  input[type=text]:focus {
+    outline: none;
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 2px rgba(59,130,246,0.15);
+  }
+
+  button {
+    padding: 6px 14px;
+    cursor: pointer;
+    border: 1px solid #cbd5e1;
+    background: #ffffff;
+    border-radius: 4px;
+    font-size: 13px;
+    font-family: inherit;
+    transition: all 0.15s ease-in-out;
+  }
+  button:hover:not(:disabled) {
+    background: #f1f5f9;
+  }
+  button.danger {
+    background: #16a34a;
+    color: #ffffff;
+    border-color: #16a34a;
+    font-weight: 700;
+    padding: 8px 20px;
+    font-size: 14px;
+  }
+  button.danger:hover:not(:disabled) {
+    background: #166534;
+  }
+  button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  /* 移除項目雙等寬欄位排版 */
+  .quick-buttons {
+    display: flex;
+    gap: 6px;
+  }
+  .quick-buttons button {
+    padding: 3px 10px;
+    font-size: 12px;
+  }
+
+  .options-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px 16px;
+    margin-top: 6px;
+  }
+  .checkbox-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    font-size: 13px;
+    line-height: 1.4;
+    cursor: pointer;
+    padding: 4px 6px;
+    border-radius: 4px;
+  }
+  .checkbox-item:hover {
+    background: #f8fafc;
+  }
+  .checkbox-item input[type=checkbox] {
+    margin-top: 2px;
+    cursor: pointer;
+    accent-color: #16a34a;
+    width: 15px;
+    height: 15px;
+  }
+  .backup-hint-box {
+    grid-column: span 2;
+    background: #fef2f2;
+    border: 1px solid #dcfce7;
+    color: #991b1b;
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    margin-bottom: 4px;
+  }
+
+  /* 底部固定操作列 */
+  .footer-bar {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 10px;
+    margin-top: 8px;
+  }
+
+  /* 彈出訊息視窗 (Modal Overlay) */
+  .modal-overlay {
+    display: none;
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(15, 23, 42, 0.6);
+    z-index: 1000;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+  }
+  .modal-overlay.active {
+    display: flex;
+  }
+  .modal-content {
+    background: #ffffff;
+    width: 100%;
+    max-width: 820px;
+    border-radius: 8px;
+    box-shadow: 0 12px 30px rgba(0,0,0,0.35);
+    padding: 16px 20px;
+    display: flex;
+    flex-direction: column;
+    max-height: 92vh;
+  }
+  .modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #e2e8f0;
+  }
+  .modal-header h2 {
+    font-size: 16px;
+    margin: 0;
+    font-weight: 700;
+    color: #166534;
+  }
+  .progress-wrap {
+    margin: 4px 0 10px;
+  }
+  .progress-info {
+    display: flex;
+    justify-content: space-between;
+    font-size: 13px;
+    color: #334155;
+    margin-bottom: 5px;
+    font-weight: 600;
+  }
+  progress {
+    width: 100%;
+    height: 18px;
+    border-radius: 4px;
+    accent-color: #16a34a;
+  }
+  #log_box {
+    flex: 1;
+    min-height: 180px;
+    max-height: 250px;
+    overflow-y: auto;
+    background: #1e1e1e;
+    color: #d4d4d4;
+    padding: 10px 12px;
+    font: 12px/1.5 Consolas, "Courier New", monospace;
+    white-space: pre-wrap;
+    border-radius: 6px;
+    border: 1px solid #333333;
+  }
+  .log-line.info { color: #9cdcfe; }
+  .log-line.success { color: #4ec9b0; font-weight: bold; }
+  .log-line.warning { color: #ce9178; }
+  .log-line.error { color: #f44747; font-weight: bold; }
+  .log-line.time { color: #6a9955; }
+
+  /* 確認對話框 */
+  .confirm-list {
+    max-height: 160px;
+    overflow-y: auto;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    padding: 8px 12px;
+    margin: 10px 0;
+    font-size: 12px;
+    line-height: 1.6;
+    color: #334155;
+  }
+</style>
+</head>
+<body>
+  <div class="header">
+    <h1>🟩 可攜 Node.js + PM2 安裝工具</h1>
+    <div id="admin_badge" class="admin-badge not-admin">檢測權限中...</div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">📁 安裝根目錄（Node 將安裝於其下 node 資料夾）</div>
+    <div class="row">
+      <input id="root_dir" type="text" value="C:\AppServ">
+      <button id="browse_btn">瀏覽...</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title"><span>🔎 環境狀態</span><button id="btn_rescan">重新偵測</button></div>
+    <div id="scan_box" style="line-height:1.8; font-size:12px;">偵測中...</div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">⚙️ 安裝選項</div>
+    <div class="options-grid" style="grid-template-columns: 1fr;">
+      <label class="checkbox-item"><input type="checkbox" id="chk_path" checked><span>🧭 將 node 目錄加入使用者 PATH</span></label>
+      <label class="checkbox-item"><input type="checkbox" id="chk_home" checked><span>🏠 設定使用者環境變數 PM2_HOME（&lt;根目錄&gt;\.pm2）</span></label>
+      <label class="checkbox-item"><input type="checkbox" id="chk_service" checked><span>🛎️ 註冊開機自啟服務 PM2_Portable_Service（開機自動 pm2 resurrect 還原既有程式）</span></label>
+      <label class="checkbox-item"><input type="checkbox" id="chk_resurrect" checked><span>🔄 立即執行 pm2 resurrect 還原既有程式 dump（已勾選服務時由服務負責）</span></label>
+    </div>
+  </div>
+
+  <div class="footer-bar">
+    <button id="btn_exit">關閉離開</button>
+    <button id="btn_start" class="danger">🚀 開始安裝</button>
+  </div>
+
+  <div id="modal_progress" class="modal-overlay">
+    <div class="modal-content">
+      <div class="modal-header"><h2>🟩 安裝進行中...</h2></div>
+      <div class="progress-wrap">
+        <div class="progress-info"><span id="status_text">準備中...</span><span id="percent_text">0.0%</span></div>
+        <progress id="progress_bar" value="0" max="100"></progress>
+      </div>
+      <div id="log_box"></div>
+      <div class="footer-bar" style="margin-top: 12px; gap: 8px;">
+        <button id="btn_modal_back" style="display: none;">返回主畫面</button>
+        <button id="btn_close_modal" class="danger" disabled>完成並關閉</button>
+      </div>
+    </div>
+  </div>
+
+<script src="app.js"></script>
+</body>
+</html>

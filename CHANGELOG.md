@@ -6,6 +6,19 @@
 
 ## [未發布]
 
+### ✨ 新增可攜 Node.js + PM2 安裝工具 (node-portable)
+- **背景與目的**：因應資安要求，原以 Node.js 16.20.2 開發的程式需搭配綠色版 Node 與 PM2；自 `updater/` 抽出相關核心程式碼，建立不含 LAH 專屬巡檢的通用離線安裝工具。
+- **新增項目**：
+  - `node-portable/`：Tauri 2 (Rust) + 純靜態 HTML/JS 工具，離線讀取 `node.zip`（依序搜尋工具旁 `base/`、工具同層、`C:\Temp`、安裝根目錄），解壓至 `<根目錄>\node`，並自動剝除頂層 `node/` 前綴。
+  - `node-portable/src-tauri/src/pm2.rs`：抽取自 updater 的 PM2 綠色環境修補（統一 `<根目錄>\.pm2`、IPC 改為 Loopback TCP 42681/42682、Daemon/Utility/NPM/logrotate 修補），並新增 `PM2_Portable_Service` 服務註冊（WinSW）。
+  - `node-portable/src-tauri/src/system.rs`：抽取使用者 PATH 註冊並新增 `PM2_HOME` 使用者環境變數寫入。
+  - `node-portable/src-tauri/src/install.rs`：安裝流程（停止舊服務與 pm2 kill、解壓、修補、環境變數、`node -v` / `pm2 -v` 驗證、服務註冊或 `pm2 resurrect`）。
+  - `node-portable/service/`：複製自 updater 的 WinSW 執行檔 `pm2-service.exe`，以及新寫的通用服務入口 `pm2_service_runner.js`（開機與每 60 秒探測 PM2 Daemon，離線即 `pm2 resurrect`，不綁定任何 LAH 服務）。
+  - `node-portable/build.py`、`build.bat`、`README.md`，以及根目錄 `建立可攜NODE工具.bat`（雙擊即編譯並輸出至 `dist/`）。
+  - 應用程式圖示採「六角形 + PM2 循環箭頭」設計，延續各維運工具之圓角深色底與彩色外框風格。
+  - `.gitignore`：排除 `node-portable` 編譯產物。
+- **相容性說明**：服務名稱為 `PM2_Portable_Service`，與 updater 的 `LAH_PM2_Service` 互不衝突；未修改 updater、uninstaller、backuper 既有程式碼。
+- **驗證狀態**：`cargo check` 與 `cargo build --release` 已通過；GUI 實機安裝（PATH、服務註冊）尚未驗證。
 ### 🐛 修復自動更新工具分流探測 ID 不一致問題 (Issue: 3 個安裝包未偵測到)
 - **根本原因排查**：
   - `ALL_PACKAGE_SPECS` 中定義的套件識別代碼分別為 `messenger`（即時通伺服器）、`lah_nuxtjs_modules`（前端核心套件）與 `messenger_modules`（即時通核心套件）。

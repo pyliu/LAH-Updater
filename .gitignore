@@ -40,3 +40,7 @@ uninstaller/src-tauri/gen/
 # updater (Tauri) build artifacts
 updater/src-tauri/target/
 updater/src-tauri/gen/
+
+# node-portable (Tauri) build artifacts
+node-portable/src-tauri/target/
+node-portable/src-tauri/gen/
