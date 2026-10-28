@@ -6,6 +6,20 @@
 
 ## [未發布]
 
+## [未發布]
+
+### 🧹 全面移除舊版 Python 原始碼，邁向純 Rust (Tauri 2) 架構
+- **移除舊版 Tkinter 主程式原始碼**：
+  - 徹底移除 `updater/updater.py`（原 5,074 行 Python 更新工具）與歷史 `.spec` 打包設定檔。
+  - 徹底移除 `uninstaller/uninstaller.py`（原 3,000+ 行 Python 移除工具）與 `uninstaller/build_uninstaller.py`。
+  - 清理全專案殘留之 `__pycache__` 快取目錄。
+- **保留專用建置與打包工具**：
+  - 保留各工具目錄下之 `build.py`（自動調用 `cargo build --release` 並發布至 `dist/`）。
+  - 保留 `pack/pack.py` 系統原始碼全自動打包發布工具。
+- **更新專案規格與文檔架構**：
+  - 同步重構更新根目錄與子專案 `AGENTS.md`、`README.md`，全面轉向純 Tauri 2 (Rust) 開發與維護規格。
+
+
 ### 🗂️ 專案維運工具模組化拆分至獨立子目錄 (`updater/`, `uninstaller/`, `pack/`, `backuper/`)
 - **檔案與依賴隔離至專屬資料夾**：
   - `updater/`：收納 `updater.py`、`build.py`、WinSW 服務模板 `service/`、更新說明文字檔以及打包規格檔。
