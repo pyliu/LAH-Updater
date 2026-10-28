@@ -135,6 +135,47 @@ function auditDaemonRuntime() {
   return true;
 }
 
+function wireBundledLogrotate() {
+  try {
+    const localMod = path.join(NODE_DIR, 'node_modules', 'pm2-logrotate');
+    const srcPkg = path.join(localMod, 'package.json');
+    const srcApp = path.join(localMod, 'app.js');
+    if (!fs.existsSync(srcPkg) || !fs.existsSync(srcApp)) return false;
+
+    const pm2Home = process.env.PM2_HOME;
+    const targetModDir = path.join(pm2Home, 'modules', 'pm2-logrotate', 'node_modules', 'pm2-logrotate');
+    fs.mkdirSync(targetModDir, { recursive: true });
+    fs.copyFileSync(srcPkg, path.join(targetModDir, 'package.json'));
+    fs.writeFileSync(path.join(targetModDir, 'app.js'), 'require(' + JSON.stringify(srcApp) + ');\n', 'utf8');
+
+    const confPath = path.join(pm2Home, 'module_conf.json');
+    let conf = {};
+    if (fs.existsSync(confPath)) {
+      try { conf = JSON.parse(fs.readFileSync(confPath, 'utf8')) || {}; } catch (e) { conf = {}; }
+    }
+    if (!conf['module-db-v2'] || typeof conf['module-db-v2'] !== 'object') {
+      conf['module-db-v2'] = {};
+    }
+    if (!conf['module-db-v2']['pm2-logrotate']) {
+      conf['module-db-v2']['pm2-logrotate'] = { uid: null, gid: null };
+    }
+    const defaults = {
+      max_size: '10M',
+      retain: '30',
+      compress: true,
+      dateFormat: 'YYYY-MM-DD_HH-mm-ss',
+      workerInterval: '30',
+      rotateInterval: '0 0 * * *',
+      rotateModule: true
+    };
+    conf['pm2-logrotate'] = Object.assign({}, defaults, conf['pm2-logrotate'] || {}, { compress: true });
+    fs.writeFileSync(confPath, JSON.stringify(conf, null, 2), 'utf8');
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
 function isLogrotateOnline() {
   try {
     const jres = spawnSync(PM2_BIN, ['jlist'], { encoding: 'utf8', windowsHide: true, timeout: 15000 });
@@ -150,6 +191,7 @@ function isLogrotateOnline() {
 
 // 4. 執行 PM2 喚醒與核心服務巡檢補啟動
 function resurrectAndEnsureServices() {
+  wireBundledLogrotate();
   log('⏳ 正在執行 [pm2 resurrect] 喚醒受控服務...', 'INFO');
   try {
     const res = spawnSync(PM2_BIN, ['resurrect', '--no-color'], { encoding: 'utf8', windowsHide: true, timeout: 30000 });
@@ -205,11 +247,12 @@ function resurrectAndEnsureServices() {
 
   // 檢查 pm2-logrotate 模組 (優先自內建 node\node_modules\pm2-logrotate 啟動)
   if (!onlineApps['pm2-logrotate']) {
-    log('⚡ 偵測到日誌輪替模組 [pm2-logrotate] 尚未在線，正在嘗試啟動...', 'WARN');
+    wireBundledLogrotate();
+    const localMod = path.join(NODE_DIR, 'node_modules', 'pm2-logrotate');
+    log(`⚡ 偵測到日誌輪替模組 [pm2-logrotate] 尚未在線，正在由便攜版 [${localMod}] 啟動...`, 'WARN');
     try {
       let modRes = spawnSync(PM2_BIN, ['restart', 'pm2-logrotate', '--no-color'], { encoding: 'utf8', windowsHide: true, timeout: 20000 });
       if (modRes.status !== 0 || !isLogrotateOnline()) {
-        const localMod = path.join(NODE_DIR, 'node_modules', 'pm2-logrotate');
         const targetPkg = fs.existsSync(localMod) ? localMod : 'pm2-logrotate';
         modRes = spawnSync(PM2_BIN, ['install', targetPkg, '--no-color'], { encoding: 'utf8', windowsHide: true, timeout: 45000 });
         if (modRes.status === 0 || isLogrotateOnline()) {
@@ -217,7 +260,7 @@ function resurrectAndEnsureServices() {
         }
       }
       if (isLogrotateOnline()) {
-        log('  ✅ 成功啟動 [pm2-logrotate] 模組！', 'SUCCESS');
+        log('  ✅ 成功啟動便攜版 [pm2-logrotate] 模組！', 'SUCCESS');
         needSave = true;
       } else {
         log(`  ⚠️ 啟動 [pm2-logrotate] 警示: ${(modRes && (modRes.stderr || modRes.stdout)) || ''}`, 'WARN');

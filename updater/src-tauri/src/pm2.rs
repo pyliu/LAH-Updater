@@ -47,19 +47,29 @@ pub fn get_pm2_version(root_dir: &Path) -> Option<String> {
     json.get("version")?.as_str().map(|s| s.to_string())
 }
 
-pub fn is_logrotate_installed(root_dir: &Path) -> bool {
-    let mod_dir = root_dir.join(".pm2").join("modules").join("pm2-logrotate");
-    let bundled_dir = root_dir
+pub fn logrotate_bundled_version(root_dir: &Path) -> Option<String> {
+    let pkg = root_dir
         .join("node")
         .join("node_modules")
-        .join("pm2-logrotate");
-    mod_dir
-        .join("node_modules")
         .join("pm2-logrotate")
-        .join("package.json")
-        .is_file()
-        || mod_dir.join("package.json").is_file()
-        || bundled_dir.join("package.json").is_file()
+        .join("package.json");
+    let raw = fs::read_to_string(pkg).ok()?;
+    let json: serde_json::Value = serde_json::from_str(&raw).ok()?;
+    json.get("version")?.as_str().map(|s| s.to_string())
+}
+
+pub fn is_logrotate_configured(root_dir: &Path) -> bool {
+    let mod_dir = root_dir
+        .join(".pm2")
+        .join("modules")
+        .join("pm2-logrotate")
+        .join("node_modules")
+        .join("pm2-logrotate");
+    mod_dir.join("package.json").is_file() && mod_dir.join("app.js").is_file()
+}
+
+pub fn is_logrotate_installed(root_dir: &Path) -> bool {
+    logrotate_bundled_version(root_dir).is_some() || is_logrotate_configured(root_dir)
 }
 
 fn find_best_legacy_pm2_dir(unified_pm2_home: &Path) -> Option<PathBuf> {
@@ -201,22 +211,19 @@ pub fn sanitize_pm2_dump(dump_path: &Path, root_dir: &Path, log_fn: &dyn Fn(&str
 }
 
 /// 將便攜版 node\node_modules\pm2-logrotate 預先掛載至 <root_dir>\.pm2\modules\pm2-logrotate 與 module_conf.json
-pub fn seed_bundled_logrotate_module(
-    root_dir: &Path,
-    unified_pm2_home: &Path,
-    log_fn: &dyn Fn(&str, &str),
-) -> bool {
-    let bundled_lr = root_dir
+pub fn wire_bundled_pm2_logrotate(root_dir: &Path, log_fn: &dyn Fn(&str, &str)) -> bool {
+    let bundled_dir = root_dir
         .join("node")
         .join("node_modules")
         .join("pm2-logrotate");
-    let src_pkg = bundled_lr.join("package.json");
-    let src_app = bundled_lr.join("app.js");
+    let src_pkg = bundled_dir.join("package.json");
+    let src_app = bundled_dir.join("app.js");
     if !src_pkg.is_file() || !src_app.is_file() {
         return false;
     }
 
-    let target_mod_dir = unified_pm2_home
+    let pm2_home = root_dir.join(".pm2");
+    let target_mod_dir = pm2_home
         .join("modules")
         .join("pm2-logrotate")
         .join("node_modules")
@@ -229,56 +236,88 @@ pub fn seed_bundled_logrotate_module(
     let _ = fs::copy(&src_pkg, &dst_pkg);
 
     let dst_app = target_mod_dir.join("app.js");
-    let wrapper_code = "const path = require('path');\n\
-const fs = require('fs');\n\
-const execDir = path.dirname(process.execPath || '');\n\
-const cand1 = path.resolve(execDir, 'node_modules', 'pm2-logrotate', 'app.js');\n\
-const cand2 = path.resolve(__dirname, '../../../../../node/node_modules/pm2-logrotate/app.js');\n\
-require(fs.existsSync(cand1) ? cand1 : cand2);\n";
-    let _ = fs::write(&dst_app, wrapper_code);
+    let src_app_json = serde_json::to_string(&src_app.to_string_lossy().to_string())
+        .unwrap_or_else(|_| format!("\"{}\"", src_app.to_string_lossy().replace('\\', "\\\\")));
+    let wrapper_js = format!("require({});\n", src_app_json);
+    let mut changed = false;
+    if fs::read_to_string(&dst_app).ok().as_deref() != Some(wrapper_js.as_str()) {
+        if fs::write(&dst_app, &wrapper_js).is_ok() {
+            changed = true;
+        }
+    }
 
-    let conf_path = unified_pm2_home.join("module_conf.json");
-    let mut conf_val: serde_json::Value = fs::read_to_string(&conf_path)
+    let conf_path = pm2_home.join("module_conf.json");
+    let mut conf_val = fs::read_to_string(&conf_path)
         .ok()
-        .and_then(|s| serde_json::from_str(&s).ok())
+        .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok())
+        .filter(|v| v.is_object())
         .unwrap_or_else(|| serde_json::json!({}));
 
     if let Some(root_obj) = conf_val.as_object_mut() {
-        let mut changed = false;
         let db_entry = root_obj
             .entry("module-db-v2".to_string())
             .or_insert_with(|| serde_json::json!({}));
+        if !db_entry.is_object() {
+            *db_entry = serde_json::json!({});
+        }
         if let Some(db_obj) = db_entry.as_object_mut() {
             if !db_obj.contains_key("pm2-logrotate") {
-                db_obj.insert("pm2-logrotate".to_string(), serde_json::json!({}));
-                changed = true;
-            }
-        }
-        let lr_entry = root_obj
-            .entry("pm2-logrotate".to_string())
-            .or_insert_with(|| serde_json::json!({}));
-        if let Some(lr_obj) = lr_entry.as_object_mut() {
-            if !lr_obj.contains_key("compress") {
-                lr_obj.insert(
-                    "compress".to_string(),
-                    serde_json::Value::String("true".to_string()),
+                db_obj.insert(
+                    "pm2-logrotate".to_string(),
+                    serde_json::json!({ "uid": null, "gid": null }),
                 );
                 changed = true;
             }
         }
-        if changed || !conf_path.is_file() {
-            if let Ok(pretty) = serde_json::to_string_pretty(&conf_val) {
-                if fs::write(&conf_path, pretty).is_ok() {
-                    log_fn(
-                        "  ✓ 已預先掛載便攜版內建 pm2-logrotate 模組至 .pm2/modules",
-                        "success",
-                    );
+
+        let lr_entry = root_obj
+            .entry("pm2-logrotate".to_string())
+            .or_insert_with(|| serde_json::json!({}));
+        if !lr_entry.is_object() {
+            *lr_entry = serde_json::json!({});
+        }
+        if let Some(lr_obj) = lr_entry.as_object_mut() {
+            let defaults = [
+                ("max_size", serde_json::json!("10M")),
+                ("retain", serde_json::json!("30")),
+                ("dateFormat", serde_json::json!("YYYY-MM-DD_HH-mm-ss")),
+                ("workerInterval", serde_json::json!("30")),
+                ("rotateInterval", serde_json::json!("0 0 * * *")),
+                ("rotateModule", serde_json::json!(true)),
+            ];
+            for (k, v) in defaults {
+                if !lr_obj.contains_key(k) {
+                    lr_obj.insert(k.to_string(), v);
+                    changed = true;
                 }
+            }
+            if lr_obj.get("compress") != Some(&serde_json::json!(true)) {
+                lr_obj.insert("compress".to_string(), serde_json::json!(true));
+                changed = true;
+            }
+        }
+    }
+
+    if changed || !conf_path.is_file() {
+        if let Ok(pretty) = serde_json::to_string_pretty(&conf_val) {
+            if fs::write(&conf_path, pretty).is_ok() {
+                log_fn(
+                    &format!("  ✓ 已掛載便攜版內建模組 ({})", bundled_dir.display()),
+                    "success",
+                );
             }
         }
     }
 
     true
+}
+
+pub fn seed_bundled_logrotate_module(
+    root_dir: &Path,
+    _unified_pm2_home: &Path,
+    log_fn: &dyn Fn(&str, &str),
+) -> bool {
+    wire_bundled_pm2_logrotate(root_dir, log_fn)
 }
 
 pub fn ensure_portable_pm2_patched(root_dir: &Path, log_fn: &dyn Fn(&str, &str)) -> bool {
@@ -462,6 +501,12 @@ endLocal & goto #_undefined_# 2>NUL || title %COMSPEC% & SET \"PATH=%dp0%;%PATH%
             let new_backup = "    var module_path = path.join(cst.DEFAULT_MODULE_PATH, canonic_module_name);\n    try { if (fs.existsSync(module_path)) copydirSync(module_path, path.join(tmpdir, canonic_module_name)); } catch (e) {}";
             n_txt = n_txt.replace(old_backup, new_backup);
 
+            let old_start = "  var install_path = path.join(cst.DEFAULT_MODULE_PATH, module_name);\n  var proc_path = path.join(install_path, 'node_modules', module_name);\n  var package_json_path = path.join(proc_path, 'package.json');";
+            let new_start = "  var install_path = path.join(cst.DEFAULT_MODULE_PATH, module_name);\n  var proc_path = path.join(install_path, 'node_modules', module_name);\n  var package_json_path = path.join(proc_path, 'package.json');\n  if (!fs.existsSync(package_json_path)) {\n    var bundled_proc = path.resolve(__dirname, '../../../../', module_name);\n    if (fs.existsSync(path.join(bundled_proc, 'package.json'))) {\n      proc_path = bundled_proc;\n      package_json_path = path.join(bundled_proc, 'package.json');\n    }\n  }";
+            if !n_txt.contains("var bundled_proc = path.resolve(__dirname") {
+                n_txt = n_txt.replace(old_start, new_start);
+            }
+
             if n_txt != orig {
                 let _ = fs::write(&npm_file, n_txt);
                 patched_any = true;
@@ -608,30 +653,55 @@ fn is_logrotate_online(pm2_cmd: &str) -> bool {
 }
 
 pub fn ensure_pm2_logrotate(root_dir: &Path, log_fn: &dyn Fn(&str, &str)) -> bool {
+    wire_bundled_pm2_logrotate(root_dir, log_fn);
+
     let Some(pm2) = resolve_pm2_command(root_dir) else {
-        log_fn("⚠️ 找不到 pm2.cmd，略過 pm2-logrotate 安裝", "warning");
+        log_fn("⚠️ 找不到 pm2.cmd，略過 pm2-logrotate 啟動", "warning");
         return false;
     };
     let pm2_str = pm2.to_string_lossy().to_string();
-
-    if is_logrotate_online(&pm2_str) {
-        log_fn("  ✓ 日誌輪替模組 [pm2-logrotate] 已在線運作", "success");
-        return true;
-    }
-
-    log_fn("📦 正在自便攜版內建模組啟動 [pm2-logrotate]...", "info");
-    let (restart_ok, _, _) =
-        run_cmd_hidden(&pm2_str, &["restart", "pm2-logrotate", "--no-color"]);
-    if restart_ok && is_logrotate_online(&pm2_str) {
-        log_fn("  ✓ 已喚醒 [pm2-logrotate] 模組", "success");
-        let _ = run_cmd_hidden(&pm2_str, &["save", "--force", "--no-color"]);
-        return true;
-    }
-
     let local_mod = root_dir
         .join("node")
         .join("node_modules")
         .join("pm2-logrotate");
+
+    if is_logrotate_online(&pm2_str) {
+        let _ = run_cmd_hidden(
+            &pm2_str,
+            &["set", "pm2-logrotate:compress", "true", "--no-color"],
+        );
+        log_fn(
+            &format!(
+                "  ✓ 便攜版內建 [pm2-logrotate] 已在線運作 ({})",
+                local_mod.display()
+            ),
+            "success",
+        );
+        return true;
+    }
+
+    log_fn(
+        &format!(
+            "📦 正在由便攜版目錄啟動日誌輪替模組 ({})...",
+            local_mod.display()
+        ),
+        "info",
+    );
+    let (restart_ok, _, _) =
+        run_cmd_hidden(&pm2_str, &["restart", "pm2-logrotate", "--no-color"]);
+    if restart_ok && is_logrotate_online(&pm2_str) {
+        let _ = run_cmd_hidden(
+            &pm2_str,
+            &["set", "pm2-logrotate:compress", "true", "--no-color"],
+        );
+        let _ = run_cmd_hidden(&pm2_str, &["save", "--force", "--no-color"]);
+        log_fn(
+            "  ✓ 已喚醒便攜版內建 [pm2-logrotate] 模組（已啟用日誌壓縮）",
+            "success",
+        );
+        return true;
+    }
+
     let target_pkg = if local_mod.is_dir() {
         local_mod.to_string_lossy().to_string()
     } else {
@@ -647,13 +717,13 @@ pub fn ensure_pm2_logrotate(root_dir: &Path, log_fn: &dyn Fn(&str, &str)) -> boo
         );
         let _ = run_cmd_hidden(&pm2_str, &["save", "--force", "--no-color"]);
         log_fn(
-            "  ✓ 成功啟動便攜版內建 [pm2-logrotate] 模組（已啟用日誌壓縮）",
+            "  ✓ 成功由便攜版目錄掛載並啟動 [pm2-logrotate] 模組（已啟用日誌壓縮）",
             "success",
         );
         true
     } else {
         log_fn(
-            &format!("  ⚠️ 安裝 [pm2-logrotate] 回傳警示: {} {}", stdout, stderr),
+            &format!("  ⚠️ 啟動 [pm2-logrotate] 回傳警示: {} {}", stdout, stderr),
             "warning",
         );
         false
@@ -663,12 +733,18 @@ pub fn ensure_pm2_logrotate(root_dir: &Path, log_fn: &dyn Fn(&str, &str)) -> boo
 pub fn query_pm2_daemon_info(root_dir: &Path) -> (bool, String) {
     let nv = get_node_version(root_dir);
     let pv = get_pm2_version(root_dir);
-    let lr = is_logrotate_installed(root_dir);
+    let lr_ver = logrotate_bundled_version(root_dir);
+    let lr_conf = is_logrotate_configured(root_dir);
     let tcp_alive = is_port_listening(42681, "127.0.0.1", 300);
 
     match (nv, pv) {
         (Some(n_ver), Some(p_ver)) => {
-            let lr_tag = if lr { " + logrotate" } else { "" };
+            let lr_tag = match (lr_ver, lr_conf) {
+                (Some(v), true) => format!(" + logrotate v{v}"),
+                (Some(v), false) => format!(" + logrotate v{v} (內建待掛載)"),
+                (None, true) => " + logrotate".to_string(),
+                (None, false) => "".to_string(),
+            };
             if tcp_alive {
                 (
                     true,
@@ -1002,11 +1078,13 @@ mod tests {
         assert!(cleaned_path.starts_with(node_dir.to_string_lossy().as_ref()));
         assert!(!cleaned_path.to_lowercase().contains("program files\\nodejs"));
 
+        assert_eq!(logrotate_bundled_version(&tmp).as_deref(), Some("2.7.0"));
         assert!(is_logrotate_installed(&tmp));
+        assert!(is_logrotate_configured(&tmp));
         let mod_conf: serde_json::Value =
             serde_json::from_str(&fs::read_to_string(pm2_dir.join("module_conf.json")).unwrap())
                 .unwrap();
-        assert_eq!(mod_conf["pm2-logrotate"]["compress"], "true");
+        assert_eq!(mod_conf["pm2-logrotate"]["compress"], serde_json::json!(true));
         assert!(mod_conf["module-db-v2"]["pm2-logrotate"].is_object());
 
         let _ = fs::remove_dir_all(&tmp);

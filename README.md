@@ -15,6 +15,7 @@
 | **`updater/`** | **自動更新工具**<br/>`智慧控管與監控系統 - 自動更新工具.exe` | Tauri 2 (Rust) | 支援 10 大模組更新包智慧對齊解壓、`base/`、`patch/`、`node_modules/` 分流優先探測與平滑回退、5 階段自動化系統配置引擎（Apache mod_php7、PHP 8.5 FastCGI Proxy、CVE-2024-4577 資安強化、綠色 Node/PM2 設定與 WinSW 服務部署、服務重啟與全系統健康檢查）。 |
 | **`uninstaller/`** | **自動移除工具**<br/>`智慧控管與監控系統 - 自動移除工具.exe` | Tauri 2 (Rust) | 完整停止並刪除 Windows 服務（`LAH_PM2_Service`、`Apache2.4`）、精確終止殘留進程、清理開機自啟動與工作排程、還原環境變數 `PATH`、註銷 Apache FastCGI 轉發、解除唯讀安全刪除檔案並深度清理安裝根目錄（嚴格保護備份檔）。 |
 | **`backuper/`** | **備份與還原工具**<br/>`智慧控管與監控系統 - 備份與還原工具.exe` | Tauri 2 (Rust) | 支援系統重要資料與設定（即時通 `db/`、`uploads/`、各專案 `.env`、`AD.php`、`www/assets/`、`php.ini`、`httpd.conf`、`.pm2`）打包備份；擴充涵蓋 Oracle `instantclient_11_2` 與 PHP 自訂資料庫擴充 DLL；還原前自動建立 `restore_undo_*.zip` 復原點，採彈現式對話框節省空間。 |
+| **`node-portable/`** | **可攜 Node 安裝工具**<br/>`智慧控管與監控系統 - 可攜 Node 安裝工具.exe` | Tauri 2 (Rust) | 因應資安要求提供純綠色版 Node.js 16.20.2 與 PM2 離線安裝，支援直接掛載內建之 `pm2-logrotate`（v3.0.0）、全面接管系統與使用者 `PATH` 及 `PM2_HOME`、停止舊全域 `pm2.exe` 服務、清理 `dump.pm2` 舊路徑、註冊開機背景自啟服務 `PM2_Portable_Service`（WinSW）並具備每 60 秒 Daemon 自癒機制，確保系統升級全域 Node.js 時受管程式不受影響。 |
 | **`pack/`** | **原始碼打包發布工具**<br/>`pack.py` | Python 3.10+ 標準庫 | 供開發管理人員遍歷工作區內平級子專案（`LAH-API`、`LAH-FE`、`lah-messenger-server` 等）全自動產出 7 大標準更新壓縮包，支援動態工作區根目錄探測。 |
 
 ---
@@ -65,7 +66,11 @@
 .\建立自動備份工具.bat
 # 或執行：python backuper\build.py
 
-# 4. 原始碼全系統打包（產出更新壓縮包至 dist/）
+# 4. 建立可攜 Node 安裝工具
+.\建立可攜NODE工具.bat
+# 或執行：python node-portable\build.py
+
+# 5. 原始碼全系統打包（產出更新壓縮包至 dist/）
 .\打包智慧控管及監控系統.bat
 # 或執行：python pack\pack.py
 ```
@@ -74,3 +79,4 @@
 - `dist/智慧控管與監控系統 - 自動更新工具.exe`（翡翠綠升級齒輪圖示，約 11.7 MB）
 - `dist/智慧控管與監控系統 - 自動移除工具.exe`（警戒深紅解構叉號圖示，約 10.7 MB）
 - `dist/智慧控管與監控系統 - 備份與還原工具.exe`（科技深藍資料庫循環圖示，約 9.5 MB）
+- `dist/智慧控管與監控系統 - 可攜 Node 安裝工具.exe`（亮綠六角形加 PM2 循環箭頭圖示，約 11.5 MB）

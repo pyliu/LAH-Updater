@@ -28,6 +28,10 @@
     - 實作 `wire_bundled_pm2_logrotate` 與 `pm2_service_runner.js` 之 `wireBundledLogrotate`，直接將便攜版 `node_modules\pm2-logrotate\app.js` 掛載至 `.pm2\modules\pm2-logrotate`，並於 `.pm2\module_conf.json` 寫入預設設定（啟用 `compress: true`）。
     - 修補 PM2 之 `NPM.js` 模組啟動函式，若 `.pm2\modules` 缺失自動退回便攜版目錄載入。
     - 改善前端環境狀態顯示，明確呈現 `3.0.0（便攜版內建，已掛載啟用）`。
+  - **系統升級全域 Node 防護說明文件化**：
+    - 於 `node-portable/README.md` 詳細增補「系統全域 Node.js 因資安要求升級時的影響說明」專章，闡述 WinSW 服務硬鎖定、`pm2.cmd` 前置注入、Daemon/子程序 `process.execPath` 繼承與 60 秒自癒機制。
+    - 於專案根目錄 `README.md` 補齊 `node-portable/` 模組職責說明、一鍵建置批次指令與發布執行檔清單。
+    - 同步更新 `updater/` 內部之 PM2 日誌輪替直接掛載機制與單元測試。
   - **單元測試防護**：
     - 新增 `test_clean_and_prepend_path_replaces_global_node_and_pm2` 與 `test_wire_bundled_pm2_logrotate_idempotent` 測試，確保環境變數替換與模組掛載之正確性與冪等性。
 
@@ -97,6 +101,10 @@
     - 實作 `wire_bundled_pm2_logrotate` 與 `pm2_service_runner.js` 之 `wireBundledLogrotate`，直接將便攜版 `node_modules\pm2-logrotate\app.js` 掛載至 `.pm2\modules\pm2-logrotate`，並於 `.pm2\module_conf.json` 寫入預設設定（啟用 `compress: true`）。
     - 修補 PM2 之 `NPM.js` 模組啟動函式，若 `.pm2\modules` 缺失自動退回便攜版目錄載入。
     - 改善前端環境狀態顯示，明確呈現 `3.0.0（便攜版內建，已掛載啟用）`。
+  - **系統升級全域 Node 防護說明文件化**：
+    - 於 `node-portable/README.md` 詳細增補「系統全域 Node.js 因資安要求升級時的影響說明」專章，闡述 WinSW 服務硬鎖定、`pm2.cmd` 前置注入、Daemon/子程序 `process.execPath` 繼承與 60 秒自癒機制。
+    - 於專案根目錄 `README.md` 補齊 `node-portable/` 模組職責說明、一鍵建置批次指令與發布執行檔清單。
+    - 同步更新 `updater/` 內部之 PM2 日誌輪替直接掛載機制與單元測試。
   - **單元測試防護**：
     - 新增 `test_clean_and_prepend_path_replaces_global_node_and_pm2` 與 `test_wire_bundled_pm2_logrotate_idempotent` 測試，確保環境變數替換與模組掛載之正確性與冪等性。
 
