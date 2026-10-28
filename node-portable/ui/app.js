@@ -22,11 +22,24 @@ function row(label, value, ok) {
 }
 
 async function rescan() {
-  const s = await invoke("scan_environment", { rootDir: $("root_dir").value.trim() });
+  const curInput = $("root_dir").value.trim();
+  const s = await invoke("scan_environment", { rootDir: curInput });
+  if (!curInput && s.root_dir) {
+    $("root_dir").value = s.root_dir;
+  }
+  let lrText = "尚未安裝（安裝時將由 node.zip 便攜版內建啟動）";
+  if (s.logrotate_version) {
+    lrText = s.logrotate_configured
+      ? `${s.logrotate_version}（便攜版內建，已掛載啟用）`
+      : `${s.logrotate_version}（便攜版內建，點擊開始安裝即可啟動）`;
+  } else if (s.logrotate_configured) {
+    lrText = "已掛載啟用";
+  }
   $("scan_box").innerHTML = [
     row("node.zip 安裝包", s.zip_found || "未找到（請放於工具旁 base 資料夾、工具同層或 C:\\Temp）", !!s.zip_found),
     row("已安裝 Node.js", s.node_version || "尚未安裝", !!s.node_version),
     row("已安裝 PM2", s.pm2_version || "尚未安裝", !!s.pm2_version),
+    row("pm2-logrotate 模組", lrText, s.logrotate_installed),
     row("PM2_Portable_Service", s.service_installed ? (s.service_running ? "已註冊，執行中" : "已註冊，未執行") : "未註冊", s.service_installed),
   ].join("");
   $("btn_start").disabled = !s.zip_found;
@@ -90,6 +103,7 @@ $("btn_start").onclick = async () => {
     root_dir: rootDir,
     register_path: $("chk_path").checked,
     set_pm2_home: $("chk_home").checked,
+    install_logrotate: $("chk_logrotate").checked,
     register_service: $("chk_service").checked,
     resurrect: $("chk_resurrect").checked,
   };

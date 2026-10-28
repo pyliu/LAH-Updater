@@ -1,10 +1,11 @@
 use crate::pm2::{
-    ensure_portable_pm2_patched, kill_pm2_daemon, resolve_pm2_command, resurrect_pm2_services,
-    setup_pm2_service, stop_pm2_service,
+    ensure_pm2_logrotate, ensure_portable_pm2_patched, is_logrotate_configured,
+    is_logrotate_installed, kill_pm2_daemon, logrotate_bundled_version, resolve_pm2_command,
+    resurrect_pm2_services, setup_pm2_service, stop_pm2_service,
 };
 use crate::system::{
-    ensure_root_dir, get_app_dir, register_path_to_user_environment, register_user_env_var,
-    run_cmd_hidden,
+    detect_default_root_dir, ensure_root_dir, get_app_dir, register_path_to_user_environment,
+    register_pm2_home_and_clean_legacy_env, run_cmd_hidden,
 };
 use crate::types::{InstallOptions, InstallReport, ScanSummary};
 use std::fs;
@@ -45,12 +46,19 @@ pub fn pm2_version(root_dir: &Path) -> Option<String> {
 }
 
 pub fn scan(root_dir: &str) -> ScanSummary {
-    let root = PathBuf::from(root_dir.trim());
+    let root = if root_dir.trim().is_empty() {
+        detect_default_root_dir()
+    } else {
+        PathBuf::from(root_dir.trim())
+    };
     ScanSummary {
         root_dir: root.to_string_lossy().to_string(),
         zip_found: find_node_zip(&root).map(|p| p.to_string_lossy().to_string()),
         node_version: node_version(&root),
         pm2_version: pm2_version(&root),
+        logrotate_version: logrotate_bundled_version(&root),
+        logrotate_installed: is_logrotate_installed(&root),
+        logrotate_configured: is_logrotate_configured(&root),
         service_installed: crate::pm2::is_pm2_service_installed(),
         service_running: crate::pm2::is_pm2_service_running(),
     }
@@ -128,7 +136,7 @@ pub fn execute_install(
 
     let root = PathBuf::from(options.root_dir.trim());
     if options.root_dir.trim().is_empty() || root.parent().is_none() {
-        return fail("安裝目錄不可為空或磁碟機根目錄，請指定例如 C:\\AppServ".to_string());
+        return fail("安裝目錄不可為空或磁碟機根目錄，請指定例如 C:\\AppServ 或 D:\\DEV".to_string());
     }
 
     progress_fn(2.0, "檢查安裝目錄與 node.zip...");
@@ -141,11 +149,9 @@ pub fn execute_install(
     log_fn(&format!("📦 使用安裝包: {}", zip_path.display()), "info");
 
     let node_dir = root.join("node");
-    progress_fn(6.0, "停止既有 PM2 與服務...");
-    if node_dir.is_dir() {
-        stop_pm2_service(log_fn);
-        let _ = kill_pm2_daemon(&root, log_fn);
-    }
+    progress_fn(6.0, "停止既有 PM2 與舊全域服務...");
+    stop_pm2_service(log_fn);
+    let _ = kill_pm2_daemon(&root, log_fn);
 
     progress_fn(15.0, "正在解壓 Node.js 與 PM2...");
     match extract_node_zip(&zip_path, &node_dir, progress_fn) {
@@ -158,15 +164,15 @@ pub fn execute_install(
         return fail("PM2 修補失敗，node 目錄不存在".to_string());
     }
 
-    progress_fn(80.0, "設定環境變數...");
+    progress_fn(80.0, "接管系統與使用者環境變數...");
     if options.register_path {
         register_path_to_user_environment(&node_dir, log_fn);
     }
     if options.set_pm2_home {
-        register_user_env_var("PM2_HOME", &root.join(".pm2").to_string_lossy(), log_fn);
+        register_pm2_home_and_clean_legacy_env(&root.join(".pm2"), log_fn);
     }
 
-    progress_fn(88.0, "驗證安裝結果...");
+    progress_fn(86.0, "驗證安裝結果...");
     let Some(nv) = node_version(&root) else {
         return fail("node.exe 無法執行，請確認 node.zip 內容正確".to_string());
     };
@@ -182,17 +188,21 @@ pub fn execute_install(
         return fail("找不到 pm2.cmd，node.zip 可能未包含 PM2".to_string());
     }
 
-    progress_fn(94.0, "服務與還原設定...");
-    if options.register_service {
-        if !setup_pm2_service(&root, log_fn) {
-            return fail("開機自啟服務註冊失敗，請檢視上方日誌".to_string());
-        }
-    } else if options.resurrect {
+    progress_fn(90.0, "還原既有 PM2 程序與啟用 pm2-logrotate...");
+    if options.resurrect || options.register_service {
         resurrect_pm2_services(&root, log_fn);
+    }
+    if options.install_logrotate {
+        ensure_pm2_logrotate(&root, log_fn);
+    }
+
+    progress_fn(96.0, "設定開機自啟服務...");
+    if options.register_service && !setup_pm2_service(&root, log_fn) {
+        return fail("開機自啟服務註冊失敗，請檢視上方日誌".to_string());
     }
 
     progress_fn(100.0, "安裝完成");
-    log_fn("🎉 可攜 Node.js 與 PM2 安裝完成！新開啟的命令提示字元即可使用 node / pm2。", "success");
+    log_fn("🎉 可攜 Node.js 與 PM2 安裝完成！新開啟的命令提示字元即可直接使用 node / pm2。", "success");
     InstallReport {
         success: true,
         message: format!("Node.js {} 安裝完成", nv),

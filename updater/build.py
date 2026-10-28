@@ -37,6 +37,11 @@ def main():
     print("[*] 執行指令：cargo build --release")
     print("-" * 60)
 
+    # 強制觸發 build.rs 更新時間戳，確保內嵌之 ui/* 與 service/* 變更必重新封裝
+    build_rs = os.path.join(src_tauri_dir, "build.rs")
+    if os.path.isfile(build_rs):
+        os.utime(build_rs, None)
+
     ret = subprocess.run([cargo_bin, "build", "--release"], cwd=src_tauri_dir)
 
     print("-" * 60)

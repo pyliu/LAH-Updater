@@ -33,6 +33,10 @@ def main():
         print("[ERROR] 系統未安裝或未於 PATH 找到 cargo 工具，請先安裝 Rust！")
         sys.exit(1)
 
+    build_rs = os.path.join(src_tauri_dir, "build.rs")
+    if os.path.isfile(build_rs):
+        os.utime(build_rs, None)
+
     print(f"[*] 工作目錄：{src_tauri_dir}")
     print("[*] 執行指令：cargo build --release")
     print("-" * 60)

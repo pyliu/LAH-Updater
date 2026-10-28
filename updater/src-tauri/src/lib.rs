@@ -142,7 +142,12 @@ fn read_release_notes() -> Option<String> {
 #[tauri::command]
 fn scan_environment(root_dir: String) -> ScanSummary {
     let app_dir = system::get_app_dir();
-    let root_path = PathBuf::from(root_dir.trim());
+    let trimmed = root_dir.trim();
+    let root_path = if trimmed.is_empty() {
+        system::detect_default_root_dir()
+    } else {
+        PathBuf::from(trimmed)
+    };
     let root_exists = root_path.exists() && root_path.is_dir();
 
     let search_dirs = vec![

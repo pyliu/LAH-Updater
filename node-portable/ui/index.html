@@ -6,7 +6,7 @@
 <style>
   * { box-sizing: border-box; }
   body {
-    font-family: "Microsoft JhengHei UI", "Microsoft JhengHei", sans-serif;
+    font-family: "Microsoft JhengHei UI", "Microsoft JhengHei", "Segoe UI Emoji", "Segoe UI Symbol", sans-serif;
     margin: 0;
     padding: 16px 20px;
     background: #f8fafc;
@@ -211,6 +211,16 @@
     margin: 0;
     font-weight: 700;
     color: #166534;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .title-svg-icon {
+    width: 22px;
+    height: 22px;
+    vertical-align: middle;
+    flex-shrink: 0;
+    display: inline-block;
   }
   .progress-wrap {
     margin: 4px 0 10px;
@@ -265,14 +275,40 @@
 </head>
 <body>
   <div class="header">
-    <h1>🟩 可攜 Node.js + PM2 安裝工具</h1>
+    <h1>
+      <svg class="title-svg-icon" viewBox="0 0 512 512" aria-hidden="true">
+        <defs>
+          <linearGradient id="app-ico-bg" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stop-color="#0b1f12"/>
+            <stop offset="1" stop-color="#14391f"/>
+          </linearGradient>
+          <linearGradient id="app-ico-g" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stop-color="#a3e635"/>
+            <stop offset="1" stop-color="#339933"/>
+          </linearGradient>
+          <linearGradient id="app-ico-t" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stop-color="#5eead4"/>
+            <stop offset="1" stop-color="#0ea5e9"/>
+          </linearGradient>
+        </defs>
+        <rect x="24" y="24" width="464" height="464" rx="110" fill="url(#app-ico-bg)" stroke="#84cc16" stroke-width="12"/>
+        <path d="M256 120 L372 187 L372 325 L256 392 L140 325 L140 187 Z" fill="url(#app-ico-g)" stroke="#d9f99d" stroke-width="8" stroke-linejoin="round"/>
+        <circle cx="256" cy="256" r="46" fill="#0b1f12"/>
+        <circle cx="256" cy="256" r="20" fill="#a3e635"/>
+        <path d="M96 270 A160 160 0 0 1 200 108" fill="none" stroke="url(#app-ico-t)" stroke-width="22" stroke-linecap="round"/>
+        <path d="M416 242 A160 160 0 0 1 312 404" fill="none" stroke="url(#app-ico-t)" stroke-width="22" stroke-linecap="round"/>
+        <path d="M176 82 L228 100 L190 142 Z" fill="#5eead4"/>
+        <path d="M336 430 L284 412 L322 370 Z" fill="#0ea5e9"/>
+      </svg>
+      <span>可攜 Node.js + PM2 安裝工具</span>
+    </h1>
     <div id="admin_badge" class="admin-badge not-admin">檢測權限中...</div>
   </div>
 
   <div class="card">
     <div class="card-title">📁 安裝根目錄（Node 將安裝於其下 node 資料夾）</div>
     <div class="row">
-      <input id="root_dir" type="text" value="C:\AppServ">
+      <input id="root_dir" type="text" value="" placeholder="自動偵測中...">
       <button id="browse_btn">瀏覽...</button>
     </div>
   </div>
@@ -285,10 +321,11 @@
   <div class="card">
     <div class="card-title">⚙️ 安裝選項</div>
     <div class="options-grid" style="grid-template-columns: 1fr;">
-      <label class="checkbox-item"><input type="checkbox" id="chk_path" checked><span>🧭 將 node 目錄加入使用者 PATH</span></label>
-      <label class="checkbox-item"><input type="checkbox" id="chk_home" checked><span>🏠 設定使用者環境變數 PM2_HOME（&lt;根目錄&gt;\.pm2）</span></label>
-      <label class="checkbox-item"><input type="checkbox" id="chk_service" checked><span>🛎️ 註冊開機自啟服務 PM2_Portable_Service（開機自動 pm2 resurrect 還原既有程式）</span></label>
-      <label class="checkbox-item"><input type="checkbox" id="chk_resurrect" checked><span>🔄 立即執行 pm2 resurrect 還原既有程式 dump（已勾選服務時由服務負責）</span></label>
+      <label class="checkbox-item"><input type="checkbox" id="chk_path" checked><span>⚡ 將 node 目錄置於系統與使用者 PATH 最前端（取代既有全域 Node / PM2）</span></label>
+      <label class="checkbox-item"><input type="checkbox" id="chk_home" checked><span>🏠 設定系統與使用者環境變數 PM2_HOME（&lt;根目錄&gt;\.pm2 並清理舊殘留變數）</span></label>
+      <label class="checkbox-item"><input type="checkbox" id="chk_logrotate" checked><span>📦 直接由便攜版 node_modules 掛載並啟動 pm2-logrotate 日誌輪替模組（自動啟用日誌壓縮）</span></label>
+      <label class="checkbox-item"><input type="checkbox" id="chk_service" checked><span>⚙️ 註冊開機自啟服務 PM2_Portable_Service（停用舊 pm2.exe 服務並守護程序）</span></label>
+      <label class="checkbox-item"><input type="checkbox" id="chk_resurrect" checked><span>🔄 立即執行 pm2 resurrect 還原既有程式 dump</span></label>
     </div>
   </div>
 
@@ -299,7 +336,19 @@
 
   <div id="modal_progress" class="modal-overlay">
     <div class="modal-content">
-      <div class="modal-header"><h2>🟩 安裝進行中...</h2></div>
+      <div class="modal-header"><h2>
+        <svg class="title-svg-icon" viewBox="0 0 512 512" aria-hidden="true" style="width: 20px; height: 20px;">
+            <rect x="24" y="24" width="464" height="464" rx="110" fill="url(#app-ico-bg)" stroke="#84cc16" stroke-width="12"/>
+            <path d="M256 120 L372 187 L372 325 L256 392 L140 325 L140 187 Z" fill="url(#app-ico-g)" stroke="#d9f99d" stroke-width="8" stroke-linejoin="round"/>
+            <circle cx="256" cy="256" r="46" fill="#0b1f12"/>
+            <circle cx="256" cy="256" r="20" fill="#a3e635"/>
+            <path d="M96 270 A160 160 0 0 1 200 108" fill="none" stroke="url(#app-ico-t)" stroke-width="22" stroke-linecap="round"/>
+            <path d="M416 242 A160 160 0 0 1 312 404" fill="none" stroke="url(#app-ico-t)" stroke-width="22" stroke-linecap="round"/>
+            <path d="M176 82 L228 100 L190 142 Z" fill="#5eead4"/>
+            <path d="M336 430 L284 412 L322 370 Z" fill="#0ea5e9"/>
+          </svg>
+        <span>安裝進行中...</span>
+      </h2></div>
       <div class="progress-wrap">
         <div class="progress-info"><span id="status_text">準備中...</span><span id="percent_text">0.0%</span></div>
         <progress id="progress_bar" value="0" max="100"></progress>
@@ -315,3 +364,4 @@
 <script src="app.js"></script>
 </body>
 </html>
+

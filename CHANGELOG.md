@@ -6,6 +6,32 @@
 
 ## [未發布]
 
+### 🛠️ 強化可攜 Node 工具 (node-portable) 與更新工具 (updater) 之 PM2 全域接管與日誌輪替模組
+
+- **背景與目的**：解決在 Windows Server 2016 等既有全域已安裝 Node.js (v22) 與 global PM2 的伺服器環境中，可攜版工具未能自動辨識已安裝根目錄、字型缺少 Emoji 導致方框缺字、舊全域 Node/PM2 環境變數與服務衝突，以及便攜版內建之 `pm2-logrotate` 顯示為「尚未安裝」之問題。
+- **具體改進項目**：
+  - **Windows Server 2016 相容性與介面圖示修復**：
+    - 將 `<h1>` 與 `<h2>` 標題之綠色方塊 Emoji 替換為與應用程式圖示一致的內嵌向量 SVG 圖示。
+    - 將核取方塊與狀態文字之 Unicode 11.0/12.0 圖示替換為向下相容之 Unicode 4.0 符號（如 `⚡`、`⚙️`、`🏠`），根除舊版 Windows Server 上的字型豆腐方塊缺字。
+  - **安裝根目錄智慧自動偵測**：
+    - 啟動時自動依序探測 `PM2_HOME`、`PATH`（尋找包含 `node.exe` 之目錄上層）、系統預設目錄（`D:\DEV`、`C:\AppServ`），精準載入已安裝環境。
+  - **系統與使用者環境變數全面接管**：
+    - 同時清理並前置注入系統（`HKLM`）與使用者（`HKCU`）`PATH`，徹底剔除舊全域 Node/PM2 路徑。
+    - 移除舊版 `pm2-installer` 遺留之系統與使用者變數 `PM2_INSTALL_DIRECTORY` 與 `PM2_SERVICE_DIRECTORY`。
+    - 統一設定系統與使用者環境變數 `PM2_HOME` 為 `<根目錄>\.pm2`。
+  - **舊全域 PM2 服務與殘留進程清理**：
+    - 安裝前自動查詢、停止並刪除舊全域 `pm2.exe` Windows 系統服務。
+    - 終止非目標可攜版路徑之 Node.js、PM2 Daemon 及殘留 FastCGI 進程。
+    - 自動清理與重寫 `dump.pm2`，將其內殘留之舊全域 node.exe 解譯器路徑重設為可攜版 `node`，並修正 PID 路徑至統一 `.pm2\pids`。
+  - **便攜版內建 `pm2-logrotate` 模組直接掛載與啟動**：
+    - 新增 `logrotate_bundled_version`，讀取 `<根目錄>\node\node_modules\pm2-logrotate\package.json`（版本 3.0.0）。
+    - 實作 `wire_bundled_pm2_logrotate` 與 `pm2_service_runner.js` 之 `wireBundledLogrotate`，直接將便攜版 `node_modules\pm2-logrotate\app.js` 掛載至 `.pm2\modules\pm2-logrotate`，並於 `.pm2\module_conf.json` 寫入預設設定（啟用 `compress: true`）。
+    - 修補 PM2 之 `NPM.js` 模組啟動函式，若 `.pm2\modules` 缺失自動退回便攜版目錄載入。
+    - 改善前端環境狀態顯示，明確呈現 `3.0.0（便攜版內建，已掛載啟用）`。
+  - **單元測試防護**：
+    - 新增 `test_clean_and_prepend_path_replaces_global_node_and_pm2` 與 `test_wire_bundled_pm2_logrotate_idempotent` 測試，確保環境變數替換與模組掛載之正確性與冪等性。
+
+
 ### ✨ 新增可攜 Node.js + PM2 安裝工具 (node-portable)
 - **背景與目的**：因應資安要求，原以 Node.js 16.20.2 開發的程式需搭配綠色版 Node 與 PM2；自 `updater/` 抽出相關核心程式碼，建立不含 LAH 專屬巡檢的通用離線安裝工具。
 - **新增項目**：
@@ -48,6 +74,32 @@
 
 
 ## [未發布]
+
+### 🛠️ 強化可攜 Node 工具 (node-portable) 與更新工具 (updater) 之 PM2 全域接管與日誌輪替模組
+
+- **背景與目的**：解決在 Windows Server 2016 等既有全域已安裝 Node.js (v22) 與 global PM2 的伺服器環境中，可攜版工具未能自動辨識已安裝根目錄、字型缺少 Emoji 導致方框缺字、舊全域 Node/PM2 環境變數與服務衝突，以及便攜版內建之 `pm2-logrotate` 顯示為「尚未安裝」之問題。
+- **具體改進項目**：
+  - **Windows Server 2016 相容性與介面圖示修復**：
+    - 將 `<h1>` 與 `<h2>` 標題之綠色方塊 Emoji 替換為與應用程式圖示一致的內嵌向量 SVG 圖示。
+    - 將核取方塊與狀態文字之 Unicode 11.0/12.0 圖示替換為向下相容之 Unicode 4.0 符號（如 `⚡`、`⚙️`、`🏠`），根除舊版 Windows Server 上的字型豆腐方塊缺字。
+  - **安裝根目錄智慧自動偵測**：
+    - 啟動時自動依序探測 `PM2_HOME`、`PATH`（尋找包含 `node.exe` 之目錄上層）、系統預設目錄（`D:\DEV`、`C:\AppServ`），精準載入已安裝環境。
+  - **系統與使用者環境變數全面接管**：
+    - 同時清理並前置注入系統（`HKLM`）與使用者（`HKCU`）`PATH`，徹底剔除舊全域 Node/PM2 路徑。
+    - 移除舊版 `pm2-installer` 遺留之系統與使用者變數 `PM2_INSTALL_DIRECTORY` 與 `PM2_SERVICE_DIRECTORY`。
+    - 統一設定系統與使用者環境變數 `PM2_HOME` 為 `<根目錄>\.pm2`。
+  - **舊全域 PM2 服務與殘留進程清理**：
+    - 安裝前自動查詢、停止並刪除舊全域 `pm2.exe` Windows 系統服務。
+    - 終止非目標可攜版路徑之 Node.js、PM2 Daemon 及殘留 FastCGI 進程。
+    - 自動清理與重寫 `dump.pm2`，將其內殘留之舊全域 node.exe 解譯器路徑重設為可攜版 `node`，並修正 PID 路徑至統一 `.pm2\pids`。
+  - **便攜版內建 `pm2-logrotate` 模組直接掛載與啟動**：
+    - 新增 `logrotate_bundled_version`，讀取 `<根目錄>\node\node_modules\pm2-logrotate\package.json`（版本 3.0.0）。
+    - 實作 `wire_bundled_pm2_logrotate` 與 `pm2_service_runner.js` 之 `wireBundledLogrotate`，直接將便攜版 `node_modules\pm2-logrotate\app.js` 掛載至 `.pm2\modules\pm2-logrotate`，並於 `.pm2\module_conf.json` 寫入預設設定（啟用 `compress: true`）。
+    - 修補 PM2 之 `NPM.js` 模組啟動函式，若 `.pm2\modules` 缺失自動退回便攜版目錄載入。
+    - 改善前端環境狀態顯示，明確呈現 `3.0.0（便攜版內建，已掛載啟用）`。
+  - **單元測試防護**：
+    - 新增 `test_clean_and_prepend_path_replaces_global_node_and_pm2` 與 `test_wire_bundled_pm2_logrotate_idempotent` 測試，確保環境變數替換與模組掛載之正確性與冪等性。
+
 
 ### 🧹 全面移除舊版 Python 原始碼，邁向純 Rust (Tauri 2) 架構
 - **移除舊版 Tkinter 主程式原始碼**：

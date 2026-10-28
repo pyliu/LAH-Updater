@@ -252,30 +252,28 @@ async function init() {
     document.getElementById("bar_progress").style.width = `${percent}%`;
   });
 
-  // 4. 【核心需求】：檢測預設目錄是否存在
-  const defaultPath = document.getElementById("txt_root_dir").value.trim() || "C:\\AppServ";
-  try {
-    const check = await invoke("check_root_dir", { path: defaultPath });
-    if (!check.exists) {
-      document.getElementById("lbl_missing_dir").textContent = defaultPath;
-      document.getElementById("modal_root_missing").classList.add("active");
-    }
-  } catch (e) {
-    console.warn("目錄檢測異常:", e);
-  }
+  // 4. 背景非同步環境掃描與智慧根目錄偵測 (完成後原位刷新套件卡片)
+  const scanRes = await scanEnvironment(true);
 
-  // 5. 背景非同步環境掃描 (完成後原位刷新套件卡片)
-  await scanEnvironment();
+  // 5. 【核心需求】：若智慧偵測後的預設目錄不存在，彈出建立引導對話框
+  if (scanRes && !scanRes.root_exists) {
+    document.getElementById("lbl_missing_dir").textContent = scanRes.root_dir || "C:\\AppServ";
+    document.getElementById("modal_root_missing").classList.add("active");
+  }
 }
 
-async function scanEnvironment() {
-  const rootDir = document.getElementById("txt_root_dir").value.trim() || "C:\\AppServ";
-  state.rootDir = rootDir;
+async function scanEnvironment(isInitial = false) {
+  const inputEl = document.getElementById("txt_root_dir");
+  const rootDir = isInitial ? inputEl.value.trim() : (inputEl.value.trim() || state.rootDir || "C:\\AppServ");
 
   document.getElementById("root_status_badge").textContent = "掃描中...";
 
   try {
     const res = await invoke("scan_environment", { rootDir });
+    if (res.root_dir) {
+      inputEl.value = res.root_dir;
+      state.rootDir = res.root_dir;
+    }
 
     // 狀態摘要更新
     const rootBadge = document.getElementById("root_status_badge");
@@ -320,9 +318,11 @@ async function scanEnvironment() {
     if (res.packages && res.packages.length > 0) {
       updatePackageCards(res.packages);
     }
+    return res;
   } catch (e) {
     console.error("掃描環境失敗:", e);
     document.getElementById("root_status_badge").textContent = "掃描失敗";
+    return null;
   }
 }
 

@@ -65,6 +65,9 @@ where
     let has_node_modules = selected_pkgs.iter().any(|p| p.is_sub_package);
     if has_node_runtime || has_node_modules {
         set_prog(3, "正在檢查 Node.js 執行狀態並釋放檔案鎖定...");
+        if is_pm2_service_running() {
+            stop_service("LAH_PM2_Service", &log_event);
+        }
         let node_exe = root_path.join("node").join("node.exe");
         let _ = kill_pm2_daemon(&root_path, &log_event);
         if is_file_locked(&node_exe) {
@@ -219,13 +222,13 @@ where
     // =========================================================================
     if node_tgt.is_dir() {
         set_prog(95, "[階段 4/5] 正在設定綠色版 Node 環境與 PM2 自動化服務...");
-        register_path_to_user_environment(&node_tgt, &log_event);
-        ensure_portable_pm2_patched(&root_path, &log_event);
-
         let oci_dir = root_path.join("instantclient_11_2");
         if oci_dir.is_dir() {
             register_path_to_user_environment(&oci_dir, &log_event);
         }
+        register_path_to_user_environment(&node_tgt, &log_event);
+        register_pm2_home_and_clean_legacy_env(&root_path.join(".pm2"), &log_event);
+        ensure_portable_pm2_patched(&root_path, &log_event);
 
         // 喚醒或重啟 PM2
         if options.restart_pm2 {
@@ -379,12 +382,13 @@ where
     // 6. Node.js 與 PM2 核心巡檢
     if node_tgt.is_dir() {
         set_prog(75, "正在巡檢與配置 PM2 核心服務...");
-        register_path_to_user_environment(&node_tgt, &log_event);
-        ensure_portable_pm2_patched(&root_path, &log_event);
         let oci_dir = root_path.join("instantclient_11_2");
         if oci_dir.is_dir() {
             register_path_to_user_environment(&oci_dir, &log_event);
         }
+        register_path_to_user_environment(&node_tgt, &log_event);
+        register_pm2_home_and_clean_legacy_env(&root_path.join(".pm2"), &log_event);
+        ensure_portable_pm2_patched(&root_path, &log_event);
         if options.auto_register_pm2 {
             setup_pm2_autostart(&root_path, &log_event);
         } else {

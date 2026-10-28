@@ -7,6 +7,7 @@
   <workingdirectory>C:\AppServ</workingdirectory>
 
   <env name="PATH" value="C:\AppServ\node;%PATH%" />
+  <env name="PM2_HOME" value="C:\AppServ\.pm2" />
 
   <logmode>roll-by-size</logmode>
   <logpath>C:\AppServ\logs\service</logpath>
