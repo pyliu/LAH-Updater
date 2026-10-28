@@ -254,6 +254,17 @@ pub fn wire_bundled_pm2_logrotate(root_dir: &Path, log_fn: &dyn Fn(&str, &str)) 
         .unwrap_or_else(|| serde_json::json!({}));
 
     if let Some(root_obj) = conf_val.as_object_mut() {
+        // 1. 若曾有舊全域 @jessety/pm2-logrotate 或其他日誌輪替變體，將其自訂參數備份遷移至 pm2-logrotate
+        let mut legacy_lr_conf = None;
+        for legacy_key in &["@jessety/pm2-logrotate", "pm2-logrotate-ext"] {
+            if let Some(removed) = root_obj.remove(*legacy_key) {
+                if legacy_lr_conf.is_none() && removed.is_object() {
+                    legacy_lr_conf = Some(removed);
+                }
+                changed = true;
+            }
+        }
+
         let db_entry = root_obj
             .entry("module-db-v2".to_string())
             .or_insert_with(|| serde_json::json!({}));
@@ -261,6 +272,37 @@ pub fn wire_bundled_pm2_logrotate(root_dir: &Path, log_fn: &dyn Fn(&str, &str)) 
             *db_entry = serde_json::json!({});
         }
         if let Some(db_obj) = db_entry.as_object_mut() {
+            // 清理舊全域 @jessety/pm2-logrotate 等可能導致啟動 crash 的殘留模組登記
+            for legacy_key in &["@jessety/pm2-logrotate", "pm2-logrotate-ext"] {
+                if db_obj.remove(*legacy_key).is_some() {
+                    changed = true;
+                }
+            }
+
+            // 清理任何在磁碟上完全不存在 package.json 的孤立模組，避免 NPM.start 丟出 MODULE_NOT_FOUND
+            let mod_keys: Vec<String> = db_obj.keys().cloned().collect();
+            for mod_k in mod_keys {
+                if mod_k == "pm2-logrotate" {
+                    continue;
+                }
+                let cand1 = pm2_home
+                    .join("modules")
+                    .join(&mod_k)
+                    .join("node_modules")
+                    .join(&mod_k)
+                    .join("package.json");
+                let cand2 = pm2_home.join("modules").join(&mod_k).join("package.json");
+                let cand3 = root_dir
+                    .join("node")
+                    .join("node_modules")
+                    .join(&mod_k)
+                    .join("package.json");
+                if !cand1.is_file() && !cand2.is_file() && !cand3.is_file() {
+                    db_obj.remove(&mod_k);
+                    changed = true;
+                }
+            }
+
             if !db_obj.contains_key("pm2-logrotate") {
                 db_obj.insert(
                     "pm2-logrotate".to_string(),
@@ -277,6 +319,14 @@ pub fn wire_bundled_pm2_logrotate(root_dir: &Path, log_fn: &dyn Fn(&str, &str)) 
             *lr_entry = serde_json::json!({});
         }
         if let Some(lr_obj) = lr_entry.as_object_mut() {
+            if let Some(serde_json::Value::Object(leg_map)) = legacy_lr_conf {
+                for (k, v) in leg_map {
+                    if !lr_obj.contains_key(&k) {
+                        lr_obj.insert(k, v);
+                        changed = true;
+                    }
+                }
+            }
             let defaults = [
                 ("max_size", serde_json::json!("10M")),
                 ("retain", serde_json::json!("30")),
@@ -502,9 +552,19 @@ endLocal & goto #_undefined_# 2>NUL || title %COMSPEC% & SET \"PATH=%dp0%;%PATH%
             n_txt = n_txt.replace(old_backup, new_backup);
 
             let old_start = "  var install_path = path.join(cst.DEFAULT_MODULE_PATH, module_name);\n  var proc_path = path.join(install_path, 'node_modules', module_name);\n  var package_json_path = path.join(proc_path, 'package.json');";
-            let new_start = "  var install_path = path.join(cst.DEFAULT_MODULE_PATH, module_name);\n  var proc_path = path.join(install_path, 'node_modules', module_name);\n  var package_json_path = path.join(proc_path, 'package.json');\n  if (!fs.existsSync(package_json_path)) {\n    var bundled_proc = path.resolve(__dirname, '../../../../', module_name);\n    if (fs.existsSync(path.join(bundled_proc, 'package.json'))) {\n      proc_path = bundled_proc;\n      package_json_path = path.join(bundled_proc, 'package.json');\n    }\n  }";
-            if !n_txt.contains("var bundled_proc = path.resolve(__dirname") {
+            let new_start = "  var install_path = path.join(cst.DEFAULT_MODULE_PATH, module_name);\n  var proc_path = path.join(install_path, 'node_modules', module_name);\n  var package_json_path = path.join(proc_path, 'package.json');\n  if (!fs.existsSync(package_json_path)) {\n    var bundled_proc = path.resolve(__dirname, '../../../../', module_name);\n    if (fs.existsSync(path.join(bundled_proc, 'package.json'))) {\n      proc_path = bundled_proc;\n      package_json_path = path.join(bundled_proc, 'package.json');\n    } else {\n      Common.printError(cst.PREFIX_MSG_MOD_ERR + 'Module ' + module_name + ' package.json not found, skipping');\n      return cb();\n    }\n  }";
+            if n_txt.contains("var bundled_proc = path.resolve(__dirname") {
+                let prev_patch = "  if (!fs.existsSync(package_json_path)) {\n    var bundled_proc = path.resolve(__dirname, '../../../../', module_name);\n    if (fs.existsSync(path.join(bundled_proc, 'package.json'))) {\n      proc_path = bundled_proc;\n      package_json_path = path.join(bundled_proc, 'package.json');\n    }\n  }";
+                let target_patch = "  if (!fs.existsSync(package_json_path)) {\n    var bundled_proc = path.resolve(__dirname, '../../../../', module_name);\n    if (fs.existsSync(path.join(bundled_proc, 'package.json'))) {\n      proc_path = bundled_proc;\n      package_json_path = path.join(bundled_proc, 'package.json');\n    } else {\n      Common.printError(cst.PREFIX_MSG_MOD_ERR + 'Module ' + module_name + ' package.json not found, skipping');\n      return cb();\n    }\n  }";
+                n_txt = n_txt.replace(prev_patch, target_patch);
+            } else {
                 n_txt = n_txt.replace(old_start, new_start);
+            }
+
+            let old_start_mod = "function StartModule(CLI, opts, cb) {\n  if (!opts.cmd && !opts.package) throw new Error('module package.json not defined');\n  if (!opts.development_mode) opts.development_mode = false;\n\n  var package_json = require(opts.cmd || opts.package);";
+            let new_start_mod = "function StartModule(CLI, opts, cb) {\n  if (!opts.cmd && !opts.package) throw new Error('module package.json not defined');\n  if (!opts.development_mode) opts.development_mode = false;\n\n  var package_json;\n  try {\n    package_json = require(opts.cmd || opts.package);\n  } catch (e) {\n    Common.printError(cst.PREFIX_MSG_MOD_ERR + 'Failed to load module package.json: ' + (opts.cmd || opts.package));\n    return cb(e);\n  }";
+            if !n_txt.contains("var package_json;\n  try {") {
+                n_txt = n_txt.replace(old_start_mod, new_start_mod);
             }
 
             if n_txt != orig {

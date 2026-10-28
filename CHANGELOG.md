@@ -6,7 +6,24 @@
 
 ## [未發布]
 
-### 🛠️ 強化可攜 Node 工具 (node-portable) 與更新工具 (updater) 之 PM2 全域接管與日誌輪替模組
+### 🐛 修復舊全域殘留 @jessety/pm2-logrotate 導致 PM2 啟動 MODULE_NOT_FOUND 錯誤
+
+- **根本原因排查**：
+  - 在既有 Windows 伺服器環境中（如先前曾使用 `pm2-installer` 部署之主機），`C:\ProgramData\pm2\home\module_conf.json` 曾登記舊全域模組 `@jessety/pm2-logrotate`。
+  - 當工具自舊全域遷移 `module_conf.json` 至 `<根目錄>\.pm2\` 後，PM2 Daemon 在啟動時會讀取 `module-db-v2` 嘗試載入所有登記之模組。
+  - 由於新可攜版環境下並不存在 `@jessety/pm2-logrotate` 目錄（且未連網下載），PM2 `NPM.js` 的 `StartModule` 在執行 `require(package.json)` 時丟出未捕獲之 `MODULE_NOT_FOUND` 異常，導致 `pm2 -v` 初始化直接崩潰（回傳碼 1）。
+- **修復與防禦強化**：
+  - **自動清理與設定遷移 (`wire_bundled_pm2_logrotate`)**：
+    - 自動清除 `module_conf.json` 中之 `@jessety/pm2-logrotate` 與 `pm2-logrotate-ext` 鍵值，並將其既有自訂參數（`max_size`、`retain`、`dateFormat` 等）完整繼承至官方標準 `pm2-logrotate`。
+    - 遍歷 `module-db-v2`，若在 `.pm2\modules` 與 `node\node_modules` 均未發現模組 `package.json`，自動將該孤立項目自 `module-db-v2` 剔除，防止 PM2 啟動崩潰。
+  - **PM2 模組載入器防禦性修補 (`NPM.js`)**：
+    - 修補 `NPM.js` 的 `start` 函式，當模組路徑不存在且便攜版目錄亦無此模組時，安全跳過並呼叫回呼函式，不再傳入無效路徑。
+    - 修補 `StartModule` 函式，以 `try/catch` 封裝 `require(opts.cmd)`，避免 require 異常中斷主進程。
+  - **背景服務守護同步 (`pm2_service_runner.js` / `service_runner.js`)**：
+    - 在服務背景巡檢與預掛載時同步執行舊全域與孤立模組清理。
+  - **單元測試防護**：
+    - 更新 `test_wire_bundled_pm2_logrotate_idempotent` 測試，模擬包含 `@jessety/pm2-logrotate` 與孤立模組之情境，斷言自動淨化與設定遷移 100% 成功。
+
 
 - **背景與目的**：解決在 Windows Server 2016 等既有全域已安裝 Node.js (v22) 與 global PM2 的伺服器環境中，可攜版工具未能自動辨識已安裝根目錄、字型缺少 Emoji 導致方框缺字、舊全域 Node/PM2 環境變數與服務衝突，以及便攜版內建之 `pm2-logrotate` 顯示為「尚未安裝」之問題。
 - **具體改進項目**：
@@ -29,8 +46,10 @@
     - 修補 PM2 之 `NPM.js` 模組啟動函式，若 `.pm2\modules` 缺失自動退回便攜版目錄載入。
     - 改善前端環境狀態顯示，明確呈現 `3.0.0（便攜版內建，已掛載啟用）`。
   - **系統升級全域 Node 防護說明文件化**：
-    - 於 `node-portable/README.md` 詳細增補「系統全域 Node.js 因資安要求升級時的影響說明」專章，闡述 WinSW 服務硬鎖定、`pm2.cmd` 前置注入、Daemon/子程序 `process.execPath` 繼承與 60 秒自癒機制。
-    - 於專案根目錄 `README.md` 補齊 `node-portable/` 模組職責說明、一鍵建置批次指令與發布執行檔清單。
+    - 於 `updater/README.md` 詳細增補「系統全域 Node.js 因資安要求升級時的影響說明」專章，闡述 WinSW 服務硬鎖定、`pm2.cmd` 前置注入、Daemon/子程序 `process.execPath` 繼承與 60 秒自癒機制。
+    - 於 `updater/service/README.md` 同步補齊 WinSW 原生系統服務之四重安全防護機制與便攜版內建 `pm2-logrotate` 預先掛載說明。
+    - 於 `node-portable/README.md` 詳細增補「系統全域 Node.js 因資安要求升級時的影響說明」專章。
+    - 於專案根目錄 `README.md` 補齊 `updater/` 與 `node-portable/` 模組職責說明、一鍵建置批次指令與發布執行檔清單。
     - 同步更新 `updater/` 內部之 PM2 日誌輪替直接掛載機制與單元測試。
   - **單元測試防護**：
     - 新增 `test_clean_and_prepend_path_replaces_global_node_and_pm2` 與 `test_wire_bundled_pm2_logrotate_idempotent` 測試，確保環境變數替換與模組掛載之正確性與冪等性。
@@ -75,38 +94,6 @@
   - 基礎服務環境包（`node.zip`）自動輸出至 `dist/base/`。
   - 自動將最新版 `*更新說明*.txt` 複製同步至 `dist/patch/`。
   - 支援 `--output-dir` 參數自訂基底目錄時維持同等分流架構。
-
-
-## [未發布]
-
-### 🛠️ 強化可攜 Node 工具 (node-portable) 與更新工具 (updater) 之 PM2 全域接管與日誌輪替模組
-
-- **背景與目的**：解決在 Windows Server 2016 等既有全域已安裝 Node.js (v22) 與 global PM2 的伺服器環境中，可攜版工具未能自動辨識已安裝根目錄、字型缺少 Emoji 導致方框缺字、舊全域 Node/PM2 環境變數與服務衝突，以及便攜版內建之 `pm2-logrotate` 顯示為「尚未安裝」之問題。
-- **具體改進項目**：
-  - **Windows Server 2016 相容性與介面圖示修復**：
-    - 將 `<h1>` 與 `<h2>` 標題之綠色方塊 Emoji 替換為與應用程式圖示一致的內嵌向量 SVG 圖示。
-    - 將核取方塊與狀態文字之 Unicode 11.0/12.0 圖示替換為向下相容之 Unicode 4.0 符號（如 `⚡`、`⚙️`、`🏠`），根除舊版 Windows Server 上的字型豆腐方塊缺字。
-  - **安裝根目錄智慧自動偵測**：
-    - 啟動時自動依序探測 `PM2_HOME`、`PATH`（尋找包含 `node.exe` 之目錄上層）、系統預設目錄（`D:\DEV`、`C:\AppServ`），精準載入已安裝環境。
-  - **系統與使用者環境變數全面接管**：
-    - 同時清理並前置注入系統（`HKLM`）與使用者（`HKCU`）`PATH`，徹底剔除舊全域 Node/PM2 路徑。
-    - 移除舊版 `pm2-installer` 遺留之系統與使用者變數 `PM2_INSTALL_DIRECTORY` 與 `PM2_SERVICE_DIRECTORY`。
-    - 統一設定系統與使用者環境變數 `PM2_HOME` 為 `<根目錄>\.pm2`。
-  - **舊全域 PM2 服務與殘留進程清理**：
-    - 安裝前自動查詢、停止並刪除舊全域 `pm2.exe` Windows 系統服務。
-    - 終止非目標可攜版路徑之 Node.js、PM2 Daemon 及殘留 FastCGI 進程。
-    - 自動清理與重寫 `dump.pm2`，將其內殘留之舊全域 node.exe 解譯器路徑重設為可攜版 `node`，並修正 PID 路徑至統一 `.pm2\pids`。
-  - **便攜版內建 `pm2-logrotate` 模組直接掛載與啟動**：
-    - 新增 `logrotate_bundled_version`，讀取 `<根目錄>\node\node_modules\pm2-logrotate\package.json`（版本 3.0.0）。
-    - 實作 `wire_bundled_pm2_logrotate` 與 `pm2_service_runner.js` 之 `wireBundledLogrotate`，直接將便攜版 `node_modules\pm2-logrotate\app.js` 掛載至 `.pm2\modules\pm2-logrotate`，並於 `.pm2\module_conf.json` 寫入預設設定（啟用 `compress: true`）。
-    - 修補 PM2 之 `NPM.js` 模組啟動函式，若 `.pm2\modules` 缺失自動退回便攜版目錄載入。
-    - 改善前端環境狀態顯示，明確呈現 `3.0.0（便攜版內建，已掛載啟用）`。
-  - **系統升級全域 Node 防護說明文件化**：
-    - 於 `node-portable/README.md` 詳細增補「系統全域 Node.js 因資安要求升級時的影響說明」專章，闡述 WinSW 服務硬鎖定、`pm2.cmd` 前置注入、Daemon/子程序 `process.execPath` 繼承與 60 秒自癒機制。
-    - 於專案根目錄 `README.md` 補齊 `node-portable/` 模組職責說明、一鍵建置批次指令與發布執行檔清單。
-    - 同步更新 `updater/` 內部之 PM2 日誌輪替直接掛載機制與單元測試。
-  - **單元測試防護**：
-    - 新增 `test_clean_and_prepend_path_replaces_global_node_and_pm2` 與 `test_wire_bundled_pm2_logrotate_idempotent` 測試，確保環境變數替換與模組掛載之正確性與冪等性。
 
 
 ### 🧹 全面移除舊版 Python 原始碼，邁向純 Rust (Tauri 2) 架構

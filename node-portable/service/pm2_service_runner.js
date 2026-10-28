@@ -88,9 +88,26 @@ function wireBundledLogrotate() {
     if (fs.existsSync(confPath)) {
       try { conf = JSON.parse(fs.readFileSync(confPath, 'utf8')) || {}; } catch (e) { conf = {}; }
     }
+    const legacyLr = conf['@jessety/pm2-logrotate'] || conf['pm2-logrotate-ext'] || {};
+    delete conf['@jessety/pm2-logrotate'];
+    delete conf['pm2-logrotate-ext'];
+
     if (!conf['module-db-v2'] || typeof conf['module-db-v2'] !== 'object') {
       conf['module-db-v2'] = {};
     }
+    delete conf['module-db-v2']['@jessety/pm2-logrotate'];
+    delete conf['module-db-v2']['pm2-logrotate-ext'];
+
+    for (const modName of Object.keys(conf['module-db-v2'])) {
+      if (modName === 'pm2-logrotate') continue;
+      const c1 = path.join(pm2Home, 'modules', modName, 'node_modules', modName, 'package.json');
+      const c2 = path.join(pm2Home, 'modules', modName, 'package.json');
+      const c3 = path.join(NODE_DIR, 'node_modules', modName, 'package.json');
+      if (!fs.existsSync(c1) && !fs.existsSync(c2) && !fs.existsSync(c3)) {
+        delete conf['module-db-v2'][modName];
+      }
+    }
+
     if (!conf['module-db-v2']['pm2-logrotate']) {
       conf['module-db-v2']['pm2-logrotate'] = { uid: null, gid: null };
     }
@@ -103,7 +120,7 @@ function wireBundledLogrotate() {
       rotateInterval: '0 0 * * *',
       rotateModule: true
     };
-    conf['pm2-logrotate'] = Object.assign({}, defaults, conf['pm2-logrotate'] || {}, { compress: true });
+    conf['pm2-logrotate'] = Object.assign({}, defaults, legacyLr, conf['pm2-logrotate'] || {}, { compress: true });
     fs.writeFileSync(confPath, JSON.stringify(conf, null, 2), 'utf8');
     return true;
   } catch (e) {
