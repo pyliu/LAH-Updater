@@ -6,7 +6,13 @@
 
 ## [未發布]
 
-## [未發布]
+### 🧹 移除舊版英文建置批次檔 (build_uninstaller.bat)
+- **統一使用標準繁體中文建置指令**：
+  - 移除專案根目錄之舊英文別名批次檔 `build_uninstaller.bat`，全面統一使用標準繁體中文命名 `建立解除安裝工具.bat`。
+  - 移除 `uninstaller/` 子目錄內殘留之 `build_uninstaller.bat`，子目錄內建置統一使用 `build.bat` 或 `build.py`。
+  - 清理專案結構，維持目錄命名與操作規範之一致性與清晰度。
+
+
 
 ### 📦 原始碼打包工具 (pack.py) 支援分流輸出 (`patch/`、`node_modules/`、`base/`)
 - **預設輸出基底導向專案 `dist/` 並分流歸檔**：
