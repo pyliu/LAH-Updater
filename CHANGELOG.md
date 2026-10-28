@@ -33,7 +33,8 @@
 - **介面效能與版面調校**：
   - 實作初始清單 0 延遲同步渲染，啟動瞬間立即可見完整版面，消除背景非同步掃描造成的延遲感。
   - 視窗預設高度設定為 665px，密合卡片與底端操作按鈕，消除多餘空白。
-- **建置管線對齊規範**：
+- **建置管線對齊規範與專屬圖示更新**：
+  - 重新繪製具備深翡翠綠底座、系統工程齒輪、向上躍升升級箭頭與同步光環之專屬 ICO/PNG 圖示，替換舊有即時通圖示。
   - 更新 `updater/build.py` 與 `updater/build.bat`，自動執行 `cargo build --release` 並發布至 `dist/智慧控管與監控系統 - 自動更新工具.exe`。
   - `.gitignore` 新增 `updater/src-tauri/target/`、`updater/src-tauri/gen/`。
 
@@ -41,7 +42,8 @@
 - **底層核心完全改以 Rust 實作**：
   - 以 Tauri 2 + 純靜態 HTML/JS 完整移植 Python 既有移除功能，包含停止/刪除 Windows 服務（`LAH_PM2_Service`、`Apache2.4`）、精確終止殘留進程（`pm2 kill` 與 PowerShell 樹狀行程刪除）、清理開機自啟動與工作排程、自系統與使用者 `PATH` 環境變數剔除並廣播 `WM_SETTINGCHANGE`、Apache PHP 轉發設定防護性註銷與語法驗證、解除檔案唯讀屬性強健刪除、以及安裝根目錄深度清理（嚴格保護 `_LAH_Backup_*.zip`）。
   - 產出之 Windows 單一執行檔體積縮減至 10.68 MB，免去 Python 解壓暫存目錄，達成隨點隨開與零防毒誤判。
-- **建置管線對齊 backuper 規範**：
+- **建置管線對齊 backuper 規範與專屬圖示更新**：
+  - 重新繪製具備警戒深紅底座、系統齒輪解構、清理垃圾桶與立體粗體移除叉號之專屬 ICO/PNG 圖示，替換舊有即時通圖示。
   - 新增 `uninstaller/build.py` 與 `uninstaller/build.bat`，自動執行 `cargo build --release` 並將二進位檔直接發布為 `dist/智慧控管與監控系統 - 自動移除工具.exe`。
   - 專案根目錄之 `建立解除安裝工具.bat` 與 `build_uninstaller.bat` 同步轉發至最新 Rust 建置腳本。
   - `.gitignore` 新增 `uninstaller/src-tauri/target/`、`uninstaller/src-tauri/gen/`。
