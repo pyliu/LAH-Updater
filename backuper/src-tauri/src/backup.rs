@@ -21,6 +21,7 @@ pub const BACKUP_ITEMS: &[(&str, &str)] = &[
     ("php7/php.ini", "php7/php.ini"),
     ("Apache24/conf/httpd.conf", "Apache24/conf/httpd.conf"),
     ("logs", "logs"),
+    ("instantclient_11_2", "instantclient_11_2"),
 ];
 
 /// .pm2 項目：來源目錄由 `resolve_pm2_dir` 決定。
@@ -68,6 +69,33 @@ fn resolve_zip_path(dest: &Path) -> io::Result<PathBuf> {
     }
 }
 
+fn is_target_php_dll(name: &str) -> bool {
+    let lower = name.to_ascii_lowercase();
+    if !lower.ends_with(".dll") {
+        return false;
+    }
+    lower.starts_with("php_oci8")
+        || lower.starts_with("php_pdo_sqlsrv")
+        || lower.starts_with("php_sqlsrv")
+}
+
+fn collect_php_ext_dlls(root: &Path, php_dir_name: &str, items: &mut Vec<(PathBuf, String)>) {
+    let ext_dir = root.join(php_dir_name).join("ext");
+    if let Ok(entries) = fs::read_dir(&ext_dir) {
+        for entry in entries.filter_map(Result::ok) {
+            let path = entry.path();
+            if path.is_file() {
+                if let Some(file_name) = path.file_name().and_then(|n| n.to_str()) {
+                    if is_target_php_dll(file_name) {
+                        let arcname = format!("{}/ext/{}", php_dir_name, file_name);
+                        items.push((path, arcname));
+                    }
+                }
+            }
+        }
+    }
+}
+
 fn collect_items(root: &Path) -> Vec<(PathBuf, String)> {
     let mut items: Vec<(PathBuf, String)> = BACKUP_ITEMS
         .iter()
@@ -77,6 +105,8 @@ fn collect_items(root: &Path) -> Vec<(PathBuf, String)> {
     for name in PM2_ITEMS {
         items.push((pm2.join(name), format!(".pm2/{}", name)));
     }
+    collect_php_ext_dlls(root, "php7", &mut items);
+    collect_php_ext_dlls(root, "php85", &mut items);
     items
 }
 

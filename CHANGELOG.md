@@ -47,7 +47,14 @@
   - `.gitignore` 新增 `uninstaller/src-tauri/target/`、`uninstaller/src-tauri/gen/`。
 
 ### 📦 備份功能獨立為 `backuper/`（Tauri 2）
-- 新增 `backuper/`：以 Tauri 2 + 純靜態 HTML/JS 實作系統重要資料備份與還原，備份清單與原 uninstaller 一致；還原前檢查服務已停止、防 Zip Slip，並自動建立 `restore_undo_<時間>.zip` 復原點。
+- 新增 `backuper/`：以 Tauri 2 + 純靜態 HTML/JS 實作系統重要資料備份與還原；還原前檢查服務已停止、防 Zip Slip，並自動建立 `restore_undo_<時間>.zip` 復原點。
+- **擴充關鍵資料庫連線依賴備份**：
+  - 自動偵測並打包 `php7/ext/` 與 `php85/ext/` 底下之 OCI8 與 MSSQL 擴充套件 DLL（`php_oci8*.dll`、`php_pdo_sqlsrv*.dll`、`php_sqlsrv*.dll`）。
+  - 自動完整打包 Oracle 核心驅動資料夾 `instantclient_11_2/`。
+- **專屬科技藍備份與還原圖示**：
+  - 重新繪製具備三層資料庫磁碟、雙向循環備份還原箭頭與安全守護意象之專屬 ICO/PNG 圖示，替換舊有即時通圖示。
+- **視窗版面空間最佳化（彈現式日誌視窗）**：
+  - 下方執行進度條與黑色訊息日誌區塊改為浮動彈現式對話框（Modal Overlay），日常維持精簡緊湊雙卡片佈局（高度 480px、無任何垂直捲軸）；按下「立即備份」或「還原到安裝根目錄」時才平滑彈出顯示進度與即時日誌，支援完成後點擊按鈕或 Esc 關閉，亦提供「📋 查看最新日誌」按鈕供隨時調閱。
 - `uninstaller.py` 移除備份功能（`backup_critical_data`、備份進度視窗模式、「立即備份」按鈕、備份勾選框），改為提示使用者先使用 backuper；仍保留 `_LAH_Backup_*.zip` 於根目錄清理時不被刪除。
 - `.gitignore` 新增 `backuper/src-tauri/target/`、`backuper/src-tauri/gen/`。
 
