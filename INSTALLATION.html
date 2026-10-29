@@ -694,7 +694,7 @@
         <h1 class="cover-title">桃園市各地政事務所<br>智慧控管與監控系統 (LAH)</h1>
         <div class="cover-subtitle">伺服器端安裝與版本升級標準操作手冊 (SOP)</div>
         <div class="cover-desc">
-          本手冊專為各地政事務所資訊系統管理師編寫，詳述智慧控管伺服器端於「原機版本升級 (In-place Upgrade)」與「全新伺服器安裝 (Clean Install)」兩種實務情境之標準作業程序。內容完整涵蓋事前 VM 快照防禦、關鍵 SQLite 資料庫封裝備份、勾選項精準核對、五大服務連接埠自動巡檢及異常雙重還原防線。
+          本手冊專為各地政事務所資訊系統管理師編寫，詳述智慧控管伺服器端於「原機版本升級 (In-place Upgrade)」與「全新伺服器安裝 (Clean Install)」兩種實務情境之標準作業程序。內容完整涵蓋事前 VM 快照防禦、關鍵 SQLite 資料庫封裝備份、Node/PM2 零全域污染沙盒隔離架構（自動附帶專屬維運終端 lah-cmd.bat）、Apache 與 PHP 組態自癒清理、五大服務連接埠自動巡檢及異常雙重還原防線。
         </div>
       </div>
 
@@ -771,6 +771,11 @@
           <td>原機徹底重裝時使用。安全停止 Windows 服務、終止佔用行程並乾淨移除目錄。</td>
         </tr>
         <tr>
+          <td><strong>智慧控管與監控系統 - 可攜 Node 安裝工具.exe</strong></td>
+          <td><span class="badge badge-opt">專屬環境</span></td>
+          <td>獨立部署或修復綠色版 Node 16 與 PM2 守護服務，保證零全域污染。</td>
+        </tr>
+        <tr>
           <td><strong>MicrosoftEdgeWebView2RuntimeInstallerX64.exe</strong></td>
           <td><span class="badge badge-opt">系統依賴</span></td>
           <td>微軟 WebView2 離線安裝包。若在純淨伺服器點擊工具無反應時請優先安裝。</td>
@@ -815,9 +820,9 @@
     <div class="step-box avoid-break">
       <div class="step-header">
         <span class="step-number">3</span>
-        <span class="step-title">原機安裝請先移除舊版全域 Node.js —— 杜絕環境衝突</span>
+        <span class="step-title">Node 與 PM2 零全域污染沙盒隔離架構 (免移除全域 Node)</span>
       </div>
-      <p>新架構全面採用系統內建的<strong>「綠色可攜版 Node.js (node.zip)」</strong>。若主機原先曾以 Windows MSI 安裝全域 Node.js，請先至「控制台 ➔ 程式和功能」將舊版 Node.js 完整解除安裝，避免全域 PATH 與 PM2 舊服務干擾。</p>
+      <p>最新架構已全面實作沙盒隔離機制。工具不會更動系統登錄檔 <code>Path</code> 與 <code>PM2_HOME</code>，<strong>無須移除本機全域已安裝的 Node.js</strong>（如 Node 20/22）。更新完成後自動於安裝根目錄產出 <strong><code>lah-cmd.bat</code></strong> 專屬維運終端，關閉視窗即自動釋放環境變數。</p>
     </div>
 
     <div class="alert alert-warning avoid-break">
@@ -1129,6 +1134,14 @@
       <li>檢視右側即時通訊看板，確認連線狀態圖示為<strong>綠燈（連線中）</strong>，歷史公告均完整保留。</li>
     </ol>
 
+    <div class="alert alert-success avoid-break" style="margin: 6px 0 8px 0;">
+      <div class="alert-icon">💻</div>
+      <div>
+        <strong>專屬沙盒維運終端 (lah-cmd.bat)：</strong><br>
+        若需手動檢視或重啟 PM2 守護行程，雙擊執行安裝根目錄 <code>C:\AppServ\lah-cmd.bat</code>，即可在隔離環境執行 <code>pm2 list</code>、<code>pm2 restart all</code> 或 <code>pm2 logs</code>，無需手動配置系統環境變數。
+      </div>
+    </div>
+
     <h2>🔄 8. 異常排除與雙重防護回滾指引 (Rollback SOP)</h2>
     <div class="alert alert-info avoid-break">
       <div class="alert-icon">🛡️</div>
@@ -1186,8 +1199,8 @@
           <td></td>
         </tr>
         <tr>
-          <td><span class="chk-box"></span> <strong>舊版 Node 卸載：</strong>原機安裝已自控制台完整移除舊版全域 Node.js。</td>
-          <td>□ 符合 □ 無舊版</td>
+          <td><span class="chk-box"></span> <strong>Node/PM2 沙盒確認：</strong>確認採用零全域污染架構，無須卸載全域 Node，且根目錄已自動產出 <code>lah-cmd.bat</code>。</td>
+          <td>□ 符合 □ 已確認</td>
           <td></td>
         </tr>
         <tr>
