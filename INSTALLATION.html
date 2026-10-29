@@ -15,6 +15,7 @@
   }
 
   :root {
+    --font-scale: 1.15; /* 預設 "中" (+15%) */
     --primary: #0284c7;
     --primary-dark: #0369a1;
     --primary-light: #f0f9ff;
@@ -36,8 +37,8 @@
     font-family: "Microsoft JhengHei UI", "Microsoft JhengHei", "Segoe UI", -apple-system, BlinkMacSystemFont, sans-serif;
     color: var(--text-main);
     background: var(--bg-page);
-    line-height: 1.5;
-    font-size: 10pt;
+    line-height: 1.55;
+    font-size: calc(10pt * var(--font-scale));
     margin: 0;
     padding: 0;
   }
@@ -87,6 +88,45 @@
     background: #334155;
   }
 
+  .header-actions {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+
+  .font-scale-control {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12.5px;
+    color: #cbd5e1;
+  }
+
+  .font-scale-control label {
+    cursor: pointer;
+    white-space: nowrap;
+    user-select: none;
+  }
+
+  .font-scale-control select {
+    background: #1e293b;
+    color: #f8fafc;
+    border: 1px solid #475569;
+    border-radius: 4px;
+    padding: 4px 8px;
+    font-size: 12px;
+    font-family: inherit;
+    font-weight: 600;
+    cursor: pointer;
+    outline: none;
+    transition: all 0.15s;
+  }
+
+  .font-scale-control select:hover, .font-scale-control select:focus {
+    border-color: #38bdf8;
+    background: #334155;
+  }
+
   .btn-print {
     background: #0284c7;
     color: #ffffff;
@@ -107,7 +147,7 @@
   }
 
   .document-container {
-    max-width: 900px;
+    max-width: 960px;
     margin: 24px auto;
     background: #ffffff;
     box-shadow: 0 4px 16px rgba(0,0,0,0.06);
@@ -149,7 +189,7 @@
     display: inline-block;
     background: var(--primary);
     color: #ffffff;
-    font-size: 8.5pt;
+    font-size: calc(8.5pt * var(--font-scale));
     font-weight: 700;
     padding: 4px 14px;
     border-radius: 20px;
@@ -158,7 +198,7 @@
   }
 
   .cover-title {
-    font-size: 24pt;
+    font-size: calc(24pt * var(--font-scale));
     font-weight: 900;
     color: #0f172a;
     line-height: 1.25;
@@ -166,14 +206,14 @@
   }
 
   .cover-subtitle {
-    font-size: 13.5pt;
+    font-size: calc(13.5pt * var(--font-scale));
     font-weight: 700;
     color: var(--primary-dark);
     margin: 0 0 12px 0;
   }
 
   .cover-desc {
-    font-size: 9.5pt;
+    font-size: calc(9.5pt * var(--font-scale));
     color: #475569;
     line-height: 1.6;
     margin-bottom: 16px;
@@ -209,7 +249,7 @@
 
   .highlight-card h4 {
     margin: 0 0 4px 0;
-    font-size: 10pt;
+    font-size: calc(10pt * var(--font-scale));
     color: #0f172a;
     display: flex;
     align-items: center;
@@ -218,7 +258,7 @@
 
   .highlight-card p {
     margin: 0;
-    font-size: 8.5pt;
+    font-size: calc(8.5pt * var(--font-scale));
     color: var(--text-muted);
     line-height: 1.45;
   }
@@ -231,7 +271,7 @@
     display: grid;
     grid-template-columns: repeat(2, 1fr);
     gap: 10px;
-    font-size: 8.5pt;
+    font-size: calc(8.5pt * var(--font-scale));
     margin-top: 12px;
   }
 
@@ -251,7 +291,7 @@
     border-top: 1px solid var(--border);
     margin-top: 16px;
     padding-top: 10px;
-    font-size: 8pt;
+    font-size: calc(8pt * var(--font-scale));
     color: var(--text-muted);
     font-weight: 500;
   }
@@ -264,7 +304,7 @@
     border-bottom: 2px solid var(--border-light);
     padding-bottom: 5px;
     margin-bottom: 12px;
-    font-size: 8pt;
+    font-size: calc(8pt * var(--font-scale));
     color: var(--text-muted);
   }
 
@@ -280,14 +320,14 @@
     margin-top: 16px;
     border-top: 1px solid var(--border-light);
     padding-top: 4px;
-    font-size: 7.5pt;
+    font-size: calc(7.5pt * var(--font-scale));
     color: #94a3b8;
     display: flex;
     justify-content: space-between;
   }
 
   h2 {
-    font-size: 13pt;
+    font-size: calc(13pt * var(--font-scale));
     color: #0f172a;
     border-left: 4.5px solid var(--primary);
     padding-left: 8px;
@@ -298,7 +338,7 @@
   }
 
   h3 {
-    font-size: 10.5pt;
+    font-size: calc(10.5pt * var(--font-scale));
     color: var(--primary-dark);
     margin: 12px 0 6px 0;
     padding-bottom: 2px;
@@ -308,6 +348,11 @@
   p {
     margin: 4px 0 6px 0;
     color: #334155;
+    font-size: calc(9.5pt * var(--font-scale));
+  }
+
+  ol, ul {
+    font-size: calc(9.5pt * var(--font-scale));
   }
 
   /* 提示框 */
@@ -315,7 +360,7 @@
     border-radius: 6px;
     padding: 8px 12px;
     margin: 8px 0;
-    font-size: 8.5pt;
+    font-size: calc(8.5pt * var(--font-scale));
     line-height: 1.5;
     display: flex;
     gap: 8px;
@@ -323,7 +368,7 @@
   }
 
   .alert-icon {
-    font-size: 11pt;
+    font-size: calc(11pt * var(--font-scale));
     line-height: 1;
     flex-shrink: 0;
     margin-top: 1px;
@@ -374,9 +419,9 @@
     background: var(--primary);
     color: #ffffff;
     font-weight: 700;
-    font-size: 8pt;
-    width: 20px;
-    height: 20px;
+    font-size: calc(8pt * var(--font-scale));
+    width: calc(20px * var(--font-scale));
+    height: calc(20px * var(--font-scale));
     border-radius: 50%;
     display: flex;
     align-items: center;
@@ -397,7 +442,7 @@
   }
 
   .step-title {
-    font-size: 9.5pt;
+    font-size: calc(9.5pt * var(--font-scale));
     font-weight: 700;
     color: #0f172a;
   }
@@ -407,7 +452,7 @@
     width: 100%;
     border-collapse: collapse;
     margin: 6px 0 8px 0;
-    font-size: 8.5pt;
+    font-size: calc(8.5pt * var(--font-scale));
   }
 
   th, td {
@@ -430,7 +475,7 @@
     display: inline-block;
     padding: 2px 6px;
     border-radius: 4px;
-    font-size: 7.5pt;
+    font-size: calc(7.5pt * var(--font-scale));
     font-weight: 700;
   }
 
@@ -479,7 +524,7 @@
 
   .screenshot-caption {
     margin-top: 4px;
-    font-size: 8pt;
+    font-size: calc(8pt * var(--font-scale));
     font-weight: 600;
     color: #475569;
     display: flex;
@@ -535,6 +580,10 @@
      完全適配 A4 縱向 8 頁規格
      ============================================================ */
   @media print {
+    :root {
+      --font-scale: 1 !important;
+    }
+
     @page {
       size: A4 portrait;
       margin: 12mm 14mm 14mm 14mm;
@@ -618,9 +667,19 @@
     <a href="#sec-verify">五大埠驗證</a>
     <a href="#sec-checklist">附錄檢核表</a>
   </nav>
-  <button class="btn-print" onclick="window.print()">
-    <span>🖨️ 列印 / 另存為 PDF</span>
-  </button>
+  <div class="header-actions">
+    <div class="font-scale-control">
+      <label for="font_scale_select">字體大小：</label>
+      <select id="font_scale_select" onchange="setFontScale(this.value)">
+        <option value="1">一般</option>
+        <option value="1.15" selected>中 [+15%]</option>
+        <option value="1.25">大 [+25%]</option>
+      </select>
+    </div>
+    <button class="btn-print" onclick="window.print()">
+      <span>🖨️ 列印 / 另存為 PDF</span>
+    </button>
+  </div>
 </header>
 
 <main class="document-container">
@@ -1198,6 +1257,29 @@
 </div>
 
 <script>
+  // 字體大小控制 (一般 1.0, 中 1.15 [預設], 大 1.25)
+  function setFontScale(scale) {
+    document.documentElement.style.setProperty('--font-scale', scale);
+    try {
+      localStorage.setItem('lah_install_font_scale', scale);
+    } catch (e) {}
+  }
+
+  // 頁面初始化套用預設值 "中" (1.15) 或用戶歷史紀錄
+  (function initFontScale() {
+    var defaultScale = '1.15';
+    var savedScale = null;
+    try {
+      savedScale = localStorage.getItem('lah_install_font_scale');
+    } catch (e) {}
+    var activeScale = savedScale || defaultScale;
+    var selectEl = document.getElementById('font_scale_select');
+    if (selectEl) {
+      selectEl.value = activeScale;
+    }
+    setFontScale(activeScale);
+  })();
+
   // 圖片點擊放大 Lightbox 實作
   document.querySelectorAll('.screenshot-card img').forEach(function(img) {
     img.addEventListener('click', function(e) {
