@@ -6,6 +6,25 @@
 
 ## [未發布]
 
+### 🎨 重新設計備份工具 (backuper) 專屬圖示並升級建置管線
+
+- **修改目的**：
+  - 全面重新設計自動備份與還原工具（backuper）應用程式圖示，捨棄舊版平面打勾徽章圖樣，改為高度契合資料庫備份還原意象之 2.5D 微立體雙向循環儲存樞紐圖示。
+  - 對齊 LAH-Updater 維運三件套整體視覺語彙（更新：翡翠綠、備份：科技藍、移除：警戒紅），採用 Squircle 圓角科技深藍底座搭配高光青天藍邊框。
+  - 解決 Cargo 建置快取未自動偵測圖示變更之問題，於 `build.rs` 注入依賴宣告與標準 UAC / Common-Controls 清單，並重新編譯發布二進位執行檔。
+- **具體修改項目**：
+  - **圖示重新設計 (`backuper/src-tauri/icons/`)**：
+    - 重新繪製 512x512 高解析度母圖與全尺寸點陣圖（`icon.png`、`128x128@2x.png`、`128x128.png`、`32x32.png`）。
+    - 採用現代 2.5D 等角微立體視角，融合三層深藍金屬光澤資料庫磁碟盤、同心雷射軌道刻紋、主軸心指示燈與流暢順逆時針雙向環抱之青天藍發光循環箭頭。
+    - 產出包含 16x16、24x24、32x32、48x48、64x64、128x128、256x256 之標準 Windows 多解析度 `icon.ico`。
+  - **建置管線升級與自動化工具 (`backuper/src-tauri/build.rs` & `generate_icons.ps1`)**：
+    - 於 `build.rs` 新增 `cargo:rerun-if-changed` 追蹤 `icon.ico` 與 `tauri.conf.json`，並配置 WindowsAttributes（Common-Controls v6.0 與 requireAdministrator UAC 資訊清單）。
+    - 建立確定性圖示自動生成腳本 `backuper/generate_icons.ps1`，便於未來自動重新產出全尺寸圖示。
+    - 執行 `backuper/build.py` 重新編譯產出最新 `dist/智慧控管與監控系統 - 備份與還原工具.exe`（9.54 MB），並實機完成二進位檔內嵌圖示提取與外觀驗證。
+- **相容性說明**：
+  - 僅更新應用程式視覺圖示與建置清單，不變更任何備份還原邏輯、壓縮包路徑或跨系統介面契約。
+  - 最新執行檔已覆蓋至 `LAH-Updater/dist/` 目錄。
+
 ### 📖 新增全系統架構純離線手冊 (README.html) 與更新工具單元測試擴充
 
 - **背景與目的**：
