@@ -57,12 +57,24 @@ pub fn ensure_php_ini_configured(php_dir: &Path, is_php85: bool, log_fn: &dyn Fn
     let orig = content.clone();
     let ext_fwd = php_dir.join("ext").to_string_lossy().replace('\\', "/");
 
-    // 1. extension_dir
+    // 1. extension_dir (清理所有殘留設定並保證僅保留單一精準之 extension_dir)
     let re_ext = Regex::new(r"(?m)^\s*;?\s*extension_dir\s*=.*$").unwrap();
     if re_ext.is_match(&content) {
-        content = re_ext.replace(&content, format!(r#"extension_dir = "{}""#, ext_fwd)).to_string();
+        let mut first = true;
+        let mut lines = Vec::new();
+        for line in content.lines() {
+            if re_ext.is_match(line) {
+                if first {
+                    lines.push(format!(r#"extension_dir = "{}""#, ext_fwd));
+                    first = false;
+                }
+            } else {
+                lines.push(line.to_string());
+            }
+        }
+        content = lines.join("\r\n");
     } else {
-        content.push_str(&format!(r#"\nextension_dir = "{}"\n"#, ext_fwd));
+        content.push_str(&format!(r#"\r\nextension_dir = "{}"\r\n"#, ext_fwd));
     }
 
     // 2. 常用與必備擴充功能啟用 (檢查 ext 目錄實際存在的 DLL)
@@ -213,6 +225,17 @@ pub fn configure_apache_mod_php7(apache_dir: &Path, root_dir: &Path, php7_dir: O
         content = re_idx.replace(&content, "DirectoryIndex index.php index.html").to_string();
     }
 
+    // 4.1 校正日誌路徑 (ErrorLog / CustomLog rotatelogs) 避免舊環境硬編碼
+    let apache_logs_fwd = apache_dir.join("logs").to_string_lossy().replace('\\', "/");
+    let re_errlog = Regex::new(r#"(?m)^\s*ErrorLog\s+"\|bin/rotatelogs\.exe\s+-l\s+[a-zA-Z]:/[^"]*?/logs/(error\.[^"]+)""#).unwrap();
+    if re_errlog.is_match(&content) {
+        content = re_errlog.replace_all(&content, format!(r#"ErrorLog "|bin/rotatelogs.exe -l {}/$1""#, apache_logs_fwd)).to_string();
+    }
+    let re_custlog = Regex::new(r#"(?m)^\s*CustomLog\s+"\|bin/rotatelogs\.exe\s+-l\s+[a-zA-Z]:/[^"]*?/logs/(access\.[^"]+)"\s+(.*)$"#).unwrap();
+    if re_custlog.is_match(&content) {
+        content = re_custlog.replace_all(&content, format!(r#"CustomLog "|bin/rotatelogs.exe -l  {}/$1" $2"#, apache_logs_fwd)).to_string();
+    }
+
     // 5. mod_php7 與相依 DLL (php7ts, libcrypto, libssl, libssh2, nghttp2, libsqlite3, libsodium, libsasl)
     if let Some(p7) = php7_dir {
         if p7.is_dir() {
@@ -248,13 +271,27 @@ pub fn configure_apache_mod_php7(apache_dir: &Path, root_dir: &Path, php7_dir: O
                     </FilesMatch>\n"
                 );
 
-                let existing_p7_re = Regex::new(r#"(?s)# =+\s*# PHP 7\.4 \(mod_php7?\).*?</FilesMatch>"#).unwrap();
+                // 移除既有標準 PHP 7.4 區塊
+                let existing_p7_re = Regex::new(r#"(?s)# =+\s*# PHP 7\.4 \(mod_php7?\).*?</FilesMatch>\s*"#).unwrap();
                 if existing_p7_re.is_match(&content) {
-                    content = existing_p7_re.replace(&content, &php7_block).to_string();
-                } else if !content.contains("php7_module") {
-                    content.push_str(&php7_block);
-                    log_fn("  ✓ 已向 Apache httpd.conf 掛載 PHP 7.4 mod_php 模組與相依程式庫", "success");
+                    content = existing_p7_re.replace_all(&content, "").to_string();
                 }
+
+                // 徹底清理所有殘留或舊版 AppServ 散落之舊設定 (LoadFile、LoadModule、PHPIniDir、mod_php7.c)
+                let re_old_loadfiles = Regex::new(r#"(?m)^\s*LoadFile\s+"[a-zA-Z]:/[^"]*?/php7/[^"]+"\r?\n"#).unwrap();
+                content = re_old_loadfiles.replace_all(&content, "").to_string();
+
+                let re_old_loadmod = Regex::new(r#"(?m)^\s*LoadModule\s+php7_module\s+.*?\r?\n"#).unwrap();
+                content = re_old_loadmod.replace_all(&content, "").to_string();
+
+                let re_old_phpinidir = Regex::new(r#"(?m)^\s*PHPIniDir\s+.*?\r?\n"#).unwrap();
+                content = re_old_phpinidir.replace_all(&content, "").to_string();
+
+                let re_old_modphp7_c = Regex::new(r#"(?s)<IfModule\s+mod_php7\.c>.*?</IfModule>\s*"#).unwrap();
+                content = re_old_modphp7_c.replace_all(&content, "").to_string();
+
+                content.push_str(&php7_block);
+                log_fn("  ✓ 已向 Apache httpd.conf 掛載 PHP 7.4 mod_php 模組與相依程式庫", "success");
             }
         }
     }
@@ -291,7 +328,7 @@ pub fn configure_apache_fcgi_proxy(apache_dir: &Path, root_dir: &Path, php85_dir
         }
     }
 
-    // 2. 注入 Proxy 轉發設定
+    // 2. 注入 Proxy 轉發設定 (含 ProxyFCGISetEnvIf 剝除代理前綴以支援 Windows 磁碟絕對路徑)
     let fcgi_block = format!(
         "\n# =====================================================================\n\
         # LAH-API (PHP 8.5 FastCGI via PM2 on 127.0.0.1:8085)\n\
@@ -311,6 +348,7 @@ pub fn configure_apache_fcgi_proxy(apache_dir: &Path, root_dir: &Path, php85_dir
             <FilesMatch \"\\.php$\">\n\
                 <If \"-f %{{REQUEST_FILENAME}}\">\n\
                     SetHandler \"proxy:fcgi://127.0.0.1:8085/\"\n\
+                    ProxyFCGISetEnvIf \"reqenv('SCRIPT_FILENAME') =~ m#^proxy:fcgi://127\\.0\\.0\\.1:8085/(.*)$#\" SCRIPT_FILENAME \"$$1\"\n\
                 </If>\n\
             </FilesMatch>\n\
         </Directory>\n\
@@ -322,10 +360,19 @@ pub fn configure_apache_fcgi_proxy(apache_dir: &Path, root_dir: &Path, php85_dir
     // 清理舊版本可能遺留之重複百分比符號語法錯誤
     content = content.replace("%{%REQUEST_FILENAME}", "%{REQUEST_FILENAME}");
 
+    // 清理可能散落或舊安裝根目錄之歷史 Alias 與 Directory (如 C:/AppServ 轉移至 D:/AppServ)
+    let re_stale_alias = Regex::new(r#"(?m)^\s*Alias\s+/(?i:lah-api)(?:/api)?\s+"[a-zA-Z]:/[^"]*?"
+?
+"#).unwrap();
+    content = re_stale_alias.replace_all(&content, "").to_string();
+
+    let re_stale_api_dir = Regex::new(r#"(?s)<Directory\s+"[a-zA-Z]:/[^"]*?/(?i:lah-api)">.*?</Directory>\s*"#).unwrap();
+    content = re_stale_api_dir.replace_all(&content, "").to_string();
+
     let existing_fcgi_re = Regex::new(r#"(?s)# =+\s*# LAH-API \(PHP 8\.5 FastCGI.*?</Proxy>\s*"#).unwrap();
     if existing_fcgi_re.is_match(&content) {
         content = existing_fcgi_re.replace(&content, &fcgi_block).to_string();
-    } else if !content.contains("proxy:fcgi://127.0.0.1:8085/") {
+    } else {
         content.push_str(&fcgi_block);
         log_fn("  ✓ 已向 Apache 注入 LAH-API (PHP 8.5 FastCGI 127.0.0.1:8085) 轉發設定", "success");
     }
@@ -496,4 +543,75 @@ pub fn apply_php_security_hardening(ini_path: &Path, log_fn: &dyn Fn(&str, &str)
         log_fn(&format!("  ✓ 已套用 PHP 安全設定 ({})", ini_path.display()), "success");
     }
     true
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_ensure_php_ini_removes_duplicate_and_stale_extension_dir() {
+        let temp_dir = std::env::temp_dir().join(format!("lah_test_php_{}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()));
+        fs::create_dir_all(&temp_dir).unwrap();
+        let ini_path = temp_dir.join("php.ini");
+        let initial_ini = "\n; Windows directory\n;include_path = \".;c:\\php\\includes\"\n;extension_dir = \"ext\"\nextension_dir = \"C:\\\\AppServ\\\\php7\\\\ext\"\ndate.timezone = \"UTC\"\n";
+        fs::write(&ini_path, initial_ini).unwrap();
+
+        let ok = ensure_php_ini_configured(&temp_dir, false, &|_, _| {});
+        assert!(ok);
+
+        let final_content = fs::read_to_string(&ini_path).unwrap();
+        assert!(!final_content.contains("C:\\\\AppServ"));
+        let ext_fwd = temp_dir.join("ext").to_string_lossy().replace('\\', "/");
+        assert!(final_content.contains(&format!(r#"extension_dir = "{}""#, ext_fwd)));
+        let count = final_content.lines().filter(|l| l.trim().starts_with("extension_dir")).count();
+        assert_eq!(count, 1);
+
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_configure_apache_mod_php7_cleans_legacy_appserv_paths() {
+        let temp_root = std::env::temp_dir().join(format!("lah_test_apache_{}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()));
+        let apache_dir = temp_root.join("Apache24");
+        let conf_dir = apache_dir.join("conf");
+        let php7_dir = temp_root.join("php7");
+        fs::create_dir_all(&conf_dir).unwrap();
+        fs::create_dir_all(&php7_dir).unwrap();
+        fs::write(php7_dir.join("php7apache2_4.dll"), b"mock dll").unwrap();
+        fs::write(php7_dir.join("php7ts.dll"), b"mock dll").unwrap();
+
+        let conf_path = conf_dir.join("httpd.conf");
+        let initial_conf = "\nDefine SRVROOT \"C:/AppServ/Apache24\"\nDocumentRoot \"C:/AppServ/www\"\nErrorLog \"|bin/rotatelogs.exe -l C:/AppServ/Apache24/logs/error.%Y.%m.%d.log 100M\"\nCustomLog \"|bin/rotatelogs.exe -l  C:/AppServ/Apache24/logs/access.%Y.%m.%d.log 100M\" combined\nLoadModule php7_module C:/AppServ/php7/php7apache2_4.dll\n<IfModule mod_php7.c>\n  AddType application/x-httpd-php .php\n  AddType application/x-httpd-php-source .phps\n</IfModule>\nPHPIniDir \"C:/AppServ/php7/\"\n";
+        fs::write(&conf_path, initial_conf).unwrap();
+
+        let (ok, changed) = configure_apache_mod_php7(&apache_dir, &temp_root, Some(&php7_dir), &|_, _| {});
+        assert!(ok);
+        assert!(changed);
+
+        let final_conf = fs::read_to_string(&conf_path).unwrap();
+        assert!(!final_conf.contains("C:/AppServ"));
+        let p7_fwd = php7_dir.to_string_lossy().replace('\\', "/");
+        let apache_fwd = apache_dir.to_string_lossy().replace('\\', "/");
+        assert!(final_conf.contains(&format!(r#"Define SRVROOT "{}""#, apache_fwd)));
+        assert!(final_conf.contains(&format!(r#"LoadModule php7_module "{}/php7apache2_4.dll""#, p7_fwd)));
+        assert!(final_conf.contains(&format!(r#"PHPIniDir "{}""#, p7_fwd)));
+        assert!(final_conf.contains(&format!(r#"ErrorLog "|bin/rotatelogs.exe -l {}/logs/error.%Y.%m.%d.log 100M""#, apache_fwd)));
+
+        // 測試 configure_apache_fcgi_proxy: 驗證自舊根目錄 (C:/AppServ) 遷移至新目錄時的 Alias/Directory 自癒與 ProxyFCGISetEnvIf
+        let api_dir = temp_root.join("LAH-API");
+        fs::create_dir_all(&api_dir).unwrap();
+        let (fcgi_ok, fcgi_changed) = configure_apache_fcgi_proxy(&apache_dir, &temp_root, None, &|_, _| {});
+        assert!(fcgi_ok);
+        assert!(fcgi_changed);
+
+        let final_fcgi_conf = fs::read_to_string(&conf_path).unwrap();
+        let api_fwd = temp_root.join("LAH-API").to_string_lossy().replace('\\', "/");
+        assert!(final_fcgi_conf.contains(&format!(r#"Alias /LAH-API "{}""#, api_fwd)));
+        assert!(final_fcgi_conf.contains("ProxyFCGISetEnvIf"));
+        assert!(!final_fcgi_conf.contains("C:/AppServ"));
+
+        let _ = fs::remove_dir_all(&temp_root);
+    }
 }

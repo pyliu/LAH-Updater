@@ -6,6 +6,27 @@
 
 ## [未發布]
 
+### 🔧 強化 Apache 與 PHP 組態自癒清理機制並校正日誌路徑
+
+- **修改目的**：
+  - 解決系統由舊版 AppServ 遷移或跨磁碟（如 `C:\AppServ` 移至 `D:\DEV`）部署時，Apache `httpd.conf` 殘留舊版硬編碼路徑（散落之 `LoadFile`、`LoadModule php7_module`、`PHPIniDir`、`<IfModule mod_php7.c>` 以及舊版 `Alias /LAH-API` 與 `<Directory>`），導致 Apache 模組衝突或轉發失敗之問題。
+  - 校正 `ErrorLog` 與 `CustomLog` 之 rotatelogs 日誌路徑，防禦日誌管道因硬編碼目錄不存在而啟動崩潰。
+  - 徹底淨化 `php.ini`，避免殘留重複或註解之 `extension_dir` 設定，確保僅保留單一精準之延伸模組目錄。
+- **具體修改項目**：
+  - **Apache 與 PHP 設定治理 (`updater/src-tauri/src/apache_conf.rs`)**：
+    - `ensure_php_ini_configured`: 逐行遍歷過濾，清理所有舊版或註解之 `extension_dir`，嚴格保證僅保留單一精準之 `extension_dir = "<php_dir>/ext"` 設定。
+    - `configure_apache_mod_php7`:
+      - 動態正規化 `ErrorLog` 與 `CustomLog` rotatelogs 管道日誌路徑，將任何舊磁碟路徑重寫為當前 `<apache_dir>/logs/`。
+      - 徹底搜尋並剔除所有散落於舊版 AppServ 設定檔之 `LoadFile` (php7 相關相依 DLL)、`LoadModule php7_module`、`PHPIniDir` 與 `<IfModule mod_php7.c>` 區塊，再注入乾淨統一之標準 PHP 7.4 模組區塊。
+    - `configure_apache_fcgi_proxy`:
+      - 主動清理指向舊路徑之無效 `Alias /LAH-API` 與 `<Directory .../LAH-API>` 區塊，避免跨目錄更新時與新注入之 FastCGI Proxy 產生衝突。
+  - **單元測試防護 (`updater/src-tauri/src/apache_conf.rs`)**：
+    - 新增 `test_ensure_php_ini_removes_duplicate_and_stale_extension_dir` 測試，斷言重複 `extension_dir` 被淨化為唯一定義。
+    - 新增 `test_configure_apache_mod_php7_cleans_legacy_appserv_paths` 測試，斷言自舊根目錄移轉時所有舊版路徑皆被自癒更新。
+    - 通過全套 8 項單元測試（`cargo test --lib`），並重新編譯產出最新版 `dist/智慧控管與監控系統 - 自動更新工具.exe` (11.82 MB)。
+- **相容性說明**：
+  - 完全向下相容全新安裝與升級安裝情境，具備強大之組態自癒與遷移容錯能力。
+
 ### 🎨 重新設計備份工具 (backuper) 專屬圖示並升級建置管線
 
 - **修改目的**：
