@@ -153,6 +153,7 @@ pub fn is_legacy_global_node_or_pm2_path(p_norm_lower: &str) -> bool {
     ) || p_norm_lower.ends_with(r"\appdata\roaming\npm")
 }
 
+/// 將目標目錄前置於 PATH 字串，並在沙盒內部淨化全域干擾（用於 dump.pm2 內部環境或當前進程內部）
 pub fn clean_and_prepend_path_string(raw_path: &str, target_norm: &str) -> (String, Vec<String>) {
     let lower_target = target_norm.trim_end_matches(['\\', '/']).to_lowercase();
     let mut removed = Vec::new();
@@ -182,10 +183,131 @@ pub fn clean_and_prepend_path_string(raw_path: &str, target_norm: &str) -> (Stri
     (kept.join(";"), removed)
 }
 
+/// 自系統/使用者 PATH 字串中拔除指定目標路徑（用於自癒清除過往寫入之綠色路徑）
+pub fn purge_target_from_path_string(raw_path: &str, target_norm: &str) -> (String, Vec<String>) {
+    let lower_target = target_norm.trim_end_matches(['\\', '/']).to_lowercase();
+    let mut removed = Vec::new();
+    let mut kept: Vec<String> = Vec::new();
+
+    for part in raw_path.split(';') {
+        let trimmed = part.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        let norm_lower = trimmed.trim_end_matches(['\\', '/']).to_lowercase();
+        if norm_lower == lower_target {
+            removed.push(trimmed.to_string());
+            continue;
+        }
+        if !kept
+            .iter()
+            .any(|k| k.trim_end_matches(['\\', '/']).eq_ignore_ascii_case(&norm_lower))
+        {
+            kept.push(trimmed.to_string());
+        }
+    }
+
+    (kept.join(";"), removed)
+}
+
+/// 自動產生專屬沙盒終端批次檔 lah-cmd.bat（零全域污染，隨點即用）
+pub fn ensure_portable_cmd_helper(root_dir: &Path, log_fn: &dyn Fn(&str, &str)) {
+    let bat_path = root_dir.join("lah-cmd.bat");
+    let content = "@echo off\r\n\
+chcp 65001 >nul\r\n\
+setlocal\r\n\
+set \"ROOT_DIR=%~dp0\"\r\n\
+set \"ROOT_DIR=%ROOT_DIR:~0,-1%\"\r\n\
+set \"NODE_DIR=%ROOT_DIR%\\node\"\r\n\
+set \"PM2_HOME=%ROOT_DIR%\\.pm2\"\r\n\
+set \"PATH=%NODE_DIR%;%PATH%\"\r\n\
+title LAH 智慧控管專屬終端 (Node 16 / PM2 沙盒環境)\r\n\
+echo ============================================================\r\n\
+echo   LAH 智慧控管專屬維運終端 (沙盒環境 - 零全域污染)\r\n\
+echo   - 隔離 Node 目錄: %NODE_DIR%\r\n\
+echo   - 隔離 PM2 目錄 : %PM2_HOME%\r\n\
+echo   - 全域環境不受任何干擾 (關閉視窗即自動釋放)\r\n\
+echo ============================================================\r\n\
+call node -v\r\n\
+call \"%NODE_DIR%\\pm2.cmd\" -v\r\n\
+echo ------------------------------------------------------------\r\n\
+echo 提示: 您可在此直接執行 pm2 status / pm2 logs / pm2 restart all\r\n\
+echo ============================================================\r\n\
+cmd /k\r\n";
+
+    if let Err(e) = fs::write(&bat_path, content) {
+        log_fn(&format!("⚠️ 建立 lah-cmd.bat 失敗: {e}"), "warning");
+    } else {
+        log_fn("  ✓ 已就緒專屬沙盒維運終端批次檔 (lah-cmd.bat)", "success");
+    }
+}
+
+/// 自系統 (HKLM) 與使用者 (HKCU) 登錄檔中還原乾淨環境，移除可攜版路徑污染
+pub fn purge_portable_from_registry(target_dir: &Path, log_fn: &dyn Fn(&str, &str)) {
+    let target_norm = target_dir
+        .to_string_lossy()
+        .trim_end_matches(['\\', '/'])
+        .to_string();
+
+    let mut changed_any = false;
+
+    // 1. 清理 HKLM PATH 與 PM2_HOME
+    if is_admin() {
+        let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
+        if let Ok(sys_key) = hklm.open_subkey_with_flags(HKLM_ENV_PATH, KEY_READ | KEY_WRITE) {
+            if let Ok(cur_sys) = sys_key.get_value::<String, _>("Path") {
+                let (new_sys, removed_sys) = purge_target_from_path_string(&cur_sys, &target_norm);
+                if !removed_sys.is_empty() {
+                    let _ = sys_key.set_value("Path", &new_sys);
+                    changed_any = true;
+                    log_fn(
+                        &format!("  ✓ 已自系統 PATH (HKLM) 移除可攜路徑 [{target_norm}]，確保全域 Node 獨立性"),
+                        "info",
+                    );
+                }
+            }
+            if sys_key.get_value::<String, _>("PM2_HOME").is_ok() {
+                let _ = sys_key.delete_value("PM2_HOME");
+                changed_any = true;
+                log_fn("  ✓ 已自系統環境變數 (HKLM) 清理 PM2_HOME，避免污染一般終端", "info");
+            }
+        }
+    }
+
+    // 2. 清理 HKCU PATH 與 PM2_HOME
+    let hkcu = RegKey::predef(HKEY_CURRENT_USER);
+    if let Ok(usr_key) = hkcu.open_subkey_with_flags("Environment", KEY_READ | KEY_WRITE) {
+        if let Ok(cur_usr) = usr_key.get_value::<String, _>("Path") {
+            let (new_usr, removed_usr) = purge_target_from_path_string(&cur_usr, &target_norm);
+            if !removed_usr.is_empty() {
+                let _ = usr_key.set_value("Path", &new_usr);
+                changed_any = true;
+                log_fn(
+                    &format!("  ✓ 已自使用者 PATH (HKCU) 移除可攜路徑 [{target_norm}]，確保全域 Node 獨立性"),
+                    "info",
+                );
+            }
+        }
+        if usr_key.get_value::<String, _>("PM2_HOME").is_ok() {
+            let _ = usr_key.delete_value("PM2_HOME");
+            changed_any = true;
+            log_fn("  ✓ 已自使用者環境變數 (HKCU) 清理 PM2_HOME，避免污染一般終端", "info");
+        }
+    }
+
+    if changed_any {
+        broadcast_setting_change();
+    }
+}
+
+/// 綠色可攜環境設定（零全域污染模式）：
+/// 1. 主動自登錄檔清理可能殘留的綠色路徑，恢復全域 Node 獨立性。
+/// 2. 僅於當前行程 (Process) PATH 注入 target_dir，供本次安裝/更新程序使用。
+/// 3. 自動生成專屬沙盒維運終端 lah-cmd.bat。
 pub fn register_path_to_user_environment(target_dir: &Path, log_fn: &dyn Fn(&str, &str)) -> bool {
     if !target_dir.is_dir() {
         log_fn(
-            &format!("⚠️ 目錄不存在，略過註冊 PATH: {}", target_dir.display()),
+            &format!("⚠️ 目錄不存在，略過設定 PATH: {}", target_dir.display()),
             "warning",
         );
         return false;
@@ -196,104 +318,40 @@ pub fn register_path_to_user_environment(target_dir: &Path, log_fn: &dyn Fn(&str
         .trim_end_matches(['\\', '/'])
         .to_string();
 
-    // 1. 優先更新系統環境變數 PATH (HKLM)，因為 Windows 系統 PATH 優先序高於使用者 PATH
-    if is_admin() {
-        let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
-        if let Ok(sys_key) = hklm.open_subkey_with_flags(HKLM_ENV_PATH, KEY_READ | KEY_WRITE) {
-            let cur_sys = sys_key.get_value::<String, _>("Path").unwrap_or_default();
-            let (new_sys, removed_sys) = clean_and_prepend_path_string(&cur_sys, &target_norm);
-            for r in &removed_sys {
-                log_fn(
-                    &format!("  ✓ 已自系統 PATH (HKLM) 移除舊全域 Node/PM2 路徑: [{r}]"),
-                    "info",
-                );
-            }
-            if let Err(e) = sys_key.set_value("Path", &new_sys) {
-                log_fn(&format!("⚠️ 寫入系統 PATH (HKLM) 失敗: {}", e), "warning");
-            } else {
-                log_fn(
-                    &format!("✅ 已將 [{target_norm}] 置於系統環境變數 PATH (HKLM) 最前端"),
-                    "success",
-                );
-            }
-        }
-    }
+    // 1. 自癒：自登錄檔中還原全域環境（移除過往版本可能寫入之綠色版路徑）
+    purge_portable_from_registry(target_dir, log_fn);
 
-    // 2. 同步更新使用者環境變數 PATH (HKCU)
-    let hkcu = RegKey::predef(HKEY_CURRENT_USER);
-    if let Ok(usr_key) = hkcu.open_subkey_with_flags("Environment", KEY_READ | KEY_WRITE) {
-        let cur_usr = usr_key.get_value::<String, _>("Path").unwrap_or_default();
-        let (new_usr, removed_usr) = clean_and_prepend_path_string(&cur_usr, &target_norm);
-        for r in &removed_usr {
-            log_fn(
-                &format!("  ✓ 已自使用者 PATH (HKCU) 移除舊全域 Node/PM2 路徑: [{r}]"),
-                "info",
-            );
-        }
-        if let Err(e) = usr_key.set_value("Path", &new_usr) {
-            log_fn(&format!("⚠️ 寫入使用者 PATH (HKCU) 失敗: {}", e), "warning");
-        } else {
-            log_fn(
-                &format!("✅ 已將 [{target_norm}] 置於使用者環境變數 PATH (HKCU) 最前端"),
-                "success",
-            );
-        }
-    }
-
-    // 3. 同步更新當前行程 PATH
+    // 2. 僅於當前更新行程內更新 PATH，供本執行檔執行 node/pm2 命令使用，作業系統全域零污染
     let cur_proc = env::var("PATH").unwrap_or_default();
     let (new_proc, _) = clean_and_prepend_path_string(&cur_proc, &target_norm);
     env::set_var("PATH", new_proc);
+    log_fn(
+        &format!("✅ [零全域污染] 已將可攜環境限縮於當前行程與專屬沙盒 ({target_norm})"),
+        "success",
+    );
 
-    broadcast_setting_change();
+    // 3. 自動建立/更新專屬沙盒終端批次檔
+    if let Some(parent) = target_dir.parent() {
+        ensure_portable_cmd_helper(parent, log_fn);
+    }
+
     true
 }
 
+/// 綠色可攜 PM2_HOME 設定（零全域污染模式）：
+/// 僅作用於當前行程，不污染 HKLM/HKCU 登錄檔。
 pub fn register_pm2_home_and_clean_legacy_env(pm2_home: &Path, log_fn: &dyn Fn(&str, &str)) -> bool {
     let val = pm2_home.to_string_lossy().to_string();
+
     let legacy_vars = ["PM2_INSTALL_DIRECTORY", "PM2_SERVICE_DIRECTORY"];
-
-    if is_admin() {
-        let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
-        if let Ok(sys_key) = hklm.open_subkey_with_flags(HKLM_ENV_PATH, KEY_READ | KEY_WRITE) {
-            let _ = sys_key.set_value("PM2_HOME", &val);
-            for lv in &legacy_vars {
-                if sys_key.get_value::<String, _>(lv).is_ok() && sys_key.delete_value(lv).is_ok() {
-                    log_fn(
-                        &format!("  ✓ 已清除系統環境變數 (HKLM) 舊殘留設定: {lv}"),
-                        "info",
-                    );
-                }
-            }
-            log_fn(
-                &format!("✅ 已設定系統環境變數 (HKLM) PM2_HOME={val}"),
-                "success",
-            );
-        }
-    }
-
-    let hkcu = RegKey::predef(HKEY_CURRENT_USER);
-    if let Ok(usr_key) = hkcu.open_subkey_with_flags("Environment", KEY_READ | KEY_WRITE) {
-        let _ = usr_key.set_value("PM2_HOME", &val);
-        for lv in &legacy_vars {
-            if usr_key.get_value::<String, _>(lv).is_ok() && usr_key.delete_value(lv).is_ok() {
-                log_fn(
-                    &format!("  ✓ 已清除使用者環境變數 (HKCU) 舊殘留設定: {lv}"),
-                    "info",
-                );
-            }
-        }
-        log_fn(
-            &format!("✅ 已設定使用者環境變數 (HKCU) PM2_HOME={val}"),
-            "success",
-        );
-    }
-
     for lv in &legacy_vars {
         env::remove_var(lv);
     }
     env::set_var("PM2_HOME", &val);
-    broadcast_setting_change();
+    log_fn(
+        &format!("✅ [零全域污染] 已設定當前行程 PM2_HOME={val}"),
+        "success",
+    );
     true
 }
 
@@ -305,11 +363,11 @@ fn broadcast_setting_change() {
             .collect();
         let mut result: usize = 0;
         windows_sys::Win32::UI::WindowsAndMessaging::SendMessageTimeoutW(
-            0xFFFF as _, // HWND_BROADCAST
-            0x001A,      // WM_SETTINGCHANGE
+            0xFFFF as _,
+            0x001A,
             0,
             env_wide.as_ptr() as isize,
-            0x0002, // SMTO_ABORTIFHUNG
+            0x0002,
             3000,
             &mut result as *mut usize as _,
         );
@@ -326,6 +384,18 @@ mod tests {
         let (cleaned, removed) = clean_and_prepend_path_string(raw, r"D:\DEV\node");
         assert_eq!(cleaned, r"D:\DEV\node;C:\Windows\system32");
         assert_eq!(removed.len(), 3);
+    }
+
+    #[test]
+    fn test_purge_target_from_path_preserves_global_node() {
+        let raw = r"C:\Windows\system32;C:\Program Files\nodejs\;D:\DEV\node\;C:\Users\administrator.HA\AppData\Roaming\npm";
+        let (cleaned, removed) = purge_target_from_path_string(raw, r"D:\DEV\node");
+        // 保留全域 Node (C:\Program Files\nodejs) 與使用者 npm，僅拔除可攜版 D:\DEV\node
+        assert_eq!(
+            cleaned,
+            r"C:\Windows\system32;C:\Program Files\nodejs\;C:\Users\administrator.HA\AppData\Roaming\npm"
+        );
+        assert_eq!(removed, vec![r"D:\DEV\node\"]);
     }
 
     #[test]

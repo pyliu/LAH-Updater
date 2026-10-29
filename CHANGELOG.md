@@ -6,6 +6,24 @@
 
 ## [未發布]
 
+### 🛡️ 實作 Node 與 PM2 零全域污染沙盒隔離架構並附帶 lah-cmd.bat 維運終端
+
+- **修改目的**：
+  - 徹底解除自動更新與可攜 Node 安裝工具對 Windows 系統（HKLM）與使用者（HKCU）環境變數 `Path` 及 `PM2_HOME` 的登錄檔接管。
+  - 解決開發者與維運人員在一般命令提示字元下執行 `node --version` 會被可攜版覆蓋干擾之問題，保證桌面一般終端完全維持全域安裝之 Node.js 版本（如 Node 20/22）。
+  - 將可攜版 Node 16 與 PM2 運行環境完全限縮於 WinSW 背景服務與專屬沙盒內，同時自動提供專屬維運終端捷徑 `lah-cmd.bat`。
+- **具體修改項目**：
+  - **Updater 核心 (`updater/src-tauri/src/system.rs`)**：
+    - 重構 `register_path_to_user_environment` 與 `register_pm2_home_and_clean_legacy_env`：停止寫入 HKLM/HKCU 登錄檔，停止拔除全域 `C:\Program Files\nodejs`。
+    - 新增 `purge_portable_from_registry` 自癒機制：自動自登錄檔清理過往早期版本不慎寫入之綠色路徑與 `PM2_HOME`。
+    - 新增 `ensure_portable_cmd_helper`：於根目錄自動產生/更新 `lah-cmd.bat`，以 `setlocal` 隔離注入可攜環境，關閉視窗即釋放。
+    - 新增單元測試 `test_purge_target_from_path_preserves_global_node`，通過 9 項單元測試。
+  - **Node Portable 核心 (`node-portable/src-tauri/src/system.rs`)**：
+    - 同步實作零全域污染模式與自癒清理機制，通過 3 項單元測試。
+- **相容性說明**：
+  - LAH 系統開機自啟服務（WinSW `LAH_PM2_Service` / `PM2_Portable_Service`）透過 XML 與 `service_runner.js` 自身已完整包含局部環境變數，背景守護與 5 大子專案運行完全不受影響；
+  - 徹底還原作業系統全域環境獨立性，達成真正的零污染綠色可攜架構。
+
 ### 🛡️ 注入串流端點向後相容 FastCGI 映射並對齊 AGENTS.md 維運防護守則
 
 - **修改目的**：
