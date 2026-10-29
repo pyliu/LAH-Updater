@@ -337,6 +337,13 @@ pub fn configure_apache_fcgi_proxy(apache_dir: &Path, root_dir: &Path, php85_dir
         Alias /lah-api/api \"{api_fwd}/v1\"\n\
         Alias /LAH-API \"{api_fwd}\"\n\
         Alias /lah-api \"{api_fwd}\"\n\
+        # 串流端點向後相容映射至 PHP 8.5 FastCGI\n\
+        Alias /get_user_img.php \"{api_fwd}/v1/get_user_img.php\"\n\
+        Alias /get_carousel_img.php \"{api_fwd}/v1/get_carousel_img.php\"\n\
+        Alias /get_blob_img.php \"{api_fwd}/v1/get_blob_img.php\"\n\
+        Alias /get_adm_reserve_pdf.php \"{api_fwd}/v1/get_adm_reserve_pdf.php\"\n\
+        Alias /get_reg_foreigner_pdf.php \"{api_fwd}/v1/get_reg_foreigner_pdf.php\"\n\
+        Alias /get_sur_destruction_pdf.php \"{api_fwd}/v1/get_sur_destruction_pdf.php\"\n\
         <Directory \"{api_fwd}\">\n\
             Header set Access-Control-Allow-Origin \"*\"\n\
             Options -Indexes +FollowSymLinks\n\

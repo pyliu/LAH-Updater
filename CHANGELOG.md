@@ -6,6 +6,21 @@
 
 ## [未發布]
 
+### 🛡️ 注入串流端點向後相容 FastCGI 映射並對齊 AGENTS.md 維運防護守則
+
+- **修改目的**：
+  - 確保智慧控管前端與外部系統呼叫根目錄舊版串流腳本（如 `/get_user_img.php`、`/get_carousel_img.php`、各類 PDF 報表串流）時，能無縫轉發至 PHP 8.5 FastCGI 後端核心（`127.0.0.1:8085`），達成向後相容。
+  - 對齊全域架構契約，於 `AGENTS.md` 載明維運四大工具架構（updater、node-portable、uninstaller、backuper），並新增第 3.4 至 3.7 節離線維運防護守則。
+- **具體修改項目**：
+  - **Apache FCGI 轉發設定 (`updater/src-tauri/src/apache_conf.rs`)**：
+    - 於 `configure_apache_fcgi_proxy` 注入 6 大串流端點別名映射：`/get_user_img.php`、`/get_carousel_img.php`、`/get_blob_img.php`、`/get_adm_reserve_pdf.php`、`/get_reg_foreigner_pdf.php`、`/get_sur_destruction_pdf.php` 指向 `{api_fwd}/v1/...`。
+    - 通過全部 8 項單元測試並重新編譯產出最新 Release 二進位產物（11.84 MB）。
+  - **開發與 AI Agent 指南更新 (`AGENTS.md`)**：
+    - 擴充目錄結構，納入 `node-portable`（可攜 Node 16.20.2 安裝工具）與對應一鍵建置指令。
+    - 增補第 3.4~3.7 節防護守則：Node/PM2 四重安全隔離與殘留模組淨化、Apache/雙 PHP 組態自癒與日誌正規化、行程鎖定安全釋放與雙層目錄自癒、零外部 CDN 原則。
+- **相容性說明**：
+  - 完美相容前端既有圖片與 PDF 串流請求，增強代理與工程師在維護工具時之安全防禦一致性。
+
 ### 🔧 強化 Apache 與 PHP 組態自癒清理機制並校正日誌路徑
 
 - **修改目的**：
