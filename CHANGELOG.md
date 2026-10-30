@@ -6,6 +6,21 @@
 
 ## [未發布]
 
+### 🖥️ 優化自動移除 (uninstaller) 與備份還原 (backuper) 工具之版面與消除預設滾動條
+
+- **修改目的**：
+  - 徹底解決 `uninstaller`（自動移除工具）與 `backuper`（備份與還原工具）在預設啟動時因視窗高度不足超出 20~40px 產生垂直滾動條（Scrollbar）之視覺問題。
+  - 調整視窗尺寸設定並同步精簡 CSS 內外邊距與行距，確保工具開啟時完整呈現所有操作項目，免滑動且無滾動軸干擾。
+- **具體修改項目**：
+  - **自動移除工具 (`uninstaller/`)**：
+    - `src-tauri/tauri.conf.json`：預設視窗尺寸調整為 `width: 980, height: 680`（原為 960x635）。
+    - `ui/index.html`：精簡 body padding（12px 18px）、card padding（10px 14px）與 options-grid 間距，全套單元測試通過。
+  - **備份與還原工具 (`backuper/`)**：
+    - `src-tauri/tauri.conf.json`：預設視窗尺寸調整為 `width: 780, height: 520`（原為 760x480）。
+    - `ui/index.html`：精簡 body padding（13px 18px）、card padding（11px 15px）與 label/btn-row 外距，單元測試通過。
+- **相容性說明**：
+  - 僅調優 UI 佈局與視窗尺寸，核心邏輯完全相容，已重新打包產出最新二進位檔並同步發布至 `\\220.1.34.18\D$\LAH智慧控管工具\`。
+
 ### 🎨 優化自動更新工具 (updater) 介面版面、快選工具列與無滾動條體驗
 
 - **修改目的**：

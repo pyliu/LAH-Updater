@@ -12,10 +12,10 @@
       {
         "label": "main",
         "title": "智慧控管與監控系統 - 自動移除工具",
-        "width": 960,
-        "height": 635,
+        "width": 980,
+        "height": 680,
         "minWidth": 860,
-        "minHeight": 620,
+        "minHeight": 580,
         "center": true
       }
     ],
