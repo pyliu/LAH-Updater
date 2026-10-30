@@ -203,7 +203,7 @@
     <div class="card-title backup">📦 系統重要資料備份</div>
     <label for="root">系統安裝根目錄</label>
     <div class="row">
-      <input id="root" type="text" value="C:\AppServ">
+      <input id="root" type="text" placeholder="自動偵測中..." value="">
       <button id="pickRoot">瀏覽...</button>
     </div>
     <label for="dest">備份存放目的地 (資料夾或 .zip 路徑)</label>
@@ -213,7 +213,7 @@
     </div>
     <div class="btn-row">
       <button id="run" class="primary">📦 立即備份重要資料</button>
-      <small class="tip">自動打包 db/、uploads/、www/assets/、.pm2 設定、.env、AD.php、php7/85 ext DLL、instantclient_11_2 與 logs/ 至 ZIP 檔案。</small>
+      <small class="tip">自動打包 db/、uploads/、www/assets/、.pm2 設定、.env、AD.php、php7/85 ext DLL、instantclient_11_2、logs/ 與 lah-cmd.bat 至 ZIP 檔案。</small>
     </div>
   </div>
 
@@ -227,7 +227,7 @@
     </div>
     <div class="btn-row">
       <button id="restore" class="danger">🚨 還原到安裝根目錄</button>
-      <small class="tip">還原前會先檢查服務已停止，覆蓋前自動將現有檔案建立為 restore_undo_*.zip 復原點。</small>
+      <small class="tip">還原前會先檢查服務已停止，覆蓋前自動建立 restore_undo_*.zip 復原點，並自動校準 Apache 設定檔路徑。</small>
     </div>
   </div>
 

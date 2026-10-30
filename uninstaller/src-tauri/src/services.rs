@@ -60,25 +60,36 @@ pub fn uninstall_apache_service(root_dir: &Path, log_fn: &dyn Fn(&str, &str)) ->
 }
 
 pub fn uninstall_lah_pm2_service(root_dir: &Path, log_fn: &dyn Fn(&str, &str)) -> bool {
-    log_fn("⏳ 正在停止並解除安裝 Windows 原生系統服務 (LAH_PM2_Service)...", "info");
-    let exe_path = root_dir.join("node").join("service").join("lah-service.exe");
+    log_fn("⏳ 正在停止並解除安裝 PM2 Windows 系統服務 (含 LAH_PM2_Service 與 PM2_Portable_Service)...", "info");
 
-    // 1. 嘗試 WinSW 卸載
-    if exe_path.is_file() {
-        let exe_str = exe_path.to_string_lossy();
-        let _ = run_cmd_hidden(&exe_str, &["stop"]);
-        let (ok_un, stdout, _) = run_cmd_hidden(&exe_str, &["uninstall"]);
-        if ok_un || stdout.to_lowercase().contains("successfully") {
-            log_fn("  ✓ 已透過 WinSW 成功卸載系統服務: LAH_PM2_Service", "success");
+    let service_pairs = [
+        ("LAH_PM2_Service", "lah-service.exe"),
+        ("PM2_Portable_Service", "pm2-service.exe"),
+    ];
+
+    for (svc_name, exe_name) in service_pairs {
+        let exe_path = root_dir.join("node").join("service").join(exe_name);
+
+        // 1. 嘗試透過 WinSW 原生命令 stop & uninstall
+        if exe_path.is_file() {
+            let exe_str = exe_path.to_string_lossy();
+            let _ = run_cmd_hidden(&exe_str, &["stop"]);
+            let (ok_un, stdout, _) = run_cmd_hidden(&exe_str, &["uninstall"]);
+            if ok_un || stdout.to_lowercase().contains("successfully") {
+                log_fn(&format!("  ✓ 已透過 WinSW 成功卸載系統服務: {svc_name}"), "success");
+            }
         }
-    }
 
-    // 2. 備援透過 sc.exe 刪除
-    let _ = run_cmd_hidden("sc.exe", &["stop", "LAH_PM2_Service"]);
-    sleep(Duration::from_millis(800));
-    let (ok_sc, _, _) = run_cmd_hidden("sc.exe", &["delete", "LAH_PM2_Service"]);
-    if ok_sc {
-        log_fn("  ✓ 已自 Windows SCM 刪除系統服務: LAH_PM2_Service", "success");
+        // 2. 備援透過 sc.exe 強制停止並自 SCM 刪除註冊
+        let (query_ok, out_query, _) = run_cmd_hidden("sc.exe", &["query", svc_name]);
+        if query_ok && !out_query.contains("1060") { // 1060: 指定的服務未安裝
+            let _ = run_cmd_hidden("sc.exe", &["stop", svc_name]);
+            sleep(Duration::from_millis(500));
+            let (ok_sc, _, _) = run_cmd_hidden("sc.exe", &["delete", svc_name]);
+            if ok_sc {
+                log_fn(&format!("  ✓ 已自 Windows SCM 刪除系統服務: {svc_name}"), "success");
+            }
+        }
     }
 
     true

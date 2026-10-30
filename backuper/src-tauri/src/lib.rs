@@ -1,5 +1,6 @@
 pub mod backup;
 pub mod restore;
+pub mod system;
 
 use backup::{BackupReport, Progress};
 use restore::RestoreReport;
@@ -9,6 +10,11 @@ use tauri::{AppHandle, Emitter};
 #[tauri::command]
 fn check_services(root: String) -> Vec<String> {
     restore::running_services(&PathBuf::from(root))
+}
+
+#[tauri::command]
+fn detect_root_dir() -> String {
+    system::detect_default_root_dir().to_string_lossy().to_string()
 }
 
 #[tauri::command]
@@ -36,7 +42,7 @@ async fn run_backup(app: AppHandle, root: String, dest: String) -> Result<Backup
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
-        .invoke_handler(tauri::generate_handler![run_backup, run_restore, check_services])
+        .invoke_handler(tauri::generate_handler![run_backup, run_restore, check_services, detect_root_dir])
         .run(tauri::generate_context!())
         .expect("啟動備份工具失敗");
 }

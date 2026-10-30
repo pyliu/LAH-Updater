@@ -7,15 +7,15 @@ let isBusy = false;
 
 // 項目核取定義與文字對齊清單
 const CHECKBOX_ITEMS = [
-  { id: "chk_services", key: "do_services", label: "• 🛑 停止並解除安裝 Windows 服務 (LAH_PM2_Service, Apache2.4)" },
-  { id: "chk_kill_procs", key: "do_kill_procs", label: "• ⚡ 終止守護行程與背景程序 (pm2 kill, 殘留 node.exe / php-cgi)" },
-  { id: "chk_autostart", key: "do_autostart", label: "• 🧹 清除開機自啟動與環境變數 (啟動資料夾, 排程器, PATH)" },
+  { id: "chk_services", key: "do_services", label: "• 🛑 停止並解除安裝 Windows 服務 (PM2 服務, Apache2.4)" },
+  { id: "chk_kill_procs", key: "do_kill_procs", label: "• ⚡ 終止守護行程與背景程序 (pm2 kill, 殘留 node.exe / php-cgi / httpd)" },
+  { id: "chk_autostart", key: "do_autostart", label: "• 🧹 清除開機自啟動與環境變數 (啟動資料夾, 排程器, PATH, PM2_HOME)" },
   { id: "chk_remove_fe", key: "do_remove_fe", label: "• 🌐 移除智慧前端網站 (LAH-NUXTJS)" },
   { id: "chk_remove_wss", key: "do_remove_wss", label: "• 💬 移除即時通訊伺服器 (lah-messenger-server)" },
   { id: "chk_remove_api", key: "do_remove_api", label: "• 🔌 移除現代化後端 API 模組 (LAH-API)" },
   { id: "chk_remove_www", key: "do_remove_www", label: "• 🏢 移除舊版後端生產庫 (www)" },
   { id: "chk_remove_apache", key: "do_remove_apache", label: "• 🌐 移除 Apache 網頁伺服器本體 (Apache24)" },
-  { id: "chk_remove_node", key: "do_remove_node", label: "• 🟩 移除 Node.js 執行期環境 (node)" },
+  { id: "chk_remove_node", key: "do_remove_node", label: "• 🟩 移除 Node.js 執行期環境 (node, .pm2, lah-cmd.bat)" },
   { id: "chk_remove_php85", key: "do_remove_php85", label: "• 🐘 移除 PHP 8.5 手動安裝目錄 (php85)" },
   { id: "chk_remove_php7", key: "do_remove_php7", label: "• 🐘 移除 PHP 7 手動安裝目錄 (php7)" },
   { id: "chk_remove_instantclient", key: "do_remove_instantclient", label: "• 🏛️ 移除 Oracle Instant Client (instantclient_11_2)" },
@@ -38,6 +38,18 @@ async function initAdminStatus() {
     }
   } catch (e) {
     console.error("Failed to check admin status:", e);
+  }
+}
+
+// 動態探測並填入預設安裝根目錄
+async function initRootDir() {
+  try {
+    const detected = await invoke("detect_root_dir");
+    if (detected && $("root_dir")) {
+      $("root_dir").value = detected;
+    }
+  } catch (e) {
+    console.error("Failed to detect root dir:", e);
   }
 }
 
@@ -89,94 +101,96 @@ function appendLog(message, level = "info") {
   box.scrollTop = box.scrollHeight;
 }
 
-// 事件監聽：progress & log
+// 監聽後端進度與日誌事件
 listen("progress", ({ payload }) => {
-  const pct = Math.max(0, Math.min(100, Number(payload.percent) || 0));
-  $("progress_bar").value = pct;
-  $("percent_text").textContent = `${pct.toFixed(1)}%`;
-  if (payload.message) {
-    $("status_text").textContent = payload.message;
-  }
+  const pct = Math.round(payload.percent);
+  $("progress_bar").value = payload.percent;
+  $("progress_percent").textContent = `${pct}%`;
+  $("status_text").textContent = payload.message || "處理中...";
 });
 
 listen("log", ({ payload }) => {
-  appendLog(payload.message, payload.level || "info");
+  appendLog(payload.message, payload.level);
 });
 
-// 確認視窗操作
-function openConfirmModal() {
+// 收集表單選項
+function getOptions() {
   const rootDir = $("root_dir").value.trim();
-  if (!rootDir) {
-    alert("請輸入系統安裝根目錄！");
-    return;
-  }
-
-  const selectedItems = [];
+  const opts = { root_dir: rootDir };
   for (const item of CHECKBOX_ITEMS) {
-    const el = $(item.id);
-    if (el && el.checked) {
-      selectedItems.push(item.label);
-    }
+    opts[item.key] = $(item.id).checked;
   }
-
-  if (selectedItems.length === 0) {
-    alert("您尚未選取任何欲移除的項目！");
-    return;
-  }
-
-  $("confirm_target_dir").textContent = rootDir;
-  const listEl = $("confirm_items_list");
-  listEl.innerHTML = selectedItems.map(s => `<div>${s}</div>`).join("");
-  $("modal_confirm").classList.add("active");
+  return opts;
 }
 
-function closeConfirmModal() {
-  $("modal_confirm").classList.remove("active");
-}
-
-$("btn_confirm_cancel").onclick = closeConfirmModal;
-$("btn_start").onclick = openConfirmModal;
-
-// 退出應用程式 (調用 Rust 原生 exit_app 以避免 WebView2 window.close 白畫面問題)
+// 退出應用程式
 async function exitApp() {
-  if (isBusy) return;
   try {
     await invoke("exit_app");
-  } catch (err) {
-    console.error("Failed to exit app:", err);
+  } catch (e) {
+    window.close();
   }
 }
 
-// 執行移除
-$("btn_confirm_ok").onclick = async () => {
-  closeConfirmModal();
-
-  const rootDir = $("root_dir").value.trim();
-  const options = { root_dir: rootDir };
-  for (const item of CHECKBOX_ITEMS) {
-    const el = $(item.id);
-    options[item.key] = el ? el.checked : false;
+// 開始移除按鈕
+$("btn_start").onclick = async () => {
+  const opts = getOptions();
+  if (!opts.root_dir) {
+    alert("請先指定系統安裝根目錄！");
+    $("root_dir").focus();
+    return;
   }
 
+  // 計算已勾選項目數量
+  const selectedCount = CHECKBOX_ITEMS.filter((item) => opts[item.key]).length;
+  if (selectedCount === 0) {
+    alert("請至少選取一個欲移除的項目！");
+    return;
+  }
+
+  // 整理清單並彈出二次確認
+  const selectedSummary = CHECKBOX_ITEMS.filter((item) => opts[item.key])
+    .map((item) => `  ${item.label}`)
+    .join("\n");
+
+  const confirmMsg =
+    `⚠️ 【重要警告：即將執行系統移除】\n\n` +
+    `安裝根目錄：\n  ${opts.root_dir}\n\n` +
+    `已勾選將被執行的操作項目 (共 ${selectedCount} 項)：\n` +
+    `${selectedSummary}\n\n` +
+    `※ 系統將在清除前自動於根目錄產出壓縮備份檔。\n` +
+    `您確定要繼續執行移除作業嗎？`;
+
+  if (!confirm(confirmMsg)) {
+    return;
+  }
+
+  // 切換 UI 狀態為忙碌中並打開進度彈窗
   isBusy = true;
   $("btn_start").disabled = true;
   $("btn_exit").disabled = true;
-  $("btn_modal_back").style.display = "none";
   $("btn_close_modal").disabled = true;
   $("btn_close_modal").textContent = "移除進行中...";
+  $("btn_modal_back").style.display = "none";
   $("log_box").innerHTML = "";
   $("progress_bar").value = 0;
-  $("percent_text").textContent = "0.0%";
-  $("status_text").textContent = "正在準備移除作業...";
+  $("progress_percent").textContent = "0%";
+  $("status_text").textContent = "正在準備啟動移除工作流程...";
+
   $("modal_progress").classList.add("active");
 
   try {
-    const res = await invoke("run_uninstall", { options });
+    const res = await invoke("run_uninstall", { options: opts });
     if (res.success) {
-      $("status_text").textContent = `✅ 全部選取項目已成功移除！(耗時 ${res.elapsed_secs.toFixed(1)} 秒)`;
-      $("btn_modal_back").style.display = "inline-block";
+      appendLog("\n==================================================", "success");
+      appendLog("🎉 智慧控管與監控系統 已成功解除安裝！", "success");
+      if (res.backup_path) {
+        appendLog(`📦 刪除前備份壓縮檔存放位置: ${res.backup_path}`, "success");
+      }
+      appendLog("==================================================", "success");
+      $("status_text").textContent = "移除作業已圓滿完成！";
       $("btn_close_modal").disabled = false;
-      $("btn_close_modal").textContent = "完成並關閉程式";
+      $("btn_close_modal").textContent = "完成並結束";
     } else {
       $("status_text").textContent = `⚠️ 移除過程發生錯誤：${res.message}`;
       $("btn_modal_back").style.display = "inline-block";
@@ -210,3 +224,4 @@ $("btn_exit").onclick = exitApp;
 
 // 啟動檢測
 initAdminStatus();
+initRootDir();

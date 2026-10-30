@@ -274,7 +274,7 @@
   <div class="card">
     <div class="card-title">📁 系統安裝根目錄</div>
     <div class="row">
-      <input id="root_dir" type="text" value="C:\AppServ">
+      <input id="root_dir" type="text" placeholder="自動偵測中..." value="">
       <button id="browse_btn">瀏覽...</button>
     </div>
   </div>
@@ -297,17 +297,17 @@
       <!-- 第一行 -->
       <label class="checkbox-item">
         <input type="checkbox" id="chk_services" checked>
-        <span>🛑 停止並解除安裝 Windows 服務 (LAH_PM2_Service, Apache2.4)</span>
+        <span>🛑 停止並解除安裝 Windows 服務 (PM2 服務, Apache2.4)</span>
       </label>
       <label class="checkbox-item">
         <input type="checkbox" id="chk_kill_procs" checked>
-        <span>⚡ 終止守護行程與背景程序 (pm2 kill, 殘留 node.exe / php-cgi)</span>
+        <span>⚡ 終止守護行程與背景程序 (pm2 kill, 殘留 node.exe / php-cgi / httpd)</span>
       </label>
 
       <!-- 第二行 -->
       <label class="checkbox-item">
         <input type="checkbox" id="chk_autostart" checked>
-        <span>🧹 清除開機自啟動與環境變數 (啟動資料夾 VBS, 排程器, PATH)</span>
+        <span>🧹 清除開機自啟動與環境變數 (啟動資料夾 VBS, 排程器, PATH, PM2_HOME)</span>
       </label>
       <label class="checkbox-item">
         <input type="checkbox" id="chk_remove_fe" checked>
@@ -337,7 +337,7 @@
       <!-- 第五行 -->
       <label class="checkbox-item">
         <input type="checkbox" id="chk_remove_node" checked>
-        <span>🟩 移除 Node.js 執行期環境 (node)</span>
+        <span>🟩 移除 Node.js 執行期環境 (node, .pm2, lah-cmd.bat)</span>
       </label>
       <label class="checkbox-item">
         <input type="checkbox" id="chk_remove_php85" checked>

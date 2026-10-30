@@ -22,6 +22,7 @@ pub const BACKUP_ITEMS: &[(&str, &str)] = &[
     ("Apache24/conf/httpd.conf", "Apache24/conf/httpd.conf"),
     ("logs", "logs"),
     ("instantclient_11_2", "instantclient_11_2"),
+    ("lah-cmd.bat", "lah-cmd.bat"),
 ];
 
 /// .pm2 項目：來源目錄由 `resolve_pm2_dir` 決定。

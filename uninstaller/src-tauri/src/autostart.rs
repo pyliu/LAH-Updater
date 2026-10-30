@@ -108,10 +108,6 @@ fn clean_registry_run(hkey: winreg::HKEY, subkey: &str, root_dir: &Path, log_fn:
 }
 
 pub fn remove_paths_from_environment(paths_to_remove: &[PathBuf], log_fn: &dyn Fn(&str, &str)) -> bool {
-    if paths_to_remove.is_empty() {
-        return true;
-    }
-
     let norm_targets: Vec<String> = paths_to_remove
         .iter()
         .map(|p| p.to_string_lossy().trim_end_matches(['\\', '/']).to_lowercase())
@@ -119,54 +115,76 @@ pub fn remove_paths_from_environment(paths_to_remove: &[PathBuf], log_fn: &dyn F
 
     let mut removed_any = false;
 
-    // 1. 清理使用者 PATH (HKCU\Environment)
+    // 1. 清理使用者 PATH (HKCU\Environment) 與 PM2 相關環境變數
     let hkcu = RegKey::predef(HKEY_CURRENT_USER);
     if let Ok(env_key) = hkcu.open_subkey_with_flags("Environment", KEY_READ | KEY_WRITE) {
-        if let Ok(cur_val) = env_key.get_value::<String, _>("Path") {
-            let parts: Vec<&str> = cur_val.split(';').filter(|s| !s.trim().is_empty()).collect();
-            let mut new_parts = Vec::new();
-
-            for p in parts {
-                let p_norm = p.trim().trim_end_matches(['\\', '/']).to_lowercase();
-                if norm_targets.contains(&p_norm) {
-                    removed_any = true;
-                    log_fn(&format!("  ✓ 自使用者 PATH 環境變數剔除: [{p}]"), "info");
-                } else {
-                    new_parts.push(p.trim());
-                }
-            }
-
-            if removed_any {
-                let new_val = new_parts.join(";");
-                let _ = env_key.set_value("Path", &new_val);
-            }
-        }
-    }
-
-    // 2. 若為系統管理員，清理系統 PATH (HKLM\...\Environment)
-    if is_admin() {
-        let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
-        let hklm_sub = r"SYSTEM\CurrentControlSet\Control\Session Manager\Environment";
-        if let Ok(env_key) = hklm.open_subkey_with_flags(hklm_sub, KEY_READ | KEY_WRITE) {
+        if !norm_targets.is_empty() {
             if let Ok(cur_val) = env_key.get_value::<String, _>("Path") {
                 let parts: Vec<&str> = cur_val.split(';').filter(|s| !s.trim().is_empty()).collect();
                 let mut new_parts = Vec::new();
-                let mut sys_removed = false;
 
                 for p in parts {
                     let p_norm = p.trim().trim_end_matches(['\\', '/']).to_lowercase();
                     if norm_targets.contains(&p_norm) {
-                        sys_removed = true;
                         removed_any = true;
-                        log_fn(&format!("  ✓ 自系統 PATH 環境變數剔除: [{p}]"), "info");
+                        log_fn(&format!("  ✓ 自使用者 PATH 環境變數剔除: [{p}]"), "info");
                     } else {
                         new_parts.push(p.trim());
                     }
                 }
 
-                if sys_removed {
+                if removed_any {
                     let new_val = new_parts.join(";");
                     let _ = env_key.set_value("Path", &new_val);
+                }
+            }
+        }
+
+        // 徹底清理使用者層級 PM2_HOME 與歷史變數
+        for var_name in &["PM2_HOME", "PM2_INSTALL_DIRECTORY", "PM2_SERVICE_DIRECTORY"] {
+            if env_key.get_value::<String, _>(var_name).is_ok() {
+                let _ = env_key.delete_value(var_name);
+                removed_any = true;
+                log_fn(&format!("  ✓ 自使用者環境變數 (HKCU) 清理殘留變數: [{var_name}]"), "info");
+            }
+        }
+    }
+
+    // 2. 若為系統管理員，清理系統 PATH (HKLM\...\Environment) 與 PM2 相關環境變數
+    if is_admin() {
+        let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
+        let hklm_sub = r"SYSTEM\CurrentControlSet\Control\Session Manager\Environment";
+        if let Ok(env_key) = hklm.open_subkey_with_flags(hklm_sub, KEY_READ | KEY_WRITE) {
+            if !norm_targets.is_empty() {
+                if let Ok(cur_val) = env_key.get_value::<String, _>("Path") {
+                    let parts: Vec<&str> = cur_val.split(';').filter(|s| !s.trim().is_empty()).collect();
+                    let mut new_parts = Vec::new();
+                    let mut sys_removed = false;
+
+                    for p in parts {
+                        let p_norm = p.trim().trim_end_matches(['\\', '/']).to_lowercase();
+                        if norm_targets.contains(&p_norm) {
+                            sys_removed = true;
+                            removed_any = true;
+                            log_fn(&format!("  ✓ 自系統 PATH 環境變數剔除: [{p}]"), "info");
+                        } else {
+                            new_parts.push(p.trim());
+                        }
+                    }
+
+                    if sys_removed {
+                        let new_val = new_parts.join(";");
+                        let _ = env_key.set_value("Path", &new_val);
+                    }
+                }
+            }
+
+            // 徹底清理系統層級 PM2_HOME 與歷史變數
+            for var_name in &["PM2_HOME", "PM2_INSTALL_DIRECTORY", "PM2_SERVICE_DIRECTORY"] {
+                if env_key.get_value::<String, _>(var_name).is_ok() {
+                    let _ = env_key.delete_value(var_name);
+                    removed_any = true;
+                    log_fn(&format!("  ✓ 自系統環境變數 (HKLM) 清理殘留變數: [{var_name}]"), "info");
                 }
             }
         }

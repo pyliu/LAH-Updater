@@ -6,6 +6,30 @@
 
 ## [未發布]
 
+### 🔄 全面升級自動移除 (uninstaller) 與備份還原 (backuper) 工具架構
+
+- **修改目的**：
+  - 巡查並全面對齊 `uninstaller` 與 `backuper` 至最新版 FastCGI 雙軌架構、零全域污染沙盒與多磁碟動態安裝環境。
+  - 徹底解決舊版自動移除工具遺漏卸載 `PM2_Portable_Service`、未清理殘留 `php-cgi.exe` 進程、未自登錄檔（HKLM/HKCU）抹除 `PM2_HOME` 等歷史脫節問題。
+  - 升級備份還原工具：將專屬維運終端腳本 `lah-cmd.bat` 納入重要備份清單；還原進程防鎖檢查同步納入 `php-cgi.exe`；實作還原後自動校準 `httpd.conf` 路徑機制，防止跨磁碟還原時因舊路徑覆蓋導致 Apache 崩潰。
+  - 兩工具全面移植 `detect_default_root_dir` 動態偵測邏輯，廢除 UI 硬編碼 `C:\AppServ`，支援非 C 槽（如 `D:\AppServ`）隨選即用。
+- **具體修改項目**：
+  - **自動移除工具 (`uninstaller/`)**：
+    - `src-tauri/src/services.rs`：`uninstall_lah_pm2_service` 同步納入 `LAH_PM2_Service` (lah-service.exe) 與 `PM2_Portable_Service` (pm2-service.exe)，並以 `sc.exe query` + `sc.exe delete` 備援。
+    - `src-tauri/src/process.rs`：終止進程全面涵蓋 `php-cgi*.exe`、`httpd*.exe`、`node*.exe`（含 Daemon.js、God.js、runner）與 `pm2.exe`。
+    - `src-tauri/src/autostart.rs`：在 `remove_paths_from_environment` 徹底清除 HKLM 與 HKCU 中殘留之 `PM2_HOME`、`PM2_INSTALL_DIRECTORY` 與 `PM2_SERVICE_DIRECTORY`，並廣播 `WM_SETTINGCHANGE`。
+    - `src-tauri/src/cleaner.rs`：移除 Node 項目中同步納入 `.pm2` 目錄與專屬維運腳本 `lah-cmd.bat` 的主動清理。
+    - `src-tauri/src/system.rs` & `lib.rs`：實作 `detect_default_root_dir` 並透過 Tauri 命令 `detect_root_dir` 暴露給前端，通過 2 項單元測試。
+    - `ui/app.js` & `ui/index.html`：初始化時非同步動態填入偵測路徑，更新各項服務與進程之繁體中文描述文字。
+  - **備份與還原工具 (`backuper/`)**：
+    - `src-tauri/Cargo.toml`：新增 `regex = "1"` 與 `winreg = "0.56"` 依賴。
+    - `src-tauri/src/backup.rs`：`BACKUP_ITEMS` 擴充納入 `("lah-cmd.bat", "lah-cmd.bat")`。
+    - `src-tauri/src/restore.rs`：`PS_LIST_EXE` 檢查納入 `php-cgi.exe`；新增 `calibrate_httpd_conf` 常式，還原後自動校準 SRVROOT、DocumentRoot、rotatelogs、FastCGI Alias 及 PHP 7 模組路徑，通過單元測試。
+    - `src-tauri/src/system.rs` & `lib.rs`：新增 `system` 模組實作 `detect_default_root_dir`，暴露 `detect_root_dir` 命令。
+    - `ui/app.js` & `ui/index.html`：初始化時動態探測填入安裝路徑，廢除預設硬編碼。
+- **相容性說明**：
+  - 經由單元測試（`cargo test --lib`）與 release 二進位建置發布（各約 10~11 MB），完全相容現行生產環境，並已同步發布至 `\\220.1.34.18\D$\LAH智慧控管工具\`。
+
 ### 🛡️ 實作 Node 與 PM2 零全域污染沙盒隔離架構並附帶 lah-cmd.bat 維運終端
 
 - **修改目的**：

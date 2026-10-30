@@ -54,6 +54,18 @@ window.addEventListener("keydown", (e) => {
   if (e.key === "Escape") closeModal();
 });
 
+// 動態探測並填入預設安裝根目錄
+async function initRootDir() {
+  try {
+    const detected = await invoke("detect_root_dir");
+    if (detected && $("root")) {
+      $("root").value = detected;
+    }
+  } catch (e) {
+    console.error("Failed to detect root dir:", e);
+  }
+}
+
 // 立即備份
 $("run").onclick = async () => {
   const root = $("root").value.trim();
@@ -104,7 +116,7 @@ $("restore").onclick = async () => {
   if (!root) return alert("請輸入系統安裝根目錄！");
   if (!zip) return alert("請先選擇欲還原的備份 ZIP 壓縮檔案！");
 
-  if (!confirm(`⚠️ 【重要警告：即將執行系統還原】\n\n備份來源：\n${zip}\n\n還原目標：\n${root}\n\n• 還原過程同名檔案將被直接覆蓋！\n• 系統將在覆蓋前自動建立 restore_undo_*.zip 復原點。\n\n您確定要繼續執行還原嗎？`)) {
+  if (!confirm(`⚠️ 【重要警告：即將執行系統還原】\n\n備份來源：\n${zip}\n\n還原目標：\n${root}\n\n• 還原過程同名檔案將被直接覆蓋！\n• 系統將在覆蓋前自動建立 restore_undo_*.zip 復原點。\n• 若包含 Apache 配置，系統將自動校準其路徑至當前目標根目錄。\n\n您確定要繼續執行還原嗎？`)) {
     return;
   }
 
@@ -141,3 +153,6 @@ $("restore").onclick = async () => {
     $("closeModalBtn").textContent = "完成並關閉視窗";
   }
 };
+
+// 初始化
+initRootDir();

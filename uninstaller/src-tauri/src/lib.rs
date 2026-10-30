@@ -16,6 +16,11 @@ fn check_admin() -> bool {
 }
 
 #[tauri::command]
+fn detect_root_dir() -> String {
+    system::detect_default_root_dir().to_string_lossy().to_string()
+}
+
+#[tauri::command]
 fn exit_app(app: AppHandle) {
     app.exit(0);
 }
@@ -54,7 +59,7 @@ async fn run_uninstall(app: AppHandle, options: UninstallOptions) -> Result<Unin
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
-        .invoke_handler(tauri::generate_handler![check_admin, run_uninstall, exit_app])
+        .invoke_handler(tauri::generate_handler![check_admin, detect_root_dir, run_uninstall, exit_app])
         .run(tauri::generate_context!())
         .expect("啟動智慧控管與監控系統 - 自動移除工具失敗");
 }

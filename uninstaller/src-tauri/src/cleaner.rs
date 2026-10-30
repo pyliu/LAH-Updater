@@ -55,6 +55,7 @@ pub fn clean_files_and_directories(
     }
     if options.do_remove_node {
         dir_tasks.push((root_dir.join("node"), "Node.js 綠色環境 (node)"));
+        dir_tasks.push((root_dir.join(".pm2"), "PM2 綠色沙盒設定目錄 (.pm2)"));
     }
     if options.do_remove_php85 {
         dir_tasks.push((root_dir.join("php85"), "PHP 8.5 手動安裝目錄 (php85)"));
@@ -84,6 +85,17 @@ pub fn clean_files_and_directories(
             90.0
         };
         progress_fn(curr_pct, &format!("正在刪除: {dname}"));
+    }
+
+    // 若選取移除 Node，主動清理根目錄專屬維運終端腳本
+    if options.do_remove_node {
+        let bat = root_dir.join("lah-cmd.bat");
+        if bat.is_file() {
+            let _ = crate::system::remove_readonly(&bat);
+            if fs::remove_file(&bat).is_ok() {
+                log_fn("  ✓ 已刪除沙盒維運終端批次檔 (lah-cmd.bat)", "success");
+            }
+        }
     }
 }
 
@@ -117,6 +129,8 @@ pub fn clean_root_directory(
     }
     if !options.do_remove_node {
         keep_paths.insert(root_dir.join("node").to_string_lossy().to_lowercase());
+        keep_paths.insert(root_dir.join(".pm2").to_string_lossy().to_lowercase());
+        keep_paths.insert(root_dir.join("lah-cmd.bat").to_string_lossy().to_lowercase());
     }
     if !options.do_remove_php85 {
         keep_paths.insert(root_dir.join("php85").to_string_lossy().to_lowercase());
