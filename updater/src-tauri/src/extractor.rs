@@ -60,6 +60,31 @@ pub const ALL_PACKAGE_SPECS: &[PackageSpec] = &[
         is_nodejs: false,
         is_sub_package: false,
     },
+    PackageSpec {
+        id: "vcredist",
+        name: "vcredist-x64.zip",
+        title: "VC++ 執行期相依套件 (vcredist-x64.zip)",
+        pattern: Some(r"(?i)^(vcredist|vc_redist|vcruntime).*?\.zip$"),
+        alt_names: &[
+            "vcredist.zip",
+            "vc_redist.zip",
+            "vcredist-x64.zip",
+            "vcredist-VS18.zip",
+            "vcredist-vs18.zip",
+            "vcredist-VS17.zip",
+            "vcredist-vs17.zip",
+            "vcredist-VS16.zip",
+            "vcredist-vs16.zip",
+            "vcredist-VC15.zip",
+            "vcredist-vc15.zip",
+        ],
+        rel_target: r"Apache24\bin",
+        expected_folder: "",
+        alt_folders: &[],
+        is_base_env: true,
+        is_nodejs: false,
+        is_sub_package: true,
+    },
     // 應用模組 (右欄)
     PackageSpec {
         id: "www",
@@ -157,8 +182,8 @@ pub const ALL_PACKAGE_SPECS: &[PackageSpec] = &[
 /// 判斷各安裝包所屬之分類專屬優先子目錄
 pub fn get_preferred_subfolder(pkg_id: &str) -> Option<&'static str> {
     match pkg_id {
-        // 基礎服務類：APACHE24, PHP7, PHP85, node -> base/
-        "apache24" | "php7" | "php85" | "node" => Some("base"),
+        // 基礎服務類：APACHE24, PHP7, PHP85, vcredist, node -> base/
+        "apache24" | "php7" | "php85" | "vcredist" | "node" => Some("base"),
         // 程式更新包：LAH-NUXTJS, LAH-API, www, lah-messenger-server -> patch/
         "lah_nuxtjs" | "lah_api" | "www" | "messenger" | "lah_messenger_server" => Some("patch"),
         // node_modules 依賴類：LAH-NUXTJS-node_modules, lah-messenger-server-node_modules -> node_modules/
@@ -571,6 +596,127 @@ pub fn ensure_default_env_files(root_dir: &Path, log_fn: &dyn Fn(&str, &str)) {
     }
 }
 
+/// 解析 Apache 安裝包檔名中包含之版本號與編譯工具鏈 (如 httpd-2.4.69-261002-Win64-VS18.zip)
+pub fn parse_apache_zip_meta(filename: &str) -> Option<(String, String)> {
+    let re = Regex::new(r"(?i)^httpd-(?P<ver>2\.4\.\d+)(?:-\d+)?-(?:win|Win)64-(?P<vc>VS\d+|VC\d+)\.zip$").ok()?;
+    if let Some(caps) = re.captures(filename) {
+        let ver = caps.name("ver").map(|m| m.as_str().to_string()).unwrap_or_else(|| "2.4".to_string());
+        let vc = caps.name("vc").map(|m| m.as_str().to_uppercase()).unwrap_or_else(|| "VC15".to_string());
+        return Some((ver, vc));
+    }
+    None
+}
+
+/// 依據 Apache 版本與常見命名規則探測獨立 VC++ 執行期壓縮包 (vcredist-*.zip)
+pub fn find_vcredist_zip(root_dir: &Path, apache_zip_path: &str) -> Option<PathBuf> {
+    let mut search_dirs = Vec::new();
+    let apache_p = Path::new(apache_zip_path);
+    if let Some(parent) = apache_p.parent() {
+        search_dirs.push(parent.to_path_buf());
+    }
+
+    let app_dir = crate::system::get_app_dir();
+    search_dirs.push(app_dir.join("base"));
+    search_dirs.push(app_dir);
+    search_dirs.push(PathBuf::from(r"C:\Temp\base"));
+    search_dirs.push(PathBuf::from(r"C:\Temp"));
+    search_dirs.push(root_dir.join("base"));
+    search_dirs.push(root_dir.to_path_buf());
+
+    let vc_tag = apache_p
+        .file_name()
+        .and_then(|s| s.to_str())
+        .and_then(parse_apache_zip_meta)
+        .map(|(_, vc)| vc);
+
+    let mut candidate_names = Vec::new();
+    if let Some(ref vc) = vc_tag {
+        candidate_names.push(format!("vcredist-{}.zip", vc.to_uppercase()));
+        candidate_names.push(format!("vcredist-{}.zip", vc.to_lowercase()));
+    }
+    candidate_names.push("vcredist-x64.zip".to_string());
+    candidate_names.push("vcredist.zip".to_string());
+    candidate_names.push("vc_redist.x64.zip".to_string());
+    candidate_names.push("vc_redist.zip".to_string());
+    candidate_names.push("vcruntime140-x64.zip".to_string());
+
+    for dir in &search_dirs {
+        if !dir.is_dir() {
+            continue;
+        }
+        for name in &candidate_names {
+            let cand = dir.join(name);
+            if cand.is_file() {
+                return Some(cand);
+            }
+        }
+    }
+
+    None
+}
+
+/// 將 Apache24/bin 下的 VC++ 核心執行期程式庫同步補齊至 php7 與 php85 目錄
+pub fn sync_vcredist_dlls_to_php(root_dir: &Path, log_fn: &dyn Fn(&str, &str)) {
+    let apache_bin = root_dir.join("Apache24").join("bin");
+    if !apache_bin.is_dir() {
+        return;
+    }
+
+    let target_php_dirs = [root_dir.join("php7"), root_dir.join("php85")];
+    let Ok(entries) = fs::read_dir(&apache_bin) else { return; };
+    let mut copied_count = 0;
+
+    let is_vc_dll = |name: &str| -> bool {
+        let n = name.to_lowercase();
+        (n.starts_with("msvcp140")
+            || n.starts_with("vcruntime140")
+            || n.starts_with("vcomp140")
+            || n.starts_with("concrt140"))
+            && n.ends_with(".dll")
+    };
+
+    let mut vc_dlls = Vec::new();
+    for entry in entries.flatten() {
+        let p = entry.path();
+        if p.is_file() {
+            let fname = p
+                .file_name()
+                .and_then(|s| s.to_str())
+                .unwrap_or("")
+                .to_string();
+            if is_vc_dll(&fname) {
+                vc_dlls.push((p, fname));
+            }
+        }
+    }
+
+    if vc_dlls.is_empty() {
+        return;
+    }
+
+    for php_dir in &target_php_dirs {
+        if php_dir.is_dir() {
+            for (dll_src, fname) in &vc_dlls {
+                let dest = php_dir.join(fname);
+                let need_copy = !dest.is_file()
+                    || fs::metadata(&dest).map_or(0, |m| m.len()) != fs::metadata(dll_src).map_or(0, |m| m.len());
+                if need_copy {
+                    if fs::copy(dll_src, &dest).is_ok() {
+                        copied_count += 1;
+                    }
+                }
+            }
+        }
+    }
+
+    if copied_count > 0 {
+        log_fn(
+            &format!("  ✓ 已將 {copied_count} 個 VC++ 核心執行期程式庫同步補齊至 php7/ 與 php85/ 目錄"),
+            "success",
+        );
+    }
+}
+
 
 #[cfg(test)]
 mod tests {
@@ -593,6 +739,7 @@ mod tests {
         assert_eq!(get_preferred_subfolder("apache24"), Some("base"));
         assert_eq!(get_preferred_subfolder("php7"), Some("base"));
         assert_eq!(get_preferred_subfolder("php85"), Some("base"));
+        assert_eq!(get_preferred_subfolder("vcredist"), Some("base"));
         assert_eq!(get_preferred_subfolder("node"), Some("base"));
 
         assert_eq!(get_preferred_subfolder("www"), Some("patch"));
@@ -605,5 +752,20 @@ mod tests {
         assert_eq!(get_preferred_subfolder("lah_nuxtjs_node_modules"), Some("node_modules"));
         assert_eq!(get_preferred_subfolder("messenger_modules"), Some("node_modules"));
         assert_eq!(get_preferred_subfolder("lah_messenger_server_node_modules"), Some("node_modules"));
+    }
+
+    #[test]
+    fn test_parse_apache_zip_meta() {
+        let meta1 = parse_apache_zip_meta("httpd-2.4.69-261002-Win64-VS18.zip");
+        assert_eq!(meta1, Some(("2.4.69".to_string(), "VS18".to_string())));
+
+        let meta2 = parse_apache_zip_meta("httpd-2.4.62-240904-win64-VS17.zip");
+        assert_eq!(meta2, Some(("2.4.62".to_string(), "VS17".to_string())));
+
+        let meta3 = parse_apache_zip_meta("httpd-2.4.39-win64-VC15.zip");
+        assert_eq!(meta3, Some(("2.4.39".to_string(), "VC15".to_string())));
+
+        let meta_none = parse_apache_zip_meta("Apache24.zip");
+        assert_eq!(meta_none, None);
     }
 }

@@ -42,8 +42,8 @@ pub fn detect_default_root_dir() -> PathBuf {
     let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
     let hkcu = RegKey::predef(HKEY_CURRENT_USER);
 
-    // 1. 優先由已註冊之系統服務 ImagePath 反推根目錄 (涵蓋 LAH_PM2_Service, PM2_Portable_Service, Apache2.4)
-    for svc_name in ["LAH_PM2_Service", "PM2_Portable_Service", "Apache2.4", "Apache24"] {
+    // 1. 優先由已註冊之系統服務 ImagePath 反推根目錄 (涵蓋 LAH_Web_Service, LAH_PM2_Service, PM2_Portable_Service, Apache2.4)
+    for svc_name in ["LAH_Web_Service", "LAH_PM2_Service", "PM2_Portable_Service", "Apache2.4", "Apache24"] {
         let subkey = format!(r"SYSTEM\CurrentControlSet\Services\{svc_name}");
         if let Ok(svc_key) = hklm.open_subkey_with_flags(&subkey, KEY_READ) {
             if let Ok(img_path) = svc_key.get_value::<String, _>("ImagePath") {

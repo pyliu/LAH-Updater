@@ -1,14 +1,16 @@
 use crate::apache_conf::*;
 use crate::extractor::{
     auto_flatten_nested_dirs, detect_strip_prefix, ensure_default_env_files, extract_zip,
-    restore_from_backup_zip, ALL_PACKAGE_SPECS,
+    find_vcredist_zip, parse_apache_zip_meta, restore_from_backup_zip, sync_vcredist_dlls_to_php,
+    ALL_PACKAGE_SPECS,
 };
 use crate::health::verify_all_services_health;
 use crate::pm2::*;
 use crate::services::*;
 use crate::system::*;
 use crate::types::{ProgressEvent, SystemConfigOptions, UpdateOptions, UpdateSummary};
-use std::path::PathBuf;
+use std::fs;
+use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 pub fn execute_update_pipeline<F>(options: UpdateOptions, emit_fn: F) -> UpdateSummary
@@ -44,7 +46,7 @@ where
     // 基礎環境優先處理
     selected_pkgs.sort_by_key(|p| if p.is_base_env { 0 } else { 1 });
 
-    let svc_name = query_apache_service().unwrap_or_else(|| "Apache2.4".to_string());
+    let svc_name = query_apache_service().unwrap_or_else(|| LAH_WEB_SERVICE_NAME.to_string());
     let has_base_env_update = selected_pkgs.iter().any(|p| p.is_base_env);
     let has_apache_app_update = selected_pkgs.iter().any(|p| p.id == "www" || p.id == "lah_api");
     let should_stop_apache = options.restart_apache || has_base_env_update || has_apache_app_update;
@@ -98,6 +100,14 @@ where
         log_event("--------------------------------------------------", "info");
         log_event(&format!("[{}/{}] 正在解壓縮：{} ➔ {}", pkg_num, total_pkgs, pkg.name, tgt_p.display()), "info");
 
+        if pkg.id == "apache24" {
+            if let Some(fname) = Path::new(&pkg.zip_path).file_name().and_then(|s| s.to_str()) {
+                if let Some((ver, vc)) = parse_apache_zip_meta(fname) {
+                    log_event(&format!("ℹ️ 解析 Apache 安裝包版本：Apache {ver} (編譯工具鏈: {vc})"), "info");
+                }
+            }
+        }
+
         // 依據 PackageSpec 取得權威 expected_folder 與 alt_folders
         let spec_opt = ALL_PACKAGE_SPECS.iter().find(|s| s.id == pkg.id);
         let expected = spec_opt.map(|s| s.expected_folder).unwrap_or(&pkg.expected_folder);
@@ -144,6 +154,30 @@ where
     // 解壓後立即進行巢狀目錄防護檢查與自癒攤平
     auto_flatten_nested_dirs(&root_path, &log_event);
 
+    // 若有更新 apache24 或未選取 vcredist，自動探測並解壓獨立 VC++ 執行期套件
+    let has_apache_update = selected_pkgs.iter().any(|p| p.id == "apache24");
+    let has_vcredist_selected = selected_pkgs.iter().any(|p| p.id == "vcredist");
+    if has_apache_update && !has_vcredist_selected {
+        let apache_pkg_path = selected_pkgs
+            .iter()
+            .find(|p| p.id == "apache24")
+            .map(|p| p.zip_path.as_str())
+            .unwrap_or("");
+        if let Some(vc_zip) = find_vcredist_zip(&root_path, apache_pkg_path) {
+            let fname = vc_zip.file_name().and_then(|s| s.to_str()).unwrap_or("vcredist.zip");
+            log_event(&format!("🛡️ [沙盒依賴補齊] 偵測到獨立 VC++ 執行期壓縮包 [{fname}]，自動補齊至 Apache24/bin..."), "info");
+            let apache_bin = root_path.join("Apache24").join("bin");
+            let _ = fs::create_dir_all(&apache_bin);
+            let on_file = |_rel: &str, _cur: usize, _tot: usize| {};
+            if let Ok(count) = extract_zip(&vc_zip, &apache_bin, None, &on_file) {
+                log_event(&format!("  ✓ 已解壓 {count} 個 VC++ 核心執行期程式庫至 Apache24/bin"), "success");
+            }
+        }
+    }
+
+    // 同步補齊 VC++ DLLs 至 php7 與 php85 (徹底達成後端全元件零 VC++ 依賴)
+    sync_vcredist_dlls_to_php(&root_path, &log_event);
+
     // 確保各子專案 .env 基礎設定檔齊備
     ensure_default_env_files(&root_path, &log_event);
 
@@ -171,8 +205,8 @@ where
     if apache_tgt.is_dir() {
         set_prog(89, "[階段 1/5] 正在配置 Apache 2.4 + PHP 7.4 與註冊服務...");
         configure_apache_mod_php7(&apache_tgt, &root_path, if php7_tgt.is_dir() { Some(&php7_tgt) } else { None }, &log_event);
-        if options.auto_register_apache || has_base_env_update || query_apache_service().is_none() {
-            install_apache_service(&apache_tgt, "Apache2.4", &log_event);
+        if options.auto_register_apache || has_base_env_update || query_apache_service().as_deref() != Some(LAH_WEB_SERVICE_NAME) {
+            install_apache_service(&apache_tgt, LAH_WEB_SERVICE_NAME, &log_event);
         }
     }
 
@@ -254,7 +288,7 @@ where
     // =========================================================================
     // 【階段 5/5】啟動 Apache 與健康巡檢
     // =========================================================================
-    let target_svc = query_apache_service().unwrap_or_else(|| "Apache2.4".to_string());
+    let target_svc = query_apache_service().unwrap_or_else(|| LAH_WEB_SERVICE_NAME.to_string());
     if is_service_running(&target_svc) {
         if should_stop_apache || apache_was_stopped {
             set_prog(98, &format!("[階段 5/5] 正在重新啟動 Apache 服務 [{target_svc}]..."));
@@ -323,6 +357,7 @@ where
     // 1. 雙層巢狀目錄自癒攤平
     set_prog(10, "正在檢查目錄結構...");
     auto_flatten_nested_dirs(&root_path, &log_event);
+    sync_vcredist_dlls_to_php(&root_path, &log_event);
 
     // 2. 確保環境檔存在
     ensure_default_env_files(&root_path, &log_event);
@@ -335,9 +370,9 @@ where
     if apache_tgt.is_dir() {
         set_prog(35, "正在配置 Apache 2.4 (httpd.conf) 與 mod_php7 模組...");
         configure_apache_mod_php7(&apache_tgt, &root_path, if php7_tgt.is_dir() { Some(&php7_tgt) } else { None }, &log_event);
-        if options.auto_register_apache || query_apache_service().is_none() {
-            set_prog(45, "正在註冊 Apache 系統服務...");
-            install_apache_service(&apache_tgt, "Apache2.4", &log_event);
+        if options.auto_register_apache || query_apache_service().as_deref() != Some(LAH_WEB_SERVICE_NAME) {
+            set_prog(45, &format!("正在註冊 Web 沙盒服務 [{LAH_WEB_SERVICE_NAME}]..."));
+            install_apache_service(&apache_tgt, LAH_WEB_SERVICE_NAME, &log_event);
         }
     }
 
@@ -401,7 +436,7 @@ where
     }
 
     // 7. 重啟 Apache 服務 (若勾選)
-    let target_svc = query_apache_service().unwrap_or_else(|| "Apache2.4".to_string());
+    let target_svc = query_apache_service().unwrap_or_else(|| LAH_WEB_SERVICE_NAME.to_string());
     if options.restart_apache {
         set_prog(88, &format!("正在重啟 Apache 服務 [{target_svc}]..."));
         if is_service_running(&target_svc) {

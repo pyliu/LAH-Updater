@@ -96,6 +96,13 @@ LAH-Updater/
 - **完整規格產出套裝**：每個新工具均須附帶獨立之 generate_icons.ps1 繪圖腳本，產出包含 16、24、32、48、64、128 與 256 多解析度影格之 icon.ico，以及 32x32.png、128x128.png、128x128@2x.png、icon.png (512x512) 與 ui/favicon.png。
 - **確保編譯時內嵌**：執行 build.py 時必須確保 Cargo.toml 與 tauri.conf.json 正確載入專屬圖示，產出之 .exe 必須包含該工具專屬圖示資源。
 
+### 3.9 介面禁止出現 Scrollbar（強制）
+- 所有工具主視窗在任何狀態（剛開啟、展開或收合選項、掃描完成後）都不得出現捲軸，視窗尺寸必須剛好貼齊內容。
+- 必須實作動態自適應視窗高度：前端 utoFitWindow() 量測文檔流真實高度（main-layout 底部 + footer 高度與 margin + body padding + 4px 裕度，不可直接取 sticky 的 .footer-bar 位置），呼叫後端 it_window_to_content 設定客戶區高度；初始渲染、掃描完成、展開或收合元件後都要觸發，禁止留成 no-op。
+- Tauri 2 window.set_size() 為客戶區尺寸，不得再疊加標題列與邊框高度。
+- 	auri.conf.json 預設高度需大於最高內容狀態，ody 使用 overflow-y: hidden。
+- 修改介面後必須實測各狀態無捲軸才能回報完成；彈窗內日誌與說明等長文字區塊不在此限。
+
 ---
 
 ## 4. 常用測試與打包指令

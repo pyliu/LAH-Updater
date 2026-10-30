@@ -28,22 +28,16 @@ pub struct ProgressPayload {
 fn fit_window_to_content(window: tauri::Window, client_height: f64) -> Result<(), String> {
     use tauri::{LogicalSize, Size};
     let scale_factor = window.scale_factor().unwrap_or(1.0);
-    let outer = window.outer_size().unwrap_or_default();
     let inner = window.inner_size().unwrap_or_default();
 
-    let border_height_logical = if outer.height >= inner.height {
-        (outer.height - inner.height) as f64 / scale_factor
-    } else {
-        39.0
-    };
-
-    let target_outer_height = client_height + border_height_logical;
-    let clamped_height = target_outer_height.max(500.0).min(960.0);
-    let cur_width = (outer.width as f64 / scale_factor).max(960.0);
+    // Tauri 2 的 window.set_size(Size) 內部映射至 tao 的 window.set_inner_size(Size)，
+    // 直接設定 Webview 客戶區尺寸。因此直接對齊前端回報之實際內容高度，限制在 500~960px 範圍內。
+    let target_inner_height = client_height.max(500.0).min(960.0);
+    let cur_width = (inner.width as f64 / scale_factor).max(960.0);
 
     let _ = window.set_size(Size::Logical(LogicalSize {
         width: cur_width,
-        height: clamped_height,
+        height: target_inner_height,
     }));
     Ok(())
 }

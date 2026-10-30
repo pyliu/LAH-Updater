@@ -14,7 +14,7 @@
     user-select: none;
     font-size: 13px;
     overflow-x: hidden;
-    overflow-y: auto;
+    overflow-y: hidden;
   }
   .header {
     display: flex;
@@ -538,7 +538,7 @@
         <div class="options-list">
           <label class="checkbox-item">
             <input type="checkbox" id="chk_auto_apache" checked>
-            <span id="lbl_auto_apache">自動註冊 Apache 為 Windows 系統服務 (Apache2.4)</span>
+            <span id="lbl_auto_apache">自動註冊 Web 伺服器為 Windows 系統服務 (LAH_Web_Service)</span>
           </label>
           <label class="checkbox-item">
             <input type="checkbox" id="chk_auto_pm2" checked>
@@ -550,7 +550,7 @@
           </label>
           <label class="checkbox-item">
             <input type="checkbox" id="chk_restart_apache">
-            <span id="lbl_restart_apache">更新後重新啟動 Apache 服務</span>
+            <span id="lbl_restart_apache">更新後重新啟動 Web 服務 (LAH_Web_Service)</span>
           </label>
           <label class="checkbox-item">
             <input type="checkbox" id="chk_restart_pm2">
@@ -597,7 +597,7 @@
         </div>
         <div class="endpoint-grid">
           <div class="endpoint-item" title="Apache HTTP 服務（前端入口與 API 反向代理）">
-            <span class="endpoint-name">🌐 系統入口 (Apache)</span>
+            <span class="endpoint-name">🌐 系統入口 (Apache / LAH_Web_Service)</span>
             <span class="endpoint-port">:80</span>
           </div>
           <div class="endpoint-item" title="Nuxt.js Vue 前端智慧管控服務">

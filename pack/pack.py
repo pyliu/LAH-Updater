@@ -396,6 +396,42 @@ def build_zip_package(title, base_dir, zip_path, include_patterns, exclude_patte
     return True
 
 
+def build_vcredist_package(base_dir):
+    """從 Windows 系統目錄打包 x64 VC++ 2015-2022 核心執行期程式庫至 base/vcredist-x64.zip"""
+    dll_names = [
+        "msvcp140.dll",
+        "msvcp140_1.dll",
+        "msvcp140_2.dll",
+        "msvcp140_atomic_wait.dll",
+        "msvcp140_codecvt_ids.dll",
+        "vcruntime140.dll",
+        "vcruntime140_1.dll",
+        "vcruntime140_threads.dll",
+        "vcomp140.dll",
+        "concrt140.dll",
+    ]
+    sys32 = os.path.join(os.environ.get("SystemRoot", r"C:\Windows"), "System32")
+    out_path = os.path.join(base_dir, "vcredist-x64.zip")
+
+    found = []
+    for name in dll_names:
+        p = os.path.join(sys32, name)
+        if os.path.isfile(p):
+            found.append((p, name))
+
+    if not found:
+        return False
+
+    os.makedirs(base_dir, exist_ok=True)
+    with zipfile.ZipFile(out_path, "w", zipfile.ZIP_DEFLATED) as z:
+        for full_p, name in found:
+            z.write(full_p, name)
+
+    size_kb = os.path.getsize(out_path) / 1024
+    print(f"[OK] vcredist-x64.zip 打包完成！共 {len(found)} 個 VC++ 核心程式庫，大小 {size_kb:.1f} KB")
+    return True
+
+
 def prompt_interactive_targets():
     """當未傳入任何參數時，顯示互動選單供使用者選擇欲打包的項目"""
     print("=" * 68)
@@ -680,6 +716,11 @@ def main():
             node_folder = os.path.basename(node_dir)
             if not build_zip_package("可攜式 Node.js 綠色環境 (base/node.zip)", node_parent, node_zip_path, [node_folder], NODE_EXCLUDES):
                 sys.exit(1)
+
+    # 8.5. 檢查並打包 VC++ 獨立執行期程式庫至 base/vcredist-x64.zip
+    vcredist_zip_path = os.path.join(base_dir, "vcredist-x64.zip")
+    if not os.path.isfile(vcredist_zip_path) or do_node:
+        build_vcredist_package(base_dir)
 
     # 9. 自動同步更新說明文件至 patch/ 子資料夾
     notes_candidates = glob.glob(os.path.join(root_dir, "updater", "*更新說明*.txt")) + glob.glob(os.path.join(root_dir, "*更新說明*.txt"))

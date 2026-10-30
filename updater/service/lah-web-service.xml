@@ -1,0 +1,20 @@
+<service>
+  <id>LAH_Web_Service</id>
+  <name>LAH 智慧管控 - Web 網頁伺服器 (Apache 2.4)</name>
+  <description>開機自動以 C:\AppServ\Apache24\bin\httpd.exe 喚醒並守護 LAH 網頁與 API 閘道服務，具備開機免登入自啟與零全域環境變數污染防護。</description>
+  <executable>C:\AppServ\Apache24\bin\httpd.exe</executable>
+  <arguments>-d C:\AppServ\Apache24</arguments>
+  <workingdirectory>C:\AppServ\Apache24</workingdirectory>
+
+  <env name="PATH" value="C:\AppServ\Apache24\bin;C:\AppServ\instantclient_11_2;C:\AppServ\php7;%PATH%" />
+  <env name="NLS_LANG" value="American_America.US7ASCII" />
+
+  <logmode>roll-by-size</logmode>
+  <logpath>C:\AppServ\logs\web_service</logpath>
+  <sizeThreshold>10240</sizeThreshold>
+  <keepFiles>10</keepFiles>
+
+  <onfailure action="restart" delay="5 sec"/>
+  <onfailure action="restart" delay="15 sec"/>
+  <resetfailure>1 hour</resetfailure>
+</service>

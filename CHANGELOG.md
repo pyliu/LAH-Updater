@@ -6,6 +6,43 @@
 
 ## [未發布]
 
+### 更新工具視窗高度動態自適應與徹底消除捲軸
+
+- **修改目的**：更新工具剛開啟與展開「從備份檔案還原」時右側出現垂直捲軸，原因為預設視窗高度不足，且前端 `autoFitWindow()` 為空實作。
+- **修改項目**：
+  - `updater/ui/app.js`：實作 `autoFitWindow()`，量測文檔流真實高度（排除 sticky 底部列，加 4px 裕度），初始渲染、掃描完成與勾選備份還原時呼叫後端 `fit_window_to_content`。
+  - `updater/src-tauri/src/lib.rs`：`fit_window_to_content` 直接設定客戶區高度，不再疊加標題列與邊框，限制 500 至 960px。
+  - `updater/src-tauri/tauri.conf.json`：預設高度由 760 調升至 825。
+  - `updater/ui/index.html`：`body` 改為 `overflow-y: hidden`。
+  - `AGENTS.md`：新增 3.9 節，明定介面禁止出現 Scrollbar 之強制規範。
+- **實測量測**：收合狀態內容高 778px，展開備份列後 815px。
+
+### 🌐 實現 Apache 2.4 網頁伺服器 WinSW 完全沙盒化 (LAH_Web_Service) 與 VC++ 依賴獨立封裝
+
+- **修改目的**：
+  - 徹底解決 Apache 2.4 原生使用 `httpd.exe -k install` 註冊系統服務引發之全域 SCM 侵入、名稱衝突以及對全域 PATH（如 Instant Client）與 VC++ Redistributable 之外部依賴。
+  - 將服務名稱命名為 `LAH_Web_Service`，改由自帶之 WinSW 服務核心 (`lah-web-service.exe`) 進行進程沙盒守護，將 `PATH` 限縮於服務內部，達到 100% 零全域環境變數污染。
+  - 支援舊版 Apache 服務（`Apache2.4` / `Apache24`）自動無縫卸載接管，防範開機雙服務競爭 Port 80。
+  - 遵循「不修改網路下載之官方原生 Apache ZIP 包」原則，將 Visual C++ 2015–2022 轉散發 DLL 獨立封裝為 `vcredist-x64.zip`，透過檔名工具鏈解析（如 `VS18`、`VS17`、`VC15`）自動解壓並同步補齊至 `Apache24/bin`、`php7/` 與 `php85/` 目錄。
+- **具體修改項目**：
+  - **自動更新工具核心 (`updater/`)**：
+    - `service/lah-web-service.xml`：新增 WinSW 服務模板，宣告私有 `PATH`（綁定 `Apache24\bin`、`instantclient_11_2` 與 `php7`）與 `NLS_LANG`，配置故障自癒重啟。
+    - `src-tauri/src/services.rs`：新增 `LAH_WEB_SERVICE_NAME` 常數，於 `query_apache_service` 優先探測 `LAH_Web_Service`；`install_apache_service` 實作自動偵測並卸載舊版 Apache 服務、釋出 WinSW 檔案並啟動守護。
+    - `src-tauri/src/extractor.rs`：新增 `parse_apache_zip_meta` 解析版本與工具鏈、`find_vcredist_zip` 探測獨立 VC++ 壓縮包、`sync_vcredist_dlls_to_php` 同步程式庫，並將 `vcredist` 納入 `ALL_PACKAGE_SPECS` 與 `base/` 分類，通過 10 項單元測試。
+    - `src-tauri/src/pipeline.rs`：解壓流程支援自動輸出 Apache 版本工具鏈日誌、自動探測並解壓獨立 `vcredist` 依賴至 `Apache24/bin` 並同步至 PHP，服務註冊與健康檢查對齊 `LAH_Web_Service`。
+    - `src-tauri/src/system.rs`：根目錄探測加入 `LAH_Web_Service` 登錄檔反推；更新專屬沙盒維運終端 `lah-cmd.bat`，注入 Apache 與 Instant Client 路徑並提供維運指引。
+    - `ui/index.html` & `ui/app.js`：更新核取方塊與狀態標籤為「自動註冊 Web 伺服器為 Windows 系統服務 (LAH_Web_Service)」，前端新增 `vcredist` 依賴卡片與端點說明。
+  - **自動移除工具 (`uninstaller/`)**：
+    - `src-tauri/src/services.rs`：卸載管線優先透過 `lah-web-service.exe stop & uninstall` 清理 Web 沙盒服務，並備援刪除 SCM 註冊。
+    - `src-tauri/src/system.rs`：服務 ImagePath 反推根目錄加入 `LAH_Web_Service`，通過 2 項單元測試。
+  - **備份與還原工具 (`backuper/`)**：
+    - `src-tauri/src/system.rs`：服務 ImagePath 反推根目錄加入 `LAH_Web_Service`，通過 1 項單元測試。
+  - **系統打包腳本 (`pack/pack.py`)**：
+    - 新增 `build_vcredist_package` 函式，自動自系統收集 10 大 x64 VC++ 2015–2022 核心程式庫打包為 `dist/base/vcredist-x64.zip`。
+- **相容性說明**：
+  - 產出之 `dist/智慧控管與監控系統 - 自動更新工具.exe` (11.86 MB) 與 `dist/智慧控管與監控系統 - 自動移除工具.exe` (10.71 MB) 均通過 Release 實體編譯與全套單元測試。
+  - 官方下載之 `httpd-*.zip` 保持純淨原貌無須重壓，全系統環境變數零污染。
+
 ### 🛡️ 全面對齊 node-portable 零全域污染沙盒模式與無滾動條體驗
 
 - **修改目的**：

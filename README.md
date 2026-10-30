@@ -12,7 +12,7 @@
 
 | 子目錄 | 工具名稱 | 核心技術 | 主要職責與特色 |
 |---|---|---|---|
-| **`updater/`** | **自動更新工具**<br/>`智慧控管與監控系統 - 自動更新工具.exe` | Tauri 2 (Rust) | 支援 10 大模組更新包智慧對齊解壓、`base/`、`patch/`、`node_modules/` 分流優先探測與平滑回退、5 階段自動化系統配置引擎（Apache mod_php7、PHP 8.5 FastCGI Proxy、CVE-2024-4577 資安強化、綠色 Node/PM2 全域接管與 WinSW 服務部署、便攜版內建 `pm2-logrotate` 預先掛載與日誌壓縮、服務重啟與全系統健康檢查）。 |
+| **`updater/`** | **自動更新工具**<br/>`智慧控管與監控系統 - 自動更新工具.exe` | Tauri 2 (Rust) | 支援 11 大模組更新包智慧對齊解壓、`base/`、`patch/`、`node_modules/` 分流優先探測與平滑回退、5 階段自動化系統配置引擎（Web 沙盒服務 `LAH_Web_Service` 守護部署與 Apache mod_php7、PHP 8.5 FastCGI Proxy、CVE-2024-4577 資安強化、綠色 Node/PM2 全域接管與 WinSW 服務部署、便攜版內建 `pm2-logrotate` 預先掛載與日誌壓縮、服務重啟與全系統健康檢查）。 |
 | **`uninstaller/`** | **自動移除工具**<br/>`智慧控管與監控系統 - 自動移除工具.exe` | Tauri 2 (Rust) | 完整停止並刪除 Windows 服務（`LAH_PM2_Service`、`Apache2.4`）、精確終止殘留進程、清理開機自啟動與工作排程、還原環境變數 `PATH`、註銷 Apache FastCGI 轉發、解除唯讀安全刪除檔案並深度清理安裝根目錄（嚴格保護備份檔）。 |
 | **`backuper/`** | **備份與還原工具**<br/>`智慧控管與監控系統 - 備份與還原工具.exe` | Tauri 2 (Rust) | 支援系統重要資料與設定（即時通 `db/`、`uploads/`、各專案 `.env`、`AD.php`、`www/assets/`、`php.ini`、`httpd.conf`、`.pm2`）打包備份；擴充涵蓋 Oracle `instantclient_11_2` 與 PHP 自訂資料庫擴充 DLL；還原前自動建立 `restore_undo_*.zip` 復原點，採彈現式對話框節省空間。 |
 | **`node-portable/`** | **可攜 Node 安裝工具**<br/>`智慧控管與監控系統 - 可攜 Node 安裝工具.exe` | Tauri 2 (Rust) | 因應資安要求提供純綠色版 Node.js 16.20.2 與 PM2 離線安裝，支援直接掛載內建之 `pm2-logrotate`（v3.0.0）、全面接管系統與使用者 `PATH` 及 `PM2_HOME`、停止舊全域 `pm2.exe` 服務、清理 `dump.pm2` 舊路徑、註冊開機背景自啟服務 `PM2_Portable_Service`（WinSW）並具備每 60 秒 Daemon 自癒機制，確保系統升級全域 Node.js 時受管程式不受影響。 |
@@ -28,6 +28,7 @@
 | 壓縮包檔名（支援萬用字元與簡寫） | 預設相對路徑 | 說明 |
 | :--- | :--- | :--- |
 | **`httpd-2.4.*.zip` / `Apache24.zip`** | `Apache24` | Apache 2.4 網頁伺服器核心 |
+| **`vcredist-x64.zip` / `vcredist*.zip`** | `Apache24\bin` | VC++ 2015–2022 獨立執行期依賴（自動補齊至 `Apache24\bin`、`php7` 與 `php85`，達成零全域依賴） |
 | **`php-7.4.*.zip` / `php7.zip`** | `php7` | PHP 7.4 執行環境 (舊軌 API 依賴) |
 | **`php-8.*.zip` / `php85.zip`** | `php85` | PHP 8.5 執行環境 (現代化 FastCGI 核心) |
 | **`node.zip`** | `node` | Node.js 綠色執行環境 (含 npm, pm2, yarn) |

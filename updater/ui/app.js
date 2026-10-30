@@ -26,6 +26,13 @@ const DEFAULT_PACKAGES = [
     rel_target: "php85",
     is_base_env: true,
   },
+  {
+    id: "vcredist",
+    name: "vcredist-x64.zip",
+    title: "VC++ 執行期相依套件 (vcredist-x64.zip)",
+    rel_target: "Apache24\\bin",
+    is_base_env: true,
+  },
   // 應用模組 (右欄)
   {
     id: "www",
@@ -79,7 +86,7 @@ const DEFAULT_PACKAGES = [
 ];
 
 const PKG_CATEGORIES = {
-  base: ['apache24', 'php7', 'php85', 'node'],
+  base: ['apache24', 'php7', 'php85', 'vcredist', 'node'],
   patch: ['www', 'lah_api', 'lah_nuxtjs', 'messenger'],
   node_modules: ['lah_nuxtjs_modules', 'messenger_modules'],
 };
@@ -121,9 +128,28 @@ function appendLog(level, msg) {
   box.scrollTop = box.scrollHeight;
 }
 
-// 視窗尺寸直接由 tauri.conf.json 精準鎖定 630px 高度 (減去 150px 消除多餘空白)
+// 動態自適應視窗高度：依據文檔流真實累積高度精準微調客戶區高度，徹底消除垂直捲軸與多餘空白
+let fitTimer = null;
 function autoFitWindow() {
-  // no-op
+  if (fitTimer) cancelAnimationFrame(fitTimer);
+  fitTimer = requestAnimationFrame(() => {
+    const layout = document.querySelector(".main-layout");
+    const footer = document.querySelector(".footer-bar");
+    if (!layout || !footer) return;
+
+    const computedFooter = window.getComputedStyle(footer);
+    const footerMarginTop = parseFloat(computedFooter.marginTop) || 6;
+    const bodyPaddingBottom = parseFloat(window.getComputedStyle(document.body).paddingBottom) || 10;
+
+    // 計算文檔流到達 footer 底部所需之完整客戶區高度 (+4px 裕度防護浮點進位誤差)
+    const requiredHeight = Math.ceil(
+      layout.offsetTop + layout.offsetHeight + footerMarginTop + footer.offsetHeight + bodyPaddingBottom + 4
+    );
+
+    invoke("fit_window_to_content", { clientHeight: requiredHeight }).catch((err) => {
+      console.warn("自適應視窗高度呼叫失敗:", err);
+    });
+  });
 }
 
 // 首次同步渲染初始清單 (0 延遲，無等待感)
@@ -293,12 +319,12 @@ async function scanEnvironment(isInitial = false) {
 
     // 服務狀態連動
     if (res.apache_service) {
-      document.getElementById("lbl_auto_apache").textContent = `自動註冊 Apache 為 Windows 系統服務 [${res.apache_service}] (${res.apache_running ? "運行中" : "已註冊"})`;
+      document.getElementById("lbl_auto_apache").textContent = `自動註冊 Web 為 Windows 系統服務 [${res.apache_service}] (${res.apache_running ? "運行中" : "已註冊"})`;
       document.getElementById("chk_restart_apache").checked = res.apache_running;
-      document.getElementById("lbl_restart_apache").textContent = `更新後重新啟動 Apache 服務 [${res.apache_service}] (${res.apache_running ? "運行中" : "已停止"})`;
+      document.getElementById("lbl_restart_apache").textContent = `更新後重新啟動 Web 服務 [${res.apache_service}] (${res.apache_running ? "運行中" : "已停止"})`;
     } else {
-      document.getElementById("lbl_auto_apache").textContent = "自動註冊 Apache 為 Windows 系統服務 (Apache2.4 未安裝)";
-      document.getElementById("lbl_restart_apache").textContent = "更新後重新啟動 Apache 服務 (未安裝)";
+      document.getElementById("lbl_auto_apache").textContent = "自動註冊 Web 為 Windows 系統服務 (LAH_Web_Service 待註冊)";
+      document.getElementById("lbl_restart_apache").textContent = "更新後重新啟動 Web 服務 (LAH_Web_Service 未註冊)";
     }
 
     if (res.pm2_service_installed) {

@@ -50,8 +50,8 @@ pub fn detect_default_root_dir() -> PathBuf {
     let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
     let hkcu = RegKey::predef(HKEY_CURRENT_USER);
 
-    // 1. 優先由已註冊之 LAH_PM2_Service / PM2_Portable_Service / Apache2.4 ImagePath 反推根目錄
-    for svc_name in ["LAH_PM2_Service", "PM2_Portable_Service", "Apache2.4", "Apache24"] {
+    // 1. 優先由已註冊之 LAH_Web_Service / LAH_PM2_Service / PM2_Portable_Service / Apache2.4 ImagePath 反推根目錄
+    for svc_name in ["LAH_Web_Service", "LAH_PM2_Service", "PM2_Portable_Service", "Apache2.4", "Apache24"] {
         let subkey = format!(r"SYSTEM\CurrentControlSet\Services\{svc_name}");
         if let Ok(svc_key) = hklm.open_subkey_with_flags(&subkey, KEY_READ) {
             if let Ok(img_path) = svc_key.get_value::<String, _>("ImagePath") {
@@ -219,19 +219,24 @@ setlocal\r\n\
 set \"ROOT_DIR=%~dp0\"\r\n\
 set \"ROOT_DIR=%ROOT_DIR:~0,-1%\"\r\n\
 set \"NODE_DIR=%ROOT_DIR%\\node\"\r\n\
+set \"APACHE_DIR=%ROOT_DIR%\\Apache24\"\r\n\
+set \"OCI_DIR=%ROOT_DIR%\\instantclient_11_2\"\r\n\
 set \"PM2_HOME=%ROOT_DIR%\\.pm2\"\r\n\
-set \"PATH=%NODE_DIR%;%PATH%\"\r\n\
-title LAH 智慧控管專屬終端 (Node 16 / PM2 沙盒環境)\r\n\
+set \"PATH=%NODE_DIR%;%APACHE_DIR%\\bin;%OCI_DIR%;%PATH%\"\r\n\
+title LAH 智慧控管專屬終端 (Node 16 / PM2 / Apache 2.4 沙盒環境)\r\n\
 echo ============================================================\r\n\
 echo   LAH 智慧控管專屬維運終端 (沙盒環境 - 零全域污染)\r\n\
-echo   - 隔離 Node 目錄: %NODE_DIR%\r\n\
-echo   - 隔離 PM2 目錄 : %PM2_HOME%\r\n\
+echo   - 隔離 Node 目錄  : %NODE_DIR%\r\n\
+echo   - 隔離 Apache 目錄: %APACHE_DIR%\r\n\
+echo   - 隔離 PM2 目錄   : %PM2_HOME%\r\n\
 echo   - 全域環境不受任何干擾 (關閉視窗即自動釋放)\r\n\
 echo ============================================================\r\n\
 call node -v\r\n\
 call \"%NODE_DIR%\\pm2.cmd\" -v\r\n\
 echo ------------------------------------------------------------\r\n\
-echo 提示: 您可在此直接執行 pm2 status / pm2 logs / pm2 restart all\r\n\
+echo 提示:\r\n\
+echo   - Node/PM2: pm2 status / pm2 logs / pm2 restart all\r\n\
+echo   - Apache   : httpd -t (語法檢查) / sc query LAH_Web_Service\r\n\
 echo ============================================================\r\n\
 cmd /k\r\n";
 
