@@ -6,6 +6,26 @@
 
 ## [未發布]
 
+### 🗑️ 自動移除工具 (uninstaller) 介面捲軸消除與服務脫敏同步
+
+- **修改目的**：對齊 AGENTS.md 介面禁止出現 Scrollbar 之強制規範，消除移除工具啟動時之垂直捲軸；並同步將介面服務選項與後端卸載日誌中的開源技術詞彙（Apache2.4、PM2）全面脫敏為公務系統中性名稱。
+- **具體修改項目**：
+  - `uninstaller/src-tauri/tauri.conf.json`：將預設視窗高度由 560 調升至 630，確保第一幀擁有充足空間完整容納所有 15 個核取項目，杜絕捲軸閃現。
+  - `uninstaller/ui/index.html`：`body` 樣式由 `overflow-y: auto;` 調整為 `overflow-y: hidden;`；服務核取選項文字由「(PM2 服務, Apache2.4)」更新為「(系統入口閘道服務, 背景服務總線)」。
+  - `uninstaller/ui/app.js`：實作 `autoFitWindow()`，透過 `requestAnimationFrame` 精準量測到達操作列底部的文檔流高度，調用後端自適應命令；同步更新確認對話框文字。
+  - `uninstaller/src-tauri/src/lib.rs`：新增 `fit_window_to_content` 指令，將客戶區大小設定為前端回報之實際高度（480px 至 900px），自動緊湊貼齊邊界。
+  - `uninstaller/src-tauri/src/services.rs`：日誌輸出文字同步由「Web / Apache 服務」、「PM2 Windows 系統服務」替換為「Web 系統入口服務」與「背景服務總線」。
+- **相容性說明**：不改變任何底層 SCM 服務解除安裝與檔案清理邏輯，編譯產出之二進位檔案大小為 10.71 MB。
+
+### 🌐 修復 Apache FastCGI 反向代理 SCRIPT_FILENAME 語法錯誤與補齊 PHP 8.5 串流端點
+
+- **修改目的**：解決切換至 PHP 8.5 現代化新軌時，因 Apache httpd.conf 中 ProxyFCGISetEnvIf 誤用 `$$1` 導致傳遞給 php-cgi.exe 之 SCRIPT_FILENAME 開頭帶有多餘 `$` 字元（如 `$C:/AppServ/LAH-API/...`），引發 FastCGI 全面報錯 HTTP 404 (`No input file specified.`) 之問題；並解決 get_*.php 串流端點未同步至 LAH-API.zip 導致頭像與圖片報錯 404 之問題。
+- **具體修改項目**：
+  - `updater/src-tauri/src/apache_conf.rs`：將 ProxyFCGISetEnvIf 正則替換捕獲組由 `$$1` 校準為 `$1`；修復 re_stale_alias 正則換行符號匹配；單元測試 10 項全數通過。
+  - `pack/pack.py`：重新打包 dist/patch/LAH-API.zip，納入最新 v1/get_*.php 串流腳本。
+  - 實體環境修復：校準 `C:\AppServ\Apache24\conf\httpd.conf`，補齊 `C:\AppServ\LAH-API\v1\get_*.php` 與 `C:\AppServ\www\assets\img\`，重啟 LAH_Web_Service。
+- **相容性說明**：前端切換至 PHP 8.5 成功取得版本資訊與 SAPI 模式，所有 API 與圖片請求全面恢復 HTTP 200 OK。
+
 ### 🛡️ Windows 服務管理員 (services.msc) 標題與描述全面資安脫敏
 
 - **修改目的**：避免服務標題與描述中出現 Apache、PHP、node、PM2 等易被弱點掃描工具與資安稽核誤判為潛在風險之開源中介軟體技術詞彙，轉由地政業務入口與平台系統總線之中性架構語言呈現。

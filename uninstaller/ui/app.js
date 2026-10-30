@@ -7,7 +7,7 @@ let isBusy = false;
 
 // 項目核取定義與文字對齊清單
 const CHECKBOX_ITEMS = [
-  { id: "chk_services", key: "do_services", label: "• 🛑 停止並解除安裝 Windows 服務 (PM2 服務, Apache2.4)" },
+  { id: "chk_services", key: "do_services", label: "• 🛑 停止並解除安裝 Windows 服務 (系統入口閘道服務, 背景服務總線)" },
   { id: "chk_kill_procs", key: "do_kill_procs", label: "• ⚡ 終止守護行程與背景程序 (pm2 kill, 殘留 node.exe / php-cgi / httpd)" },
   { id: "chk_autostart", key: "do_autostart", label: "• 🧹 清除開機自啟動與環境變數 (啟動資料夾, 排程器, PATH, PM2_HOME)" },
   { id: "chk_remove_fe", key: "do_remove_fe", label: "• 🌐 移除智慧前端網站 (LAH-NUXTJS)" },
@@ -222,6 +222,25 @@ $("btn_modal_back").onclick = () => {
 // 主畫面退出按鈕
 $("btn_exit").onclick = exitApp;
 
+
+// 動態自適應視窗高度：依據文檔流真實累積高度精準微調客戶區高度，徹底消除垂直捲軸
+let fitTimer = null;
+function autoFitWindow() {
+  if (fitTimer) cancelAnimationFrame(fitTimer);
+  fitTimer = requestAnimationFrame(() => {
+    const footer = document.querySelector(".footer-bar");
+    if (!footer) return;
+
+    // 計算文檔流到達 footer 底部所需之客戶區完整高度 (+4px 裕度防護浮點進位誤差)
+    const requiredHeight = Math.ceil(footer.offsetTop + footer.offsetHeight + 12 + 4);
+
+    invoke("fit_window_to_content", { clientHeight: requiredHeight }).catch((err) => {
+      console.warn("自適應視窗高度呼叫失敗:", err);
+    });
+  });
+}
+
 // 啟動檢測
 initAdminStatus();
 initRootDir();
+autoFitWindow();

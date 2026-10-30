@@ -355,7 +355,7 @@ pub fn configure_apache_fcgi_proxy(apache_dir: &Path, root_dir: &Path, php85_dir
             <FilesMatch \"\\.php$\">\n\
                 <If \"-f %{{REQUEST_FILENAME}}\">\n\
                     SetHandler \"proxy:fcgi://127.0.0.1:8085/\"\n\
-                    ProxyFCGISetEnvIf \"reqenv('SCRIPT_FILENAME') =~ m#^proxy:fcgi://127\\.0\\.0\\.1:8085/(.*)$#\" SCRIPT_FILENAME \"$$1\"\n\
+                    ProxyFCGISetEnvIf \"reqenv('SCRIPT_FILENAME') =~ m#^proxy:fcgi://127\\.0\\.0\\.1:8085/(.*)$#\" SCRIPT_FILENAME \"$1\"\n\
                 </If>\n\
             </FilesMatch>\n\
         </Directory>\n\
@@ -368,9 +368,7 @@ pub fn configure_apache_fcgi_proxy(apache_dir: &Path, root_dir: &Path, php85_dir
     content = content.replace("%{%REQUEST_FILENAME}", "%{REQUEST_FILENAME}");
 
     // 清理可能散落或舊安裝根目錄之歷史 Alias 與 Directory (如 C:/AppServ 轉移至 D:/AppServ)
-    let re_stale_alias = Regex::new(r#"(?m)^\s*Alias\s+/(?i:lah-api)(?:/api)?\s+"[a-zA-Z]:/[^"]*?"
-?
-"#).unwrap();
+    let re_stale_alias = Regex::new(r#"(?m)^\s*Alias\s+/(?i:lah-api)(?:/api)?\s+"[a-zA-Z]:/[^"]*?"(?:\r?\n)?"#).unwrap();
     content = re_stale_alias.replace_all(&content, "").to_string();
 
     let re_stale_api_dir = Regex::new(r#"(?s)<Directory\s+"[a-zA-Z]:/[^"]*?/(?i:lah-api)">.*?</Directory>\s*"#).unwrap();

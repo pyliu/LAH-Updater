@@ -11,6 +11,22 @@ use tauri::{AppHandle, Emitter};
 use types::{LogPayload, ProgressPayload, UninstallOptions, UninstallReport};
 
 #[tauri::command]
+fn fit_window_to_content(window: tauri::Window, client_height: f64) -> Result<(), String> {
+    use tauri::{LogicalSize, Size};
+    let scale_factor = window.scale_factor().unwrap_or(1.0);
+    let inner = window.inner_size().unwrap_or_default();
+
+    let target_inner_height = client_height.max(480.0).min(900.0);
+    let cur_width = (inner.width as f64 / scale_factor).max(860.0);
+
+    let _ = window.set_size(Size::Logical(LogicalSize {
+        width: cur_width,
+        height: target_inner_height,
+    }));
+    Ok(())
+}
+
+#[tauri::command]
 fn check_admin() -> bool {
     system::is_admin()
 }
@@ -59,7 +75,7 @@ async fn run_uninstall(app: AppHandle, options: UninstallOptions) -> Result<Unin
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
-        .invoke_handler(tauri::generate_handler![check_admin, detect_root_dir, run_uninstall, exit_app])
+        .invoke_handler(tauri::generate_handler![fit_window_to_content, check_admin, detect_root_dir, run_uninstall, exit_app])
         .run(tauri::generate_context!())
         .expect("啟動智慧控管與監控系統 - 自動移除工具失敗");
 }

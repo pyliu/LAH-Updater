@@ -32,7 +32,7 @@ pub fn query_apache_service() -> Option<String> {
 
 pub fn uninstall_apache_service(root_dir: &Path, log_fn: &dyn Fn(&str, &str)) -> bool {
     let svc_name = query_apache_service().unwrap_or_else(|| "LAH_Web_Service".to_string());
-    log_fn(&format!("⏳ 正在停止並解除安裝 Web / Apache 服務 [{}]...", svc_name), "info");
+    log_fn(&format!("⏳ 正在停止並解除安裝 Web 系統入口服務 [{}]...", svc_name), "info");
 
     let mut uninstalled = false;
 
@@ -73,16 +73,16 @@ pub fn uninstall_apache_service(root_dir: &Path, log_fn: &dyn Fn(&str, &str)) ->
     }
 
     if uninstalled {
-        log_fn(&format!("  ✓ Web / Apache 服務 [{}] 已成功解除安裝", svc_name), "success");
+        log_fn(&format!("  ✓ Web 系統入口服務 [{}] 已成功解除安裝", svc_name), "success");
     } else {
-        log_fn("  ℹ️ 未偵測到運作中之 Web / Apache 服務或先前已卸載", "info");
+        log_fn("  ℹ️ 未偵測到運作中之 Web 系統服務或先前已卸載", "info");
     }
 
     true
 }
 
 pub fn uninstall_lah_pm2_service(root_dir: &Path, log_fn: &dyn Fn(&str, &str)) -> bool {
-    log_fn("⏳ 正在停止並解除安裝 PM2 Windows 系統服務 (含 LAH_PM2_Service 與 PM2_Portable_Service)...", "info");
+    log_fn("⏳ 正在停止並解除安裝背景服務總線 (含 LAH_PM2_Service 與 PM2_Portable_Service)...", "info");
 
     let service_pairs = [
         ("LAH_PM2_Service", "lah-service.exe"),
