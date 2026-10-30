@@ -759,7 +759,7 @@ def main():
         build_vcredist_package(base_dir)
 
     # 9. 自動同步更新說明文件至 patch/ 子資料夾
-    notes_candidates = glob.glob(os.path.join(root_dir, "updater", "*更新說明*.txt")) + glob.glob(os.path.join(root_dir, "*更新說明*.txt"))
+    notes_candidates = glob.glob(os.path.join(root_dir, "tools", "updater", "*更新說明*.txt")) + glob.glob(os.path.join(root_dir, "updater", "*更新說明*.txt")) + glob.glob(os.path.join(root_dir, "*更新說明*.txt"))
     if notes_candidates:
         notes_candidates.sort(key=os.path.getmtime, reverse=True)
         latest_note = notes_candidates[0]

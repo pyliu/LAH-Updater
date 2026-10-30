@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>智慧控管與監控系統 - 管理儀表板</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="icon" type="image/png" href="favicon.png">
+</head>
+<body>
+  <div id="app" class="app-container">
+    <!-- 頂部標題與全域控制列 -->
+    <header class="header-bar">
+      <div class="brand-group">
+        <div class="brand-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
+          </svg>
+        </div>
+        <div class="brand-info">
+          <h1 class="brand-title">智慧控管與監控系統 - 管理儀表板</h1>
+          <div class="root-badge" id="rootBadge" title="當前安裝根目錄">
+            <span class="dot"></span>
+            <span class="path-text" id="rootDirText">載入中...</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="header-actions">
+        <!-- 輪詢時間選擇選單 -->
+        <div class="control-pill polling-interval-group" title="調整背景自動探測與更新頻率">
+          <span class="control-label">輪詢：</span>
+          <select id="selectPollingInterval" class="pill-select">
+            <option value="3000">3 秒</option>
+            <option value="5000" selected>5 秒 (預設)</option>
+            <option value="10000">10 秒</option>
+            <option value="15000">15 秒</option>
+            <option value="30000">30 秒</option>
+            <option value="60000">60 秒</option>
+          </select>
+        </div>
+
+        <!-- 字體大小切換選單 -->
+        <div class="control-pill font-scale-group" title="調整介面字體大小">
+          <span class="control-label">字體：</span>
+          <select id="selectFontScale" class="pill-select">
+            <option value="1">一般 (100%)</option>
+            <option value="1.15" selected>中 (+15%)</option>
+            <option value="1.25">大 (+25%)</option>
+          </select>
+        </div>
+
+        <!-- 明暗主題切換按鈕 -->
+        <button class="btn btn-secondary" id="btnToggleTheme" title="切換明亮／深邃介面主題">
+          <span id="themeIcon">☀️</span>
+          <span id="themeText">明亮</span>
+        </button>
+
+        <button class="btn btn-warning" id="btnRestartAll" title="一鍵重啟底層 Web 服務與所有 PM2 進程">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="btn-icon">
+            <polyline points="1 4 1 10 7 10"></polyline>
+            <polyline points="23 20 23 14 17 14"></polyline>
+            <path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"></path>
+          </svg>
+          一鍵重啟全部
+        </button>
+        <button class="btn btn-secondary" id="btnTogglePolling" title="暫停或恢復背景自動探測">
+          <span id="pollingStatusIcon">⏸️</span>
+          <span id="pollingStatusText">暫停輪詢</span>
+        </button>
+        <button class="btn btn-primary" id="btnManualRefresh" title="立即主動探測各項狀態">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="btn-icon">
+            <polyline points="23 4 23 10 17 10"></polyline>
+            <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
+          </svg>
+          重新整理
+        </button>
+      </div>
+    </header>
+
+    <!-- 分頁選單導航 -->
+    <nav class="nav-tabs">
+      <button class="tab-btn active" data-tab="tab-services">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="tab-icon">
+          <rect x="2" y="2" width="20" height="8" rx="2" ry="2"></rect>
+          <rect x="2" y="14" width="20" height="8" rx="2" ry="2"></rect>
+          <line x1="6" y1="6" x2="6.01" y2="6"></line>
+          <line x1="6" y1="18" x2="6.01" y2="18"></line>
+        </svg>
+        服務監控與控制
+      </button>
+      <button class="tab-btn" data-tab="tab-logs">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="tab-icon">
+          <polyline points="4 17 10 11 4 5"></polyline>
+          <line x1="12" y1="19" x2="20" y2="19"></line>
+        </svg>
+        即時日誌檢視器
+      </button>
+      <button class="tab-btn" data-tab="tab-metrics">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="tab-icon">
+          <path d="M18 20V10"></path>
+          <path d="M12 20V4"></path>
+          <path d="M6 20v-6"></path>
+        </svg>
+        系統指標與快捷維運
+      </button>
+    </nav>
+
+    <!-- 分頁內容主容器 -->
+    <main class="content-body">
+      <!-- 分頁一：服務監控與控制 -->
+      <section id="tab-services" class="tab-pane active">
+        <!-- Windows 系統服務層 -->
+        <div class="card service-card">
+          <div class="card-header">
+            <div class="card-title-group">
+              <span class="card-icon">🪟</span>
+              <h2 class="card-title">Windows 系統服務層 (WinSW 沙盒服務)</h2>
+            </div>
+            <span class="section-desc">負責 Apache 2.4 反向代理閘道與 PM2 背景守護進程</span>
+          </div>
+          <div class="table-responsive">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th style="width: 22%;">服務名稱</th>
+                  <th style="width: 44%;">顯示名稱與職責</th>
+                  <th style="width: 14%;">即時狀態</th>
+                  <th style="width: 20%; text-align: right;">操作動作</th>
+                </tr>
+              </thead>
+              <tbody id="systemServicesTableBody">
+                <tr><td colspan="4" class="text-center loading-row">正在讀取系統服務狀態...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- PM2 應用進程層 -->
+        <div class="card service-card mt-3">
+          <div class="card-header">
+            <div class="card-title-group">
+              <span class="card-icon">⚡</span>
+              <h2 class="card-title">PM2 應用進程層 (Node / PHP 核心)</h2>
+            </div>
+            <span class="section-desc">智慧管控前端 (FE)、即時通 (WSS)、排程 (Scheduler) 與 API (FastCGI)</span>
+          </div>
+          <div class="table-responsive">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th style="width: 6%;">ID</th>
+                  <th style="width: 20%;">進程名稱</th>
+                  <th style="width: 10%;">PID</th>
+                  <th style="width: 12%;">狀態</th>
+                  <th style="width: 10%;">CPU</th>
+                  <th style="width: 12%;">記憶體</th>
+                  <th style="width: 10%;">重啟次數</th>
+                  <th style="width: 20%; text-align: right;">操作動作</th>
+                </tr>
+              </thead>
+              <tbody id="pm2TableBody">
+                <tr><td colspan="8" class="text-center loading-row">正在讀取 PM2 進程狀態...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- 分頁二：即時日誌檢視器 -->
+      <section id="tab-logs" class="tab-pane">
+        <div class="log-control-bar card">
+          <div class="log-filter-row">
+            <div class="select-group">
+              <label for="logSourceSelect">日誌來源：</label>
+              <select id="logSourceSelect" class="form-select">
+                <option value="">正在載入可用日誌清單...</option>
+              </select>
+            </div>
+
+            <div class="tail-toggle-group">
+              <label class="switch-label">
+                <input type="checkbox" id="chkAutoTail" checked>
+                <span class="switch-slider"></span>
+                即時追蹤 (Auto-Tail)
+              </label>
+            </div>
+
+            <div class="search-group">
+              <input type="text" id="txtLogFilter" class="form-input" placeholder="過濾關鍵字 (如 error, warn)...">
+            </div>
+
+            <div class="log-btn-group">
+              <button class="btn btn-outline" id="btnClearLogCanvas" title="清除視窗當前日誌畫布">🧹 清空畫布</button>
+              <button class="btn btn-outline" id="btnOpenNotepad" title="以 Windows 記事本開啟目前選定之日誌檔案">📝 記事本開啟</button>
+              <button class="btn btn-outline" id="btnCopyLog" title="複製畫面上已篩選的日誌文字">📋 複製內容</button>
+            </div>
+          </div>
+
+          <div class="log-info-bar">
+            <span id="logPathInfo">路徑：-</span>
+            <span id="logMetaInfo">大小：- ｜ 最後修改：-</span>
+          </div>
+        </div>
+
+        <div class="log-viewport card" id="logViewport">
+          <pre id="logContent">正在等待選取日誌來源...</pre>
+        </div>
+      </section>
+
+      <!-- 分頁三：系統指標與快捷維運 -->
+      <section id="tab-metrics" class="tab-pane">
+        <!-- 主機資源指標卡片列 -->
+        <div class="metrics-grid">
+          <div class="card metric-card">
+            <div class="metric-header">
+              <span class="metric-title">CPU 總使用率</span>
+              <span class="metric-icon">⚙️</span>
+            </div>
+            <div class="metric-value-box">
+              <span class="metric-value" id="valCpu">-</span>
+              <span class="metric-unit">%</span>
+            </div>
+            <div class="progress-bar-bg">
+              <div class="progress-bar-fill" id="barCpu" style="width: 0%;"></div>
+            </div>
+            <div class="metric-subtext">多核心即時負載</div>
+          </div>
+
+          <div class="card metric-card">
+            <div class="metric-header">
+              <span class="metric-title">系統實體記憶體</span>
+              <span class="metric-icon">🧠</span>
+            </div>
+            <div class="metric-value-box">
+              <span class="metric-value" id="valMem">-</span>
+              <span class="metric-unit">MB</span>
+            </div>
+            <div class="progress-bar-bg">
+              <div class="progress-bar-fill" id="barMem" style="width: 0%;"></div>
+            </div>
+            <div class="metric-subtext" id="textMemDetails">已用 - / 總計 -</div>
+          </div>
+
+          <div class="card metric-card">
+            <div class="metric-header">
+              <span class="metric-title">安裝磁碟剩餘空間</span>
+              <span class="metric-icon">💾</span>
+            </div>
+            <div class="metric-value-box">
+              <span class="metric-value" id="valDiskFree">-</span>
+              <span class="metric-unit">GB</span>
+            </div>
+            <div class="progress-bar-bg">
+              <div class="progress-bar-fill" id="barDisk" style="width: 0%;"></div>
+            </div>
+            <div class="metric-subtext" id="textDiskDetails">剩餘 - GB / 總計 - GB</div>
+          </div>
+        </div>
+
+        <!-- 五大通訊埠健康檢查矩陣 -->
+        <div class="card mt-3">
+          <div class="card-header">
+            <div class="card-title-group">
+              <span class="card-icon">🔌</span>
+              <h2 class="card-title">五大關鍵連接埠健康探針</h2>
+            </div>
+            <span class="section-desc">即時探測本機 TCP 監聽通訊埠，確保 HTTP、WebSocket 與 FastCGI 暢通</span>
+          </div>
+          <div class="port-grid" id="portProbeGrid">
+            <div class="port-card">正在探測通訊埠狀態...</div>
+          </div>
+        </div>
+
+        <!-- 快捷維運工具箱 -->
+        <div class="card mt-3">
+          <div class="card-header">
+            <div class="card-title-group">
+              <span class="card-icon">🛠️</span>
+              <h2 class="card-title">快捷維運工具箱</h2>
+            </div>
+            <span class="section-desc">常用系統維運動作，免除手動翻找目錄或輸入命令之繁瑣</span>
+          </div>
+          <div class="tools-grid">
+            <button class="tool-btn" id="btnLaunchSandboxCmd">
+              <span class="tool-icon">💻</span>
+              <span class="tool-name">開啟 LAH 沙盒維運終端</span>
+              <span class="tool-hint">啟動 lah-cmd.bat 私有隔離環境</span>
+            </button>
+
+            <button class="tool-btn" id="btnOpenFrontendWeb">
+              <span class="tool-icon">🌐</span>
+              <span class="tool-name">瀏覽器開啟前端入口</span>
+              <span class="tool-hint">導向 http://127.0.0.1:8080/</span>
+            </button>
+
+            <button class="tool-btn" id="btnCheckApacheSyntax">
+              <span class="tool-icon">🩺</span>
+              <span class="tool-name">Apache 組態語法校驗</span>
+              <span class="tool-hint">執行 httpd.exe -t 檢查組態</span>
+            </button>
+
+            <button class="tool-btn" id="btnTriggerLogrotate">
+              <span class="tool-icon">🗜️</span>
+              <span class="tool-name">手動觸發日誌壓縮輪替</span>
+              <span class="tool-hint">執行 pm2-logrotate 釋放磁碟空間</span>
+            </button>
+
+            <button class="tool-btn" id="btnOpenLogsFolder">
+              <span class="tool-icon">📁</span>
+              <span class="tool-name">開啟日誌存放目錄</span>
+              <span class="tool-hint">以檔案總管開啟 AppServ\logs\</span>
+            </button>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- 底部資訊列 -->
+    <footer class="footer-bar">
+      <div class="footer-left">
+        <span class="status-indicator live"></span>
+        <span id="footerStatusText">系統監控總線運作中</span>
+      </div>
+      <div class="footer-right">
+        <span id="lastUpdatedTime">最後更新：-</span>
+        <span class="version-tag">v0.1.0</span>
+      </div>
+    </footer>
+  </div>
+
+  <!-- 全域訊息提示 Toast -->
+  <div id="toast" class="toast"></div>
+
+  <!-- 確認對話視窗 Modal -->
+  <div id="confirmModal" class="modal-overlay hidden">
+    <div class="modal-card">
+      <h3 class="modal-title" id="modalTitle">確認操作</h3>
+      <p class="modal-body" id="modalBody">確定要執行此操作嗎？</p>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" id="btnModalCancel">取消</button>
+        <button class="btn btn-primary" id="btnModalConfirm">確定執行</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

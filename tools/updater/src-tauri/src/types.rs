@@ -103,4 +103,8 @@ pub struct UpdateSummary {
     pub health_report: Vec<String>,
     pub zips_to_clean: Vec<String>,
     pub error_message: Option<String>,
+    #[serde(default)]
+    pub dashboard_deployed: bool,
+    #[serde(default)]
+    pub dashboard_exe_path: Option<String>,
 }

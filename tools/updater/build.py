@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 r"""
-智慧控管與監控系統 - 重要資料備份與還原工具 (backuper)
+智慧控管與監控系統 - 自動更新工具 (updater)
 Rust (Tauri 2) 單一執行檔打包輔助腳本 (build.py)
 """
 import os
@@ -17,7 +17,7 @@ if sys.stderr and hasattr(sys.stderr, "reconfigure"):
 
 def main():
     print("=" * 60)
-    print("正在編譯打包「智慧控管與監控系統 - 備份與還原工具 (backuper)」...")
+    print("正在編譯打包「智慧控管與監控系統 - 自動更新工具 (updater)」...")
     print("=" * 60)
 
     script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -37,29 +37,47 @@ def main():
     print("[*] 執行指令：cargo build --release")
     print("-" * 60)
 
+    # 強制觸發 build.rs 更新時間戳，確保內嵌之 ui/* 與 service/* 變更必重新封裝
+    build_rs = os.path.join(src_tauri_dir, "build.rs")
+    if os.path.isfile(build_rs):
+        os.utime(build_rs, None)
+
     ret = subprocess.run([cargo_bin, "build", "--release"], cwd=src_tauri_dir)
 
     print("-" * 60)
     if ret.returncode == 0:
         # 依據 .cargo/config.toml 之 target-dir 定位產出二進位檔案
         target_candidates = [
-            r"C:\Temp\cargo-target\lah-backuper\release\lah-backuper.exe",
-            os.path.join(src_tauri_dir, "target", "release", "lah-backuper.exe"),
+            r"C:\Temp\cargo-target\lah-updater\release\lah-updater.exe",
+            os.path.join(src_tauri_dir, "target", "release", "lah-updater.exe"),
         ]
         built_exe = next((p for p in target_candidates if os.path.isfile(p)), None)
 
         if built_exe:
-            root_dir = os.path.dirname(script_dir)
+            root_dir = os.path.abspath(os.path.join(script_dir, "..", ".."))
             dist_dir = os.path.join(root_dir, "dist")
             os.makedirs(dist_dir, exist_ok=True)
 
-            out_exe_name = "智慧控管與監控系統 - 備份與還原工具.exe"
+            out_exe_name = "智慧控管與監控系統 - 自動更新工具.exe"
             out_exe_path = os.path.join(dist_dir, out_exe_name)
 
-            shutil.copy2(built_exe, out_exe_path)
+            try:
+                shutil.copy2(built_exe, out_exe_path)
+            except PermissionError:
+                old_bak = out_exe_path + ".old"
+                if os.path.isfile(old_bak):
+                    try:
+                        os.remove(old_bak)
+                    except Exception:
+                        pass
+                try:
+                    os.rename(out_exe_path, old_bak)
+                    shutil.copy2(built_exe, out_exe_path)
+                except Exception as e:
+                    print(f"[WARN] 覆蓋執行檔時發生鎖定: {e}")
 
             # 確保 dist 目錄僅保留中文檔名之發布執行檔，若存在舊版英文檔名則主動清除
-            legacy_std_path = os.path.join(dist_dir, "lah-backuper.exe")
+            legacy_std_path = os.path.join(dist_dir, "lah-updater.exe")
             if os.path.isfile(legacy_std_path):
                 try:
                     os.remove(legacy_std_path)
@@ -70,7 +88,7 @@ def main():
             print(f"[OK] 編譯成功！二進位檔案大小：{size_mb:.2f} MB")
             print(f"[OK] 產出發布路徑：\n  -> {out_exe_path}")
         else:
-            print("[WARN] 編譯指令成功，但在預期目標路徑未找到 lah-backuper.exe！")
+            print("[WARN] 編譯指令成功，但在預期目標路徑未找到 lah-updater.exe！")
     else:
         print(f"[ERROR] 編譯失敗，回傳碼：{ret.returncode}")
     print("=" * 60)

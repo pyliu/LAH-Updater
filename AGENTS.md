@@ -8,7 +8,7 @@
 
 - **目標**：提供一套乾淨、輕量、秒開、免安裝、具備防呆機制且相容 Windows 權限體系的原生自動化維運工具套件。
 - **核心架構**：
-  - 維運四大核心工具與擴充小工具全數採用 **Tauri 2 (Rust) + 純靜態 HTML/JS 前端** 原生架構實作（包含 `updater`、`node-portable`、`uninstaller`、`backuper` 與 `tools/sms-env-editor`）。
+  - 全系列維運工具與擴充小工具全數收納於 `tools/`，並採用 **Tauri 2 (Rust) + 純靜態 HTML/JS 前端** 原生架構實作（包含 `tools/updater`、`tools/node-portable`、`tools/uninstaller`、`tools/backuper`、`tools/dashboard` 與 `tools/sms-env-editor`）。
   - 單一執行檔體積約 9~12 MB，冷啟動縮減至 0.3 秒以內，免除 Python 解壓暫存目錄，達成隨點秒開並大幅降低防毒軟體誤判率。
 - **無外部運行庫依賴（Zero External Runtime Dependencies）**：
   - 核心程式碼嚴格使用 Rust 靜態編譯並自包含 WinSW 服務核心（`lah-service.exe` / `lah-web-service.exe`）。
@@ -20,33 +20,34 @@
 
 ```text
 LAH-Updater/
-├── updater/                 # 智慧控管與監控系統 - 自動更新工具 (Tauri 2 / Rust)
-│   ├── src-tauri/          # Rust 核心 (5 階段更新、解壓對齊、LAH_Web_Service / LAH_PM2_Service 沙盒服務配置)
-│   ├── ui/                 # 純靜態 HTML/JS 介面 (動態高度自適應無捲軸)
-│   ├── service/            # WinSW 模板 (lah-web-service.xml, lah-service.xml，編譯時透過 include_bytes! 內嵌)
-│   ├── build.py / build.bat# 一鍵編譯發布腳本 (輸出至 dist/)
-│   └── README.md
-├── uninstaller/            # 智慧控管與監控系統 - 自動移除工具 (Tauri 2 / Rust)
-│   ├── src-tauri/          # Rust 核心 (服務停止/刪除、進程終止、PATH/排程清理、深度掃除)
-│   ├── ui/                 # 純靜態 HTML/JS 介面 (內置二次確認彈窗、動態高度自適應)
-│   ├── build.py / build.bat# 一鍵編譯發布腳本 (輸出至 dist/)
-│   └── README.md
-├── backuper/               # 智慧控管與監控系統 - 備份與還原工具 (Tauri 2 / Rust)
-│   ├── src-tauri/          # Rust 核心 (重要資料備份、OCI8/MSSQL DLL 掃描、復原點 undo)
-│   ├── ui/                 # 彈現式日誌介面 (Modal Overlay、動態高度自適應)
-│   ├── build.py / build.bat# 一鍵編譯發布腳本 (輸出至 dist/)
-│   └── README.md
-├── node-portable/          # 智慧控管與監控系統 - 可攜 Node 安裝工具 (Tauri 2 / Rust)
-│   ├── src-tauri/          # Rust 核心 (Node 16.20.2 解壓、零全域污染沙盒隔離、WinSW 註冊、pm2-logrotate 預載)
-│   ├── ui/                 # 純靜態 HTML/JS 介面 (無捲軸緊緻版面、Unicode 4.0 符號向下相容)
-│   ├── service/            # WinSW 服務模板與 pm2_service_runner.js
-│   ├── build.py / build.bat# 一鍵編譯發布腳本 (輸出至 dist/)
+├── tools/                  # 獨立維運工具套件庫 (全數採用 Tauri 2 / Rust 實作)
+│   ├── updater/            # 智慧控管與監控系統 - 自動更新工具 (Tauri 2 / Rust)
+│   │   ├── src-tauri/      # Rust 核心 (5 階段更新、解壓對齊、LAH_Web_Service / LAH_PM2_Service 沙盒服務配置)
+│   │   ├── ui/             # 純靜態 HTML/JS 介面 (動態高度自適應無捲軸)
+│   │   ├── service/        # WinSW 模板 (lah-web-service.xml, lah-service.xml，編譯時透過 include_bytes! 內嵌)
+│   │   ├── build.py / build.bat# 一鍵編譯發布腳本 (輸出至 dist/)
+│   │   └── README.md
+│   ├── uninstaller/        # 智慧控管與監控系統 - 自動移除工具 (Tauri 2 / Rust)
+│   │   ├── src-tauri/      # Rust 核心 (服務停止/刪除、進程終止、PATH/排程清理、深度掃除)
+│   │   ├── ui/             # 純靜態 HTML/JS 介面 (內置二次確認彈窗、動態高度自適應)
+│   │   ├── build.py / build.bat# 一鍵編譯發布腳本 (輸出至 dist/)
+│   │   └── README.md
+│   ├── backuper/           # 智慧控管與監控系統 - 備份與還原工具 (Tauri 2 / Rust)
+│   │   ├── src-tauri/      # Rust 核心 (重要資料備份、OCI8/MSSQL DLL 掃描、復原點 undo)
+│   │   ├── ui/             # 彈現式日誌介面 (Modal Overlay、動態高度自適應)
+│   │   ├── build.py / build.bat# 一鍵編譯發布腳本 (輸出至 dist/)
+│   │   └── README.md
+│   ├── node-portable/      # 智慧控管與監控系統 - 可攜 Node 安裝工具 (Tauri 2 / Rust)
+│   │   ├── src-tauri/      # Rust 核心 (Node 16.20.2 解壓、零全域污染沙盒隔離、WinSW 註冊、pm2-logrotate 預載)
+│   │   ├── ui/             # 純靜態 HTML/JS 介面 (無捲軸緊緻版面、Unicode 4.0 符號向下相容)
+│   │   ├── service/        # WinSW 服務模板與 pm2_service_runner.js
+│   │   ├── build.py / build.bat# 一鍵編譯發布腳本 (輸出至 dist/)
+│   │   └── README.md
+│   ├── dashboard/          # 管理儀表板 (智慧控管與監控系統 - 管理儀表板.exe，WinSW/PM2/Log/Metrics)
+│   ├── sms-env-editor/     # 地籍異動簡訊參數設定工具 (env.properties BASE64 編輯器)
 │   └── README.md
 ├── pack/                   # 系統原始碼自動打包發布工具 (Python 3.10+ 標準庫)
 │   ├── pack.py / pack.bat  # 遍歷 LAH 各子專案與 VC++ 執行期打包為三向分流 .zip 壓縮包
-│   └── README.md
-├── tools/                  # 獨立維運小工具套件庫 (Tauri 2 / Rust)
-│   ├── sms-env-editor/     # 地籍異動簡訊參數設定工具 (env.properties BASE64 編輯器)
 │   └── README.md
 ├── assets/img/             # 離線操作手冊專用本機截圖與圖示資源
 ├── README.html             # 視覺化系統架構技術手冊 (100% 離線純靜態 HTML，含字體大小切換)
@@ -107,34 +108,63 @@ LAH-Updater/
 - `tauri.conf.json` 預設高度需大於最高內容狀態，`body` 使用 `overflow-y: hidden`。
 - 修改介面後必須實測各狀態無捲軸才能回報完成；彈窗內日誌與說明等長文字區塊不在此限。
 
+
+### 3.10 組態注入與正則字面替換防禦規範（強制）
+維運工具經常涉及以 Rust 讀取、修改並重新寫入 `httpd.conf`、`php.ini`、`services.xml` 或 `ecosystem.config.js` 等中介軟體設定檔。為根絕過去多次因「正則捕獲組吞噬」或「字串跳脫混淆」導致 FastCGI 路徑錯亂（HTTP 404 / 503）的事故，必須嚴格遵守以下三部曲防禦規範：
+
+1. **Rust 正則區塊替換強制宣告 `regex::NoExpand`**：
+   - 當動態生成之組態區塊（如 `fcgi_block`、`php2shell_block`、`xml_content`）內容含有 `$` 符號（例如 Apache 代理捕獲組 `$1`、環境變數 `$PORT`、正規表達式語法等）時，**嚴禁**直接傳入字串切片 `re.replace(text, &block)`。
+   - 在 Rust `regex` 套件中，`&str` 作為替換內容會自動嘗試展開 `$1`, `$2` 等反向引用；若被替換的目標正則未宣告對應捕獲組，**正則引擎會靜默將 `$1` 吞噬替換為空字串 `""`**，造成線上環境設定檔產生 `SCRIPT_FILENAME ""` 的致命錯誤。
+   - **強制做法**：必須一律包裝為 `regex::NoExpand(&block)`（例如 `re.replace(&content, NoExpand(&fcgi_block))`），強制將替換內容作為純字面（Literal）處理，絕不進行反向引用解析。
+
+2. **Apache `ProxyFCGISetEnvIf` 路徑捕獲語法規範**：
+   - 於 `httpd.conf` 中轉發 Windows FastCGI 請求時，剝除代理 URL 前綴之標準語法為：
+     ```apache
+     ProxyFCGISetEnvIf "reqenv('SCRIPT_FILENAME') =~ m#^proxy:fcgi://127\.0\.0\.1:8085/(.*)$#" SCRIPT_FILENAME "$1"
+     ```
+   - Expression 表達式中的捕獲組**必須且只能是 `$1`**。
+   - **嚴禁寫成 `$$1`**：Apache `ap_expr` 會將 `$$1` 解析為字面 `$` 字元加上捕獲內容（如 `$C:/AppServ/...`），導致 Windows 版 `php-cgi.exe` 收到無效磁碟路徑而報錯 `No input file specified.` (HTTP 404)。
+
+3. **組態函式雙軌單元測試強制驗證（初次建立 + 二次覆蓋等冪性）**：
+   - 凡涉及設定檔生成、注入或正規化的 Rust 函式，其單元測試**嚴格禁止只驗證「初次寫入（`push_str`）」路徑**。
+   - 測試案例必須強制執行**連續兩次呼叫（初次注入 ➔ 二次覆蓋更新）**，以完整模擬使用者重新執行工具或升級覆蓋的真實情境。
+   - 於第二次覆蓋後，必須同時驗證：
+     1. 正確字串已保留：`assert!(conf.contains(r#"SCRIPT_FILENAME "$1""#));`
+     2. 吞噬空字串不存在：`assert!(!conf.contains(r#"SCRIPT_FILENAME """#));`
+     3. 錯誤轉義字串不存在：`assert!(!conf.contains(r#"SCRIPT_FILENAME "$$1""#));`
 ---
 
 ## 4. 常用測試與打包指令
 
 - **建立自動更新工具**：
   ```powershell
-  python updater\build.py
+  python tools\updater\build.py
   # 或執行：.\建立自動更新工具.bat
   ```
 - **建立自動移除工具**：
   ```powershell
-  python uninstaller\build.py
+  python tools\uninstaller\build.py
   # 或執行：.\建立解除安裝工具.bat
   ```
 - **建立可攜 Node 工具**：
   ```powershell
-  python node-portable\build.py
+  python tools\node-portable\build.py
   # 或執行：.\建立可攜NODE工具.bat
   ```
 - **建立自動備份工具**：
   ```powershell
-  python backuper\build.py
+  python tools\backuper\build.py
   # 或執行：.\建立自動備份工具.bat
   ```
 - **建立簡訊設定工具**：
   ```powershell
   python tools\sms-env-editor\build.py
   # 或執行：.\建立簡訊設定工具.bat
+  ```
+- **建立管理儀表板工具**：
+  ```powershell
+  python tools\dashboard\build.py
+  # 或執行：.\建立管理儀表板工具.bat
   ```
 - **原始碼全系統打包**：
   ```powershell

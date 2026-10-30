@@ -105,6 +105,7 @@ let state = {
   backupZip: "",
   isUpdating: false,
   lastSummary: null,
+  dashboardExePath: null,
 };
 
 function formatSize(bytes) {
@@ -503,6 +504,18 @@ document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("btn_close_modal").addEventListener("click", () => {
     invoke("exit_app");
   });
+  const btnLaunchDash = document.getElementById("btn_launch_dashboard");
+  if (btnLaunchDash) {
+    btnLaunchDash.addEventListener("click", async () => {
+      if (state.dashboardExePath) {
+        try {
+          await invoke("launch_dashboard", { exePath: state.dashboardExePath });
+        } catch (e) {
+          alert(`啟動管理儀表板失敗: ${e}`);
+        }
+      }
+    });
+  }
   document.getElementById("btn_modal_back").addEventListener("click", () => {
     document.getElementById("modal_progress").classList.remove("active");
     scanEnvironment();
@@ -557,6 +570,8 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById("badge_updating").style.color = "#0284c7";
     document.getElementById("btn_modal_back").style.display = "none";
     document.getElementById("btn_close_modal").style.display = "none";
+    const btnDash1 = document.getElementById("btn_launch_dashboard");
+    if (btnDash1) btnDash1.style.display = "none";
     document.getElementById("modal_progress").classList.add("active");
 
     state.isUpdating = true;
@@ -572,6 +587,14 @@ document.addEventListener("DOMContentLoaded", () => {
         document.getElementById("badge_updating").style.color = "#16a34a";
         document.getElementById("btn_modal_back").style.display = "inline-block";
         document.getElementById("btn_close_modal").style.display = "inline-block";
+
+        if (summary.dashboard_deployed && summary.dashboard_exe_path) {
+          state.dashboardExePath = summary.dashboard_exe_path;
+          const btnDash = document.getElementById("btn_launch_dashboard");
+          if (btnDash) {
+            btnDash.style.display = "inline-block";
+          }
+        }
 
         // 若有更新完成的 zip 檔案，彈出清理詢問彈窗
         if (summary.zips_to_clean && summary.zips_to_clean.length > 0) {
@@ -627,6 +650,8 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById("badge_updating").style.color = "#0284c7";
     document.getElementById("btn_modal_back").style.display = "none";
     document.getElementById("btn_close_modal").style.display = "none";
+    const btnDash2 = document.getElementById("btn_launch_dashboard");
+    if (btnDash2) btnDash2.style.display = "none";
     document.getElementById("modal_progress").classList.add("active");
 
     state.isUpdating = true;
@@ -641,6 +666,14 @@ document.addEventListener("DOMContentLoaded", () => {
         document.getElementById("badge_updating").style.color = "#16a34a";
         document.getElementById("btn_modal_back").style.display = "inline-block";
         document.getElementById("btn_close_modal").style.display = "inline-block";
+
+        if (summary.dashboard_deployed && summary.dashboard_exe_path) {
+          state.dashboardExePath = summary.dashboard_exe_path;
+          const btnDash = document.getElementById("btn_launch_dashboard");
+          if (btnDash) {
+            btnDash.style.display = "inline-block";
+          }
+        }
       } else {
         document.getElementById("modal_progress_title").textContent = "⚠️ 套用未完全成功";
         document.getElementById("badge_updating").textContent = "有警告";

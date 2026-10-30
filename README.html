@@ -498,11 +498,13 @@
       
       <li class="nav-category">維運工具與模組</li>
       <li class="nav-item"><a href="#updater-overview" class="nav-link">LAH-Updater 工具套件總覽</a></li>
-      <li class="nav-item"><a href="#updater-tool" class="nav-link">1. 自動更新工具 (updater)</a></li>
-      <li class="nav-item"><a href="#node-portable" class="nav-link">2. 可攜 Node 安裝工具</a></li>
-      <li class="nav-item"><a href="#uninstaller-tool" class="nav-link">3. 解除安裝工具 (uninstaller)</a></li>
-      <li class="nav-item"><a href="#backuper-tool" class="nav-link">4. 自動備份工具 (backuper)</a></li>
-      <li class="nav-item"><a href="#pack-script" class="nav-link">5. 原始碼打包腳本 (pack.py)</a></li>
+      <li class="nav-item"><a href="#updater-overview" class="nav-link" onclick="switchTab('tab-updater')">1. 自動更新工具 (updater)</a></li>
+      <li class="nav-item"><a href="#updater-overview" class="nav-link" onclick="switchTab('tab-portable')">2. 可攜 Node 安裝工具</a></li>
+      <li class="nav-item"><a href="#updater-overview" class="nav-link" onclick="switchTab('tab-uninstaller')">3. 解除安裝工具 (uninstaller)</a></li>
+      <li class="nav-item"><a href="#updater-overview" class="nav-link" onclick="switchTab('tab-backuper')">4. 自動備份工具 (backuper)</a></li>
+      <li class="nav-item"><a href="#updater-overview" class="nav-link" onclick="switchTab('tab-pack')">5. 原始碼打包腳本 (pack.py)</a></li>
+      <li class="nav-item"><a href="#updater-overview" class="nav-link" onclick="switchTab('tab-sms')">6. 簡訊設定工具 (sms-env-editor)</a></li>
+      <li class="nav-item"><a href="#updater-overview" class="nav-link" onclick="switchTab('tab-dashboard')">7. 管理儀表板 (dashboard)</a></li>
 
       <li class="nav-category">資產與目錄規格</li>
       <li class="nav-item"><a href="#directory-specs" class="nav-link">安裝更新包目錄分流規範</a></li>
@@ -782,15 +784,15 @@
           <span class="project-tech" style="color: #c084fc; border-color: rgba(192, 132, 252, 0.3);">Tauri 2 (Rust) / 零 CDN 離線純前端 / Python pack.py</span>
         </div>
         <p style="font-size: 0.9rem; color: var(--text-light); margin-bottom: 10px;">
-          作為全系統的維運發布中心，整合自動更新（updater）、可攜 Node 安裝（node-portable）、自動備份（backuper）、解除安裝（uninstaller）四大桌面工具與全系統打包腳本（pack.py）。
+          作為全系統的維運發布中心，整合自動更新（updater）、可攜 Node 安裝（node-portable）、自動備份（backuper）、解除安裝（uninstaller）、管理儀表板（dashboard）、簡訊設定工具（sms-env-editor）全系列桌面原生工具與全系統打包腳本（pack.py）。
         </p>
       </div>
     </section>
 
-    <!-- 第 3 區：LAH-Updater 六大維運與自動化模組實作詳解 -->
+    <!-- 第 3 區：LAH-Updater 七大維運與自動化模組實作詳解 -->
     <section id="updater-overview" class="section-card">
       <h2 class="section-title">
-        <span>🚀</span> LAH-Updater 六大維運與自動化模組實作詳解
+        <span>🚀</span> LAH-Updater 七大維運與自動化模組實作詳解
       </h2>
       <p class="section-intro">
         點擊下方頁籤切換檢視各獨立工具的架構設計、核心管線、防呆自癒與操作指引：
@@ -804,6 +806,7 @@
         <button class="tab-btn" onclick="switchTab('tab-backuper')">4. 自動備份工具 (backuper)</button>
         <button class="tab-btn" onclick="switchTab('tab-pack')">5. 原始碼打包 (pack.py)</button>
         <button class="tab-btn" onclick="switchTab('tab-sms')">6. 簡訊設定工具 (sms-env-editor)</button>
+        <button class="tab-btn" onclick="switchTab('tab-dashboard')">7. 管理儀表板 (dashboard)</button>
       </div>
 
       <!-- Tab 1: updater -->
@@ -977,7 +980,7 @@ ode 等雙層</text>
               <code># 在 LAH-Updater 目錄下執行
 建立可攜NODE工具.bat
 # 或執行 Python 建置腳本
-python node-portable/build.py</code>
+python tools/node-portable/build.py</code>
               <button class="copy-btn" onclick="copyCode(this)">複製</button>
             </div>
             <p style="font-size: 0.8rem; color: var(--text-muted);">編譯後產出自動複製至 <code>dist/智慧控管與監控系統 - 可攜 Node 安裝工具.exe</code>。</p>
@@ -1138,7 +1141,7 @@ python node-portable/build.py</code>
           <div>
             <h4 style="color: #ffffff; margin-bottom: 8px;">🌟 核心功能與防呆設計</h4>
             <ul class="project-detail-list">
-              <li><strong>預設連線路徑：</strong>預設自動載入 <code>\220.1.34.221\C$\SMSWEB_MOI\env.properties</code>，亦支援自由切換本機與網路磁碟。</li>
+              <li><strong>預設連線路徑：</strong>預設自動載入 <code>\\220.1.34.221\C$\SMSWEB_MOI\env.properties</code>，亦支援自由切換本機與網路磁碟。</li>
               <li><strong>BASE64 自動編解碼：</strong>簡訊帳密、郵件帳密、Oracle 帳密與連線 URL 於讀取時自動解密呈現，儲存時自動加密寫回。</li>
               <li><strong>Big-5 繁體中文支援：</strong>完美相容 Java 舊版程式對 Big-5 / CP950 編碼之嚴格要求，不破壞既有參數結構。</li>
               <li><strong>差異預覽與備份：</strong>儲存前彈出變更差異（Diff）確認彈窗，寫入前自動於同目錄建立時間戳記備份。</li>
@@ -1154,6 +1157,37 @@ python tools/sms-env-editor/build.py</code>
               <button class="copy-btn" onclick="copyCode(this)">複製</button>
             </div>
             <p style="font-size: 0.8rem; color: var(--text-muted);">編譯後產出自動複製至 <code>dist/地籍異動簡訊參數設定工具.exe</code>。</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab 7: dashboard -->
+      <div id="tab-dashboard" class="tab-content">
+        <h3 style="color: #38bdf8; margin-bottom: 10px;">智慧控管與監控系統 - 管理儀表板 (dashboard)</h3>
+        <p style="font-size: 0.92rem; color: var(--text-light); margin-bottom: 14px;">
+          執行檔產物：<code>dist/智慧控管與監控系統 - 管理儀表板.exe</code> (約 11.20 MB)<br>
+          核心職責：整合 Windows 系統服務監控與控制、PM2 應用進程層控管、動態即時日誌串流檢視（Auto-Tail、關鍵字即時篩選、記事本開啟）、主機資源指標（CPU、RAM、磁碟容量）與五大連接埠（80, 8080, 8081, 8082, 8085）健康探針之全功能原生管理儀表板。
+        </p>
+        <div class="grid-2">
+          <div>
+            <h4 style="color: #ffffff; margin-bottom: 8px;">🌟 核心功能與視圖架構</h4>
+            <ul class="project-detail-list">
+              <li><strong>雙軌服務控管：</strong>統一管控 Windows 服務層（<code>LAH_Web_Service</code>、<code>LAH_PM2_Service</code>）與 PM2 進程層（<code>LAH-FE</code>、<code>LAH-WSS</code>、<code>LAH-SCHEDULER</code>、<code>lah-api-v85</code>），支援個別啟動/停止/重啟與頂部一鍵全域重啟。</li>
+              <li><strong>即時串流日誌：</strong>自動探測全系統各模組日誌，支援 Auto-Tail 動態追蹤、關鍵字即時篩選、清空畫面與以記事本直接開啟實體日誌檔案。</li>
+              <li><strong>指標與健康探針：</strong>主機 CPU 總負載、實體記憶體使用率、安裝磁碟剩餘空間，外加五大連接埠（80, 8080, 8081, 8082, 8085）即時 TCP 心跳檢查。</li>
+              <li><strong>快捷維運箱：</strong>一鍵喚醒 <code>lah-cmd.bat</code> 沙盒終端、前端入口、Apache 組態語法驗證（<code>httpd -t</code>）與日誌目錄。</li>
+            </ul>
+          </div>
+          <div>
+            <h4 style="color: #ffffff; margin-bottom: 8px;">🔨 便捷編譯與產出</h4>
+            <div class="code-block">
+              <code># 在 LAH-Updater 目錄下執行
+建立管理儀表板工具.bat
+# 或執行 Python 建置腳本
+python tools/dashboard/build.py</code>
+              <button class="copy-btn" onclick="copyCode(this)">複製</button>
+            </div>
+            <p style="font-size: 0.8rem; color: var(--text-muted);">編譯後產出自動複製至 <code>dist/智慧控管與監控系統 - 管理儀表板.exe</code>，若本機存在 <code>C:\AppServ</code> 亦同步部署。</p>
           </div>
         </div>
       </div>
@@ -1356,11 +1390,7 @@ ode</code></td>
         <div class="project-card">
           <h4 style="color: var(--accent-cyan); margin-bottom: 8px;">隔離 1：WinSW 服務實體絕對路徑綁定</h4>
           <p style="font-size: 0.88rem; color: var(--text-light);">
-            在 <code>lah_pm2_service.xml</code> 中，服務執行器直接鎖定為 <code>&lt;root_dir&gt;
-ode
-ode.exe</code> 與 <code>&lt;root_dir&gt;
-ode
-ode_modules\pm2in\pm2</code>。作業系統開機啟動服務時，直接載入該專屬執行檔，絕不透過全域 <code>PATH</code> 尋找，即使全域 Node 升級至 v22，服務依舊穩定運行於 v16。
+            在 <code>lah_pm2_service.xml</code> 中，服務執行器直接鎖定為 <code>&lt;root_dir&gt;\node\node.exe</code> 與 <code>&lt;root_dir&gt;\node\node_modules\pm2\bin\pm2</code>。作業系統開機啟動服務時，直接載入該專屬執行檔，絕不透過全域 <code>PATH</code> 尋找，即使全域 Node 升級至 v22，服務依舊穩定運行於 v16。
           </p>
         </div>
 
@@ -1374,9 +1404,7 @@ ode_modules\pm2in\pm2</code>。作業系統開機啟動服務時，直接載入
         <div class="project-card">
           <h4 style="color: var(--accent-cyan); margin-bottom: 8px;">隔離 3：雙層登錄檔環境變數治理 (HKLM + HKCU)</h4>
           <p style="font-size: 0.88rem; color: var(--text-light);">
-            工具執行時會自動巡檢系統層級 (<code>HKLM\...\Environment</code>) 與使用者層級 (<code>HKCU\Environment</code>) 之 <code>PATH</code>。自動移除指向 <code>C:\Program Files
-odejs</code> 之殘留路徑，並將 <code>&lt;root_dir&gt;
-ode</code> 置於首位，確保命令提示字元直接呼叫可攜版。
+            工具執行時會自動巡檢系統層級 (<code>HKLM\...\Environment</code>) 與使用者層級 (<code>HKCU\Environment</code>) 之 <code>PATH</code>。自動移除指向 <code>C:\Program Files\nodejs</code> 之殘留路徑，並將 <code>&lt;root_dir&gt;\node</code> 置於首位，確保命令提示字元直接呼叫可攜版。
           </p>
         </div>
 
@@ -1471,6 +1499,7 @@ ode</code> 置於首位，確保命令提示字元直接呼叫可攜版。
             <li><code>建立可攜NODE工具.bat</code>：編譯可攜式 Node 安裝工具。</li>
             <li><code>建立解除安裝工具.bat</code>：編譯系統安全解除安裝工具。</li>
             <li><code>建立自動備份工具.bat</code>：編譯系統重要組態自動備份工具。</li>
+            <li><code>建立管理儀表板工具.bat</code>：編譯智慧控管服務管理儀表板。</li>
             <li><code>建立簡訊設定工具.bat</code>：編譯地籍異動簡訊參數設定工具。</li>
             <li><code>校準現有服務資安脫敏名稱.bat</code>：免重裝服務一鍵線上熱校準 services.msc 顯示名稱與描述。</li>
           </ul>
@@ -1494,15 +1523,17 @@ ode</code> 置於首位，確保命令提示字元直接呼叫可攜版。
       const buttons = document.querySelectorAll('.tab-btn');
       
       contents.forEach(c => c.classList.remove('active'));
-      buttons.forEach(b => b.classList.remove('active'));
+      buttons.forEach(b => {
+        b.classList.remove('active');
+        if (b.getAttribute('onclick') && b.getAttribute('onclick').includes(tabId)) {
+          b.classList.add('active');
+        }
+      });
 
       const target = document.getElementById(tabId);
       if (target) {
         target.classList.add('active');
       }
-
-      // 高亮對應按鈕
-      event.currentTarget.classList.add('active');
     }
 
     // 一鍵代碼複製

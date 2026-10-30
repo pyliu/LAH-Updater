@@ -6,6 +6,77 @@
 
 ## [未發布]
 
+### 🖥️ 新增「智慧控管與監控系統 - 管理儀表板」原生維運工具 (tools/dashboard)
+
+- **修改目的**：
+  - 為現場與遠端維運人員打造全方位、免安裝、隨點即開的單一執行檔原生儀表板（基於 Tauri 2 / Rust + 原生純 HTML/CSS/JS 前端），整合 Windows 系統服務監控與控制、PM2 應用進程層控管、動態即時日誌檢視、主機資源即時狀態與五大連接埠 TCP 健康探針，消除日常維運需要繁瑣切換工作管理員、服務管理員與終端機之痛點。
+- **具體功能與架構**：
+  - **雙軌分層服務監控與重啟**：
+    - Windows 服務層：管控 `LAH_Web_Service`（Apache 2.4）與 `LAH_PM2_Service`（PM2 Daemon）。
+    - PM2 進程層：管控 `LAH-FE`（Port 8080）、`LAH-WSS`（Port 8081/8082）、`LAH-SCHEDULER`（排程）與 `lah-api-v85`（PHP 8.5 FastCGI Port 8085）。
+    - 支援個別服務啟動、停止、重啟，並具備頂部安全防呆之「一鍵重啟全部服務」。
+  - **即時日誌檢視器**：
+    - 自動探測全系統各模組日誌（前端、即時通、排程、PHP 8.5、Apache access/error、WinSW 與 pm2-logrotate）。
+    - 支援 Auto-Tail 即時追蹤、關鍵字即時篩選、清空畫面與「在記事本中開啟」實體檔案。
+  - **主機指標與通訊埠探針**：
+    - CPU 總使用率、實體記憶體負載、磁碟容量健康度即時條。
+    - 五大連接埠（80, 8080, 8081, 8082, 8085）即時 TCP 心跳探針。
+  - **快捷維運工具箱**：
+    - 一鍵開啟 `lah-cmd.bat` 沙盒終端、前端入口、Apache 組態語法驗證（`httpd -t`）、手動觸發日誌壓縮輪替與開啟日誌存放目錄。
+  - **介面體驗與效能優化 (Tab-Aware Polling & Dynamic UI)**：
+    - 視窗預設最大化顯示，日誌檢視器改為內部自適應 Flexbox 貼齊，徹底根除雙重垂直捲軸問題。
+    - 內建字體大小切換選單（一般 100%、中 +15% 預設、大 +25%），透過 CSS 變數 `--font-scale` 全局等比縮放並記憶於本機。
+    - 支援明亮／深邃主題切換，日誌檢視終端畫布維持高對比深色背景以防止炫光；修復明亮主題下日誌來源選單文字與背景對比度不足之缺陷。
+    - 提供可自訂輪詢週期選單（3秒、5秒預設、10秒、15秒、30秒、60秒），解決 Windows 環境下頻繁執行 `pm2.cmd jlist` 單次耗時 2.16 秒所導致的系統頓挫，並導入分頁感知隔離（非可見分頁不查詢 PM2）、視窗最小化休眠與日誌特徵指紋防抖渲染機制。
+  - **一鍵編譯與自動部署**：
+    - 建立 `tools/dashboard/build.py` 與根目錄快捷批次檔 `建立管理儀表板工具.bat`，產出 `dist/智慧控管與監控系統 - 管理儀表板.exe`，若本機存在 `C:\AppServ` 自動同步熱部署。
+- **相容性說明**：
+  - 為完全獨立之原生維運工具，零全域污染、無外網依賴，不更動既有 SCM 或 PM2 運作規則。
+
+### 📊 自動更新工具 (updater) 支援更新完成後自動同步管理儀表板 EXE 與建立桌面捷徑
+
+- **修改目的**：
+  - 當自動更新工具完成系統部署後，主動探測同目錄下是否存在管理儀表板執行檔（`智慧控管與監控系統 - 管理儀表板.exe` 或 `*儀表板*.exe`），若發現則自動同步複製至安裝根目錄，並在 Windows 公用桌面與使用者桌面建立快捷啟動捷徑（`.lnk`），並於更新完成視窗中提供一鍵啟動按鈕，免去維運人員手動搬移與手動設定捷徑之繁瑣操作。
+- **具體修改項目**：
+  - `tools/updater/src-tauri/src/system.rs`：
+    - 新增 `find_dashboard_exe_in_dir`：精準比對預期儀表板名稱，並廣泛匹配排除 updater 之儀表板執行檔；支援開發環境回溯探測。
+    - 新增 `create_desktop_shortcut`：透過 PowerShell COM 介面（`WScript.Shell`）建立包含工作目錄、執行參數與圖示之 Windows 桌面捷徑（`.lnk`），自動適用於公用桌面與當前使用者桌面。
+    - 新增 `deploy_dashboard_if_found`：自動將同目錄下儀表板 EXE 複製覆蓋至安裝根目錄（支援檔案鎖定時更名 `.old` 容錯），並即時建立桌面捷徑與日誌回報。
+  - `tools/updater/src-tauri/src/types.rs`：
+    - `UpdateSummary` 擴充 `dashboard_deployed: bool` 與 `dashboard_exe_path: Option<String>` 欄位。
+  - `tools/updater/src-tauri/src/pipeline.rs`：
+    - 於 `execute_update_pipeline` 與 `apply_system_configurations` 完成階段加入管理儀表板探測、部署與桌面捷徑建立管線。
+  - `tools/updater/src-tauri/src/lib.rs`：
+    - 新增 `launch_dashboard` Tauri 指令，支援從完成視窗直接拉起安裝根目錄之儀表板進程。
+  - `tools/updater/ui/index.html` & `tools/updater/ui/app.js`：
+    - 完成視窗新增「📊 開啟管理儀表板」操作按鈕，偵測到儀表板部署成功時動態顯示，點選可立即開啟程式。
+- **相容性說明**：
+  - 12 項單元測試全數通過（含儀表板偵測與自動複製部署測試）。未檢出儀表板時維持既有標準更新流程，無破壞性影響。
+
+### 🗂️ 桌面維運工具子專案收整至 tools/ 目錄與路徑結構標準化
+
+- **修改目的**：
+  - 將專案根目錄下原本分散之四大桌面維運工具子專案（`updater`、`uninstaller`、`backuper`、`node-portable`）全數收整至 `tools/` 目錄，使 `LAH-Updater` 專案架構更為集中清晰，維持根目錄整潔，並使全部獨立產生 exe 的維運輔助工具統一歸屬於 `tools/` 套件庫。
+- **具體修改項目**：
+  - **子專案目錄搬移（`git mv`）**：
+    - `updater/` ➔ `tools/updater/`
+    - `uninstaller/` ➔ `tools/uninstaller/`
+    - `backuper/` ➔ `tools/backuper/`
+    - `node-portable/` ➔ `tools/node-portable/`
+  - **自動建置腳本路徑校準（`build.py`）**：
+    - 調整 `tools/updater/build.py`、`tools/uninstaller/build.py`、`tools/backuper/build.py`、`tools/node-portable/build.py` 中的根目錄與產物輸出路徑推導（由 `..` 改為 `..\..`），確保 release 二進位檔一律正確輸出至專案根目錄之 `dist/`。
+  - **原始碼打包工具相容（`pack/pack.py`）**：
+    - 更新更新說明搜尋候選路徑，擴充支援 `tools/updater/*更新說明*.txt`。
+  - **根目錄一鍵批次檔校準**：
+    - `建立自動更新工具.bat` ➔ 呼叫 `%~dp0tools\updater\build.py`。
+    - `建立解除安裝工具.bat` ➔ 呼叫 `%~dp0tools\uninstaller\build.py`。
+    - `建立自動備份工具.bat` ➔ 呼叫 `%~dp0tools\backuper\build.py`。
+    - `建立可攜NODE工具.bat` ➔ 呼叫 `%~dp0tools\node-portable\build.py`。
+  - **文件與手冊同步更新**：
+    - 更新 `tools/README.md`、`AGENTS.md`、`README.md`、`generate_readme_html.py` 與工作區根目錄 `AGENTS.md`。
+- **相容性說明**：
+  - 各 Tauri 2 (Rust) 子專案內部設定、WinSW 服務二進位檔依賴、圖示產出與輸出命名完全保持一致，外部一鍵建置批次檔與產物目錄維持不變。
+
 ### 📦 系統打包工具 (pack) 補齊後端排程任務與專案資源並支援 VC++ 獨立封裝
 
 - **修改目的**：

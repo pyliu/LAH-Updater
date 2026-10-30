@@ -1,0 +1,23 @@
+[package]
+name = "lah-dashboard"
+version = "0.1.0"
+description = "智慧控管與監控系統 - 管理儀表板"
+edition = "2021"
+
+[lib]
+name = "lah_dashboard_lib"
+crate-type = ["rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
+regex = "1"
+
+[profile.dev]
+incremental = false

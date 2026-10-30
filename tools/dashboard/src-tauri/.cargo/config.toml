@@ -1,0 +1,6 @@
+[build]
+pipelining = false
+target-dir = "C:/Temp/cargo-target/dashboard"
+
+[profile.dev]
+incremental = false

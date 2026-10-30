@@ -15,10 +15,11 @@
 
 | 子目錄 | 工具名稱 | 核心技術 | 主要職責與特色 |
 |---|---|---|---|
-| **`updater/`** | **自動更新工具**<br/>`智慧控管與監控系統 - 自動更新工具.exe` | Tauri 2 (Rust) | 支援 11 大模組更新包智慧對齊解壓、`base/`、`patch/`、`node_modules/` 分流優先探測與平滑回退、5 階段自動化系統配置引擎（Web 沙盒服務 `LAH_Web_Service` 守護與 Apache mod_php7、VC++ 依賴自動補齊、PHP 8.5 FastCGI Proxy、CVE-2024-4577 資安強化、綠色 Node/PM2 零全域污染沙盒隔離与 `LAH_PM2_Service` 守護、內建 `pm2-logrotate` 離線掛載、服務名稱資安脫敏、服務重啟與五大連接埠健康巡檢）。 |
-| **`uninstaller/`** | **自動移除工具**<br/>`智慧控管與監控系統 - 自動移除工具.exe` | Tauri 2 (Rust) | 完整停止並刪除 Windows 系統服務（`LAH_Web_Service`、`LAH_PM2_Service` 與向下相容 `Apache2.4`）、精確終止殘留進程（含 `php-cgi.exe`）、清理開機自啟動與工作排程、清理舊有登錄檔殘留 `PATH`、註銷 Apache FastCGI 轉發、內置擬真二次確認對話框、解除唯讀安全刪除檔案並深度清理安裝根目錄（嚴格保護備份檔）。 |
-| **`backuper/`** | **備份與還原工具**<br/>`智慧控管與監控系統 - 備份與還原工具.exe` | Tauri 2 (Rust) | 支援系統重要資料與設定（即時通 `db/`、`uploads/`、各專案 `.env`、`AD.php`、`www/assets/`、`php.ini`、`httpd.conf`、`.pm2`、`lah-cmd.bat`）打包備份；擴充涵蓋 Oracle `instantclient_11_2` 與 PHP 自訂資料庫擴充 DLL（OCI8 / SQLSRV）；還原前自動建立 `restore_undo_*.zip` 復原點，支援動態視窗高度自適應與彈現式進度對話框。 |
-| **`node-portable/`** | **可攜 Node 安裝工具**<br/>`智慧控管與監控系統 - 可攜 Node 安裝工具.exe` | Tauri 2 (Rust) | 因應資安要求提供純綠色版 Node.js 16.20.2 與 PM2 離線安裝，採**零全域污染沙盒隔離模式**（不修改系統或使用者 `PATH`，主動清理登錄檔舊殘留並產出專屬維運終端 `lah-cmd.bat`），直接掛載內建 `pm2-logrotate`（v3.0.0）、清理 `dump.pm2` 舊路徑、註冊開機背景自啟服務 `PM2_Portable_Service`（WinSW）並具備每 60 秒 Daemon 自癒機制。 |
+| **`tools/updater/`** | **自動更新工具**<br/>`智慧控管與監控系統 - 自動更新工具.exe` | Tauri 2 (Rust) | 支援 11 大模組更新包智慧對齊解壓、`base/`、`patch/`、`node_modules/` 分流優先探測與平滑回退、5 階段自動化系統配置引擎（Web 沙盒服務 `LAH_Web_Service` 守護與 Apache mod_php7、VC++ 依賴自動補齊、PHP 8.5 FastCGI Proxy、CVE-2024-4577 資安強化、綠色 Node/PM2 零全域污染沙盒隔離与 `LAH_PM2_Service` 守護、內建 `pm2-logrotate` 離線掛載、服務名稱資安脫敏、服務重啟與五大連接埠健康巡檢）。 |
+| **`tools/uninstaller/`** | **自動移除工具**<br/>`智慧控管與監控系統 - 自動移除工具.exe` | Tauri 2 (Rust) | 完整停止並刪除 Windows 系統服務（`LAH_Web_Service`、`LAH_PM2_Service` 與向下相容 `Apache2.4`）、精確終止殘留進程（含 `php-cgi.exe`）、清理開機自啟動與工作排程、清理舊有登錄檔殘留 `PATH`、註銷 Apache FastCGI 轉發、內置擬真二次確認對話框、解除唯讀安全刪除檔案並深度清理安裝根目錄（嚴格保護備份檔）。 |
+| **`tools/backuper/`** | **備份與還原工具**<br/>`智慧控管與監控系統 - 備份與還原工具.exe` | Tauri 2 (Rust) | 支援系統重要資料與設定（即時通 `db/`、`uploads/`、各專案 `.env`、`AD.php`、`www/assets/`、`php.ini`、`httpd.conf`、`.pm2`、`lah-cmd.bat`）打包備份；擴充涵蓋 Oracle `instantclient_11_2` 與 PHP 自訂資料庫擴充 DLL（OCI8 / SQLSRV）；還原前自動建立 `restore_undo_*.zip` 復原點，支援動態視窗高度自適應與彈現式進度對話框。 |
+| **`tools/node-portable/`** | **可攜 Node 安裝工具**<br/>`智慧控管與監控系統 - 可攜 Node 安裝工具.exe` | Tauri 2 (Rust) | 因應資安要求提供純綠色版 Node.js 16.20.2 與 PM2 離線安裝，採**零全域污染沙盒隔離模式**（不修改系統或使用者 `PATH`，主動清理登錄檔舊殘留並產出專屬維運終端 `lah-cmd.bat`），直接掛載內建 `pm2-logrotate`（v3.0.0）、清理 `dump.pm2` 舊路徑、註冊開機背景自啟服務 `PM2_Portable_Service`（WinSW）並具備每 60 秒 Daemon 自癒機制。 |
+| **`tools/dashboard/`** | **管理儀表板**<br/>`智慧控管與監控系統 - 管理儀表板.exe` | Tauri 2 (Rust) | 整合 Windows 系統服務監控與控制（`LAH_Web_Service`、`LAH_PM2_Service`）、PM2 應用進程層（`LAH-FE`、`LAH-WSS`、`LAH-SCHEDULER`、`lah-api-v85`）、即時串流日誌檢視器（Auto-Tail 動態追蹤、關鍵字過濾、外部記事本開啟）、主機資源指標（CPU、RAM、磁碟容量）與五大連接埠（80, 8080, 8081, 8082, 8085）健康探針之全功能管理儀表板。 |
 | **`tools/sms-env-editor/`** | **地籍異動簡訊參數設定工具**<br/>`地籍異動簡訊參數設定工具.exe` | Tauri 2 (Rust) | 內政部地籍異動簡訊與郵件發送服務（`SMSWEB_MOI\env.properties`）專用可視化設定工具。預設載入 `\\220.1.34.221\C$\SMSWEB_MOI\env.properties`，支援平臺網址、簡訊/郵件/Oracle 帳密 BASE64 自動加解密、Big-5 / CP950 編碼無損相容、儲存前 Diff 差異預覽與自動時間戳記備份。 |
 | **`pack/`** | **原始碼打包發布工具**<br/>`pack.py` | Python 3.10+ 標準庫 | 供開發管理人員遍歷工作區內平級子專案（`LAH-API`、`LAH-FE`、`lah-messenger-server` 等）全自動產出標準更新壓縮包（含自動收集系統 VC++ 執行期 DLL 封裝為 `vcredist-x64.zip`），依三向分流結構輸出至 `dist/patch/`、`dist/node_modules/`、`dist/base/`。 |
 
@@ -61,29 +62,33 @@
 ```powershell
 # 1. 建立自動更新工具
 .\建立自動更新工具.bat
-# 或執行：python updater\build.py
+# 或執行：python tools\updater\build.py
 
 # 2. 建立自動移除工具
 .\建立解除安裝工具.bat
-# 或執行：python uninstaller\build.py
+# 或執行：python tools\uninstaller\build.py
 
 # 3. 建立自動備份工具
 .\建立自動備份工具.bat
-# 或執行：python backuper\build.py
+# 或執行：python tools\backuper\build.py
 
 # 4. 建立可攜 Node 安裝工具
 .\建立可攜NODE工具.bat
-# 或執行：python node-portable\build.py
+# 或執行：python tools\node-portable\build.py
 
-# 5. 建立地籍異動簡訊參數設定工具
+# 5. 建立管理儀表板工具
+.\建立管理儀表板工具.bat
+# 或執行：python tools\dashboard\build.py
+
+# 6. 建立地籍異動簡訊參數設定工具
 .\建立簡訊設定工具.bat
 # 或執行：python tools\sms-env-editor\build.py
 
-# 6. 原始碼全系統打包（產出更新壓縮包至 dist/base、dist/patch、dist/node_modules）
+# 7. 原始碼全系統打包（產出更新壓縮包至 dist/base、dist/patch、dist/node_modules）
 .\打包智慧控管及監控系統.bat
 # 或執行：python pack\pack.py
 
-# 7. 現有主機 Windows 服務名稱與描述資安脫敏熱校準（免重裝服務直接更新 services.msc 顯示名稱）
+# 8. 現有主機 Windows 服務名稱與描述資安脫敏熱校準（免重裝服務直接更新 services.msc 顯示名稱）
 .\校準現有服務資安脫敏名稱.bat
 ```
 
@@ -92,4 +97,5 @@
 - `dist/智慧控管與監控系統 - 自動移除工具.exe`（警戒深紅解構叉號圖示，約 10.71 MB）
 - `dist/智慧控管與監控系統 - 備份與還原工具.exe`（科技深藍資料庫循環圖示，約 11.09 MB）
 - `dist/智慧控管與監控系統 - 可攜 Node 安裝工具.exe`（亮綠六角形加 PM2 循環箭頭圖示，約 11.50 MB）
+- `dist/智慧控管與監控系統 - 管理儀表板.exe`（青藍伺服器儀表板圖示，約 11.20 MB）
 - `dist/地籍異動簡訊參數設定工具.exe`（專屬簡訊信封與加密金鑰齒輪圖示，約 10.50 MB）

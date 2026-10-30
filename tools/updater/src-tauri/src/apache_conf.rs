@@ -1,5 +1,5 @@
 use crate::system::run_cmd_hidden;
-use regex::Regex;
+use regex::{NoExpand, Regex};
 use std::fs;
 use std::path::Path;
 
@@ -376,7 +376,7 @@ pub fn configure_apache_fcgi_proxy(apache_dir: &Path, root_dir: &Path, php85_dir
 
     let existing_fcgi_re = Regex::new(r#"(?s)# =+\s*# LAH-API \(PHP 8\.5 FastCGI.*?</Proxy>\s*"#).unwrap();
     if existing_fcgi_re.is_match(&content) {
-        content = existing_fcgi_re.replace(&content, &fcgi_block).to_string();
+        content = existing_fcgi_re.replace(&content, NoExpand(&fcgi_block)).to_string();
     } else {
         content.push_str(&fcgi_block);
         log_fn("  ✓ 已向 Apache 注入 LAH-API (PHP 8.5 FastCGI 127.0.0.1:8085) 轉發設定", "success");
@@ -508,7 +508,7 @@ pub fn apply_apache_security_hardening(conf_path: &Path, root_dir: &Path, log_fn
 
     let existing_sec_re = Regex::new(r#"(?s)# =+\s*# PHP2Shell \(CVE-2024-4577.*?</Directory>\s*"#).unwrap();
     if existing_sec_re.is_match(&content) {
-        content = existing_sec_re.replace(&content, &php2shell_block).to_string();
+        content = existing_sec_re.replace(&content, NoExpand(&php2shell_block)).to_string();
     } else if !content.contains("PHP2Shell (CVE-2024-4577") {
         content.push_str(&php2shell_block);
         log_fn("  ✓ Apache httpd.conf 已套用資安防護與 CVE-2024-4577 PHP2Shell 緩解設定", "success");
@@ -616,6 +616,15 @@ mod tests {
         assert!(final_fcgi_conf.contains(&format!(r#"Alias /LAH-API "{}""#, api_fwd)));
         assert!(final_fcgi_conf.contains("ProxyFCGISetEnvIf"));
         assert!(!final_fcgi_conf.contains("C:/AppServ"));
+        assert!(final_fcgi_conf.contains(r#"SCRIPT_FILENAME "$1""#));
+
+        // 二次覆蓋更新測試：驗證已有 fcgi_block 時以 NoExpand 替換，SCRIPT_FILENAME "$1" 絕不被 Regex::replace 吞噬為空字串
+        let (fcgi_ok2, _) = configure_apache_fcgi_proxy(&apache_dir, &temp_root, None, &|_, _| {});
+        assert!(fcgi_ok2);
+        let final_fcgi_conf2 = fs::read_to_string(&conf_path).unwrap();
+        assert!(final_fcgi_conf2.contains(r#"SCRIPT_FILENAME "$1""#));
+        assert!(!final_fcgi_conf2.contains(r#"SCRIPT_FILENAME """#));
+        assert!(!final_fcgi_conf2.contains(r#"SCRIPT_FILENAME "$$1""#));
 
         let _ = fs::remove_dir_all(&temp_root);
     }

@@ -253,6 +253,20 @@ fn delete_installed_zips(zip_paths: Vec<String>) -> Result<usize, String> {
     Ok(count)
 }
 
+#[tauri::command]
+fn launch_dashboard(exe_path: String) -> Result<(), String> {
+    let path = PathBuf::from(&exe_path);
+    if !path.is_file() {
+        return Err(format!("找不到管理儀表板執行檔: {exe_path}"));
+    }
+    let parent = path.parent().unwrap_or_else(|| std::path::Path::new("."));
+    std::process::Command::new(&path)
+        .current_dir(parent)
+        .spawn()
+        .map_err(|e| format!("啟動管理儀表板失敗: {e}"))?;
+    Ok(())
+}
+
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
@@ -266,6 +280,7 @@ pub fn run() {
             run_update,
             apply_system_config,
             delete_installed_zips,
+            launch_dashboard,
             exit_app
         ])
         .run(tauri::generate_context!())

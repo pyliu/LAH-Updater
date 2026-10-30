@@ -146,6 +146,8 @@ where
                     health_report: Vec::new(),
                     zips_to_clean,
                     error_message: Some(err_msg),
+                    dashboard_deployed: false,
+                    dashboard_exe_path: None,
                 };
             }
         }
@@ -301,8 +303,13 @@ where
     }
 
     // 全方位服務健康確認
-    set_prog(99, "正在進行全系統服務與通訊埠健康巡檢...");
+    set_prog(98, "正在進行全系統服務與通訊埠健康巡檢...");
     let (_, health_report) = verify_all_services_health(&root_path, if apache_tgt.is_dir() { Some(&apache_tgt) } else { None }, &log_event);
+
+    // 探測同目錄下之管理儀表板，若存在則複製至安裝根目錄並建立桌面捷徑
+    set_prog(99, "正在檢查管理儀表板與建立桌面捷徑...");
+    let app_dir = get_app_dir();
+    let (dashboard_deployed, dashboard_exe) = deploy_dashboard_if_found(&app_dir, &root_path, &log_event);
 
     let elapsed = start_time.elapsed().as_secs_f64();
     set_prog(100, &format!("✅ 全部安裝與服務啟動確認完成！(耗時 {:.1} 秒)", elapsed));
@@ -317,6 +324,8 @@ where
         health_report,
         zips_to_clean,
         error_message: None,
+        dashboard_deployed,
+        dashboard_exe_path: dashboard_exe.map(|p| p.to_string_lossy().to_string()),
     }
 }
 
@@ -446,12 +455,17 @@ where
     }
 
     // 8. 全方位服務健康確認
-    set_prog(95, "正在進行系統服務健康確認...");
+    set_prog(98, "正在進行系統服務健康確認...");
     let (_, health_report) = verify_all_services_health(
         &root_path,
         if apache_tgt.is_dir() { Some(&apache_tgt) } else { None },
         &log_event,
     );
+
+    // 探測同目錄下之管理儀表板，若存在則複製至安裝根目錄並建立桌面捷徑
+    set_prog(99, "正在檢查管理儀表板與建立桌面捷徑...");
+    let app_dir = get_app_dir();
+    let (dashboard_deployed, dashboard_exe) = deploy_dashboard_if_found(&app_dir, &root_path, &log_event);
 
     let elapsed = start_time.elapsed().as_secs_f64();
     set_prog(100, &format!("✅ 系統服務與資安配置套用完成！(耗時 {:.1} 秒)", elapsed));
@@ -466,5 +480,7 @@ where
         health_report,
         zips_to_clean: Vec::new(),
         error_message: None,
+        dashboard_deployed,
+        dashboard_exe_path: dashboard_exe.map(|p| p.to_string_lossy().to_string()),
     }
 }

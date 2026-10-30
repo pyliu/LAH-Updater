@@ -379,9 +379,263 @@ fn broadcast_setting_change() {
     }
 }
 
+fn find_dashboard_exe_direct(dir: &Path) -> Option<PathBuf> {
+    if !dir.is_dir() {
+        return None;
+    }
+    // 1. 精準優先候選檔名
+    let primary_candidates = [
+        "智慧控管與監控系統 - 管理儀表板.exe",
+        "LAH服務監控儀表板.exe",
+        "lah-dashboard.exe",
+    ];
+    for name in &primary_candidates {
+        let p = dir.join(name);
+        if p.is_file() {
+            return Some(p);
+        }
+    }
+
+    // 2. 廣泛匹配包含「儀表板」或「dashboard」之執行檔 (排除 updater/uninstaller/backuper/node)
+    if let Ok(entries) = fs::read_dir(dir) {
+        for entry in entries.flatten() {
+            let p = entry.path();
+            if p.is_file() {
+                if let Some(name) = p.file_name().and_then(|s| s.to_str()) {
+                    let lower = name.to_lowercase();
+                    if lower.ends_with(".exe")
+                        && (lower.contains("儀表板") || lower.contains("dashboard"))
+                        && !lower.contains("updater")
+                        && !lower.contains("更新")
+                        && !lower.contains("uninstall")
+                        && !lower.contains("移除")
+                        && !lower.contains("backup")
+                        && !lower.contains("備份")
+                        && !lower.contains("node")
+                    {
+                        return Some(p);
+                    }
+                }
+            }
+        }
+    }
+
+    None
+}
+
+/// 尋找目錄下之管理儀表板執行檔 (優先同目錄，若開發環境則相容探測 dist 子目錄)
+pub fn find_dashboard_exe_in_dir(dir: &Path) -> Option<PathBuf> {
+    if let Some(p) = find_dashboard_exe_direct(dir) {
+        return Some(p);
+    }
+    // 開發或排程測試容錯：若位於 src-tauri 或 target 目錄，回溯至 dist/ 探測
+    if let Some(parent) = dir.parent() {
+        let dist = parent.join("dist");
+        if let Some(p) = find_dashboard_exe_direct(&dist) {
+            return Some(p);
+        }
+        if let Some(grandparent) = parent.parent() {
+            let dist2 = grandparent.join("dist");
+            if let Some(p) = find_dashboard_exe_direct(&dist2) {
+                return Some(p);
+            }
+        }
+    }
+    None
+}
+
+/// 透過 PowerShell COM 介面建立 Windows 桌面捷徑 (.lnk)
+pub fn create_desktop_shortcut(
+    target_exe: &Path,
+    working_dir: &Path,
+    shortcut_name: &str,
+    description: &str,
+) -> (bool, Vec<PathBuf>, String) {
+    let target_str = target_exe.to_string_lossy().replace('\'', "''");
+    let work_str = working_dir.to_string_lossy().replace('\'', "''");
+    let name_str = shortcut_name.replace('\'', "''");
+    let desc_str = description.replace('\'', "''");
+
+    let ps_script = format!(
+        r#"$ws = New-Object -ComObject WScript.Shell
+$dirs = @(
+    [Environment]::GetFolderPath('CommonDesktopDirectory'),
+    [Environment]::GetFolderPath('Desktop')
+) | Where-Object {{ $_ -and (Test-Path $_) }} | Select-Object -Unique
+
+$created = @()
+foreach ($d in $dirs) {{
+    try {{
+        $lnk = Join-Path $d '{name_str}'
+        $s = $ws.CreateShortcut($lnk)
+        $s.TargetPath = '{target_str}'
+        $s.WorkingDirectory = '{work_str}'
+        $s.Description = '{desc_str}'
+        $s.IconLocation = '{target_str},0'
+        $s.Save()
+        $created += $lnk
+    }} catch {{
+        Write-Error $_
+    }}
+}}
+$created -join ';'
+"#
+    );
+
+    let (ok, stdout, stderr) = run_powershell(&ps_script);
+    let mut paths = Vec::new();
+    for p in stdout.trim().split(';') {
+        let p_trimmed = p.trim();
+        if !p_trimmed.is_empty() {
+            paths.push(PathBuf::from(p_trimmed));
+        }
+    }
+    (ok && !paths.is_empty(), paths, stderr)
+}
+
+/// 若同目錄下存在管理儀表板 EXE，複製至安裝根目錄並建立桌面捷徑
+pub fn deploy_dashboard_if_found(
+    app_dir: &Path,
+    root_path: &Path,
+    log_fn: &dyn Fn(&str, &str),
+) -> (bool, Option<PathBuf>) {
+    let Some(src_exe) = find_dashboard_exe_in_dir(app_dir) else {
+        return (false, None);
+    };
+
+    let filename = src_exe
+        .file_name()
+        .and_then(|s| s.to_str())
+        .unwrap_or("智慧控管與監控系統 - 管理儀表板.exe");
+    let dest_exe = root_path.join(filename);
+
+    log_fn("--------------------------------------------------", "info");
+    log_fn(&format!("📊 偵測到同目錄下存在管理儀表板：{}", src_exe.display()), "info");
+
+    // 若來源與目標不同，進行複製覆蓋
+    if src_exe != dest_exe {
+        let copy_result = if dest_exe.is_file() {
+            match fs::copy(&src_exe, &dest_exe) {
+                Ok(_) => Ok(()),
+                Err(e) => {
+                    // 若目標被執行中進程鎖定，嘗試將舊檔移至 .old 後覆蓋
+                    let old_path = dest_exe.with_extension("exe.old");
+                    let _ = fs::remove_file(&old_path);
+                    if fs::rename(&dest_exe, &old_path).is_ok() {
+                        fs::copy(&src_exe, &dest_exe)
+                            .map(|_| ())
+                            .map_err(|e2| format!("更名後複製仍失敗: {e2}"))
+                    } else {
+                        Err(format!("覆蓋複製失敗 (目標可能遭鎖定): {e}"))
+                    }
+                }
+            }
+        } else {
+            fs::copy(&src_exe, &dest_exe)
+                .map(|_| ())
+                .map_err(|e| format!("複製失敗: {e}"))
+        };
+
+        match copy_result {
+            Ok(_) => {
+                log_fn(
+                    &format!(
+                        "  ✓ 已同步複製管理儀表板至安裝根目錄：{}",
+                        dest_exe.display()
+                    ),
+                    "success",
+                );
+            }
+            Err(err) => {
+                log_fn(&format!("  ⚠️ 同步管理儀表板失敗: {err}"), "warning");
+                return (false, None);
+            }
+        }
+    } else {
+        log_fn(
+            &format!(
+                "  ℹ️ 管理儀表板已位於安裝根目錄：{}",
+                dest_exe.display()
+            ),
+            "info",
+        );
+    }
+
+    // 建立 Windows 桌面捷徑
+    let shortcut_stem = dest_exe
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("智慧控管與監控系統 - 管理儀表板");
+    let shortcut_name = format!("{shortcut_stem}.lnk");
+
+    let (shortcut_ok, created_paths, shortcut_err) = create_desktop_shortcut(
+        &dest_exe,
+        root_path,
+        &shortcut_name,
+        "智慧控管與監控系統 - 管理儀表板",
+    );
+
+    if shortcut_ok && !created_paths.is_empty() {
+        for cp in created_paths {
+            log_fn(
+                &format!("  ✓ 已建立管理儀表板桌面捷徑：{}", cp.display()),
+                "success",
+            );
+        }
+    } else {
+        log_fn(
+            &format!("  ⚠️ 建立桌面捷徑時發生警告: {shortcut_err}"),
+            "warning",
+        );
+    }
+
+    (true, Some(dest_exe))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_find_dashboard_exe_in_dir() {
+        let temp_dir = env::temp_dir().join("test_lah_dashboard_search");
+        let _ = fs::create_dir_all(&temp_dir);
+        let target_exe = temp_dir.join("智慧控管與監控系統 - 管理儀表板.exe");
+        let _ = fs::write(&target_exe, b"dummy exe content");
+
+        let found = find_dashboard_exe_in_dir(&temp_dir);
+        assert_eq!(found, Some(target_exe.clone()));
+
+        let _ = fs::remove_file(&target_exe);
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_deploy_dashboard_if_found() {
+        let temp_src = env::temp_dir().join("test_lah_dash_src");
+        let temp_tgt = env::temp_dir().join("test_lah_dash_tgt");
+        let _ = fs::create_dir_all(&temp_src);
+        let _ = fs::create_dir_all(&temp_tgt);
+
+        let src_exe = temp_src.join("智慧控管與監控系統 - 管理儀表板.exe");
+        let _ = fs::write(&src_exe, b"test dashboard binary content");
+
+        let (ok, out_path) = deploy_dashboard_if_found(&temp_src, &temp_tgt, &|_, _| {});
+        assert!(ok);
+        assert_eq!(out_path, Some(temp_tgt.join("智慧控管與監控系統 - 管理儀表板.exe")));
+        assert!(temp_tgt.join("智慧控管與監控系統 - 管理儀表板.exe").is_file());
+
+        // 清理測試檔案與捷徑
+        let _ = fs::remove_dir_all(&temp_src);
+        let _ = fs::remove_dir_all(&temp_tgt);
+        let shortcut_name = "智慧控管與監控系統 - 管理儀表板.lnk";
+        if let Ok(user_profile) = env::var("USERPROFILE") {
+            let u = PathBuf::from(user_profile);
+            let _ = fs::remove_file(u.join("Desktop").join(shortcut_name));
+            let _ = fs::remove_file(u.join("OneDrive").join("Desktop").join(shortcut_name));
+        }
+        let _ = fs::remove_file(PathBuf::from(r"C:\Users\Public\Desktop").join(shortcut_name));
+    }
 
     #[test]
     fn test_clean_and_prepend_path_replaces_global_node_and_pm2() {
