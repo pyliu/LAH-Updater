@@ -13,9 +13,9 @@
         "label": "main",
         "title": "智慧控管與監控系統 - 備份與還原工具",
         "width": 780,
-        "height": 520,
+        "height": 440,
         "minWidth": 660,
-        "minHeight": 440,
+        "minHeight": 400,
         "center": true
       }
     ],

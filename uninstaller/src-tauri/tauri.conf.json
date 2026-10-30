@@ -13,9 +13,9 @@
         "label": "main",
         "title": "智慧控管與監控系統 - 自動移除工具",
         "width": 980,
-        "height": 680,
+        "height": 560,
         "minWidth": 860,
-        "minHeight": 580,
+        "minHeight": 520,
         "center": true
       }
     ],
