@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <title>地籍異動簡訊參數設定工具</title>
+  <link rel="icon" type="image/png" href="favicon.png">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- Header -->
+  <header class="app-header">
+    <div class="brand-section">
+      <div class="brand-icon">
+        <svg viewBox="0 0 24 24"><path d="M20 2H4c-1.1 0-1.99.9-1.99 2L2 22l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zM6 9h12v2H6V9zm8 5H6v-2h8v2zm4-6H6V6h12v2z"/></svg>
+      </div>
+      <div class="brand-text">
+        <h1>地籍異動簡訊參數設定工具 (SMSWEB_MOI)</h1>
+        <p>內政部地籍異動簡訊與郵件發送服務參數編輯與 BASE64 加解密管理</p>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Container -->
+  <main class="container">
+    <!-- Path Bar Card -->
+    <div class="path-bar-card">
+      <span class="path-bar-label">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="#0284c7"><path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>
+        目標設定檔：
+      </span>
+      <input type="text" id="targetPathInput" class="path-bar-input" value="\\220.1.34.221\C$\SMSWEB_MOI\env.properties" spellcheck="false">
+      <button id="btnBrowse" class="btn btn-default" title="瀏覽本機或網路檔案">瀏覽...</button>
+      <button id="btnReload" class="btn btn-primary" title="重新讀取該路徑設定">載入</button>
+      <button id="btnOpenFolder" class="btn btn-default" title="於檔案總管開啟所在資料夾">開啟目錄</button>
+    </div>
+
+    <!-- Alert Banner -->
+    <div id="alertBanner" class="alert-banner">
+      <span id="alertMessage">訊息內容</span>
+      <button id="btnAlertClose" class="alert-close">&times;</button>
+    </div>
+
+    <!-- Main Form Card (對齊 Java 原始 UI 截圖 10 項設定) -->
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="#0284c7"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/></svg>
+          核心連線與帳密參數
+        </div>
+        <span class="card-badge">Base64 編碼保護</span>
+      </div>
+      <div class="card-body">
+        <div class="form-grid">
+          <!-- 1. 訊息平臺網址 -->
+          <label class="form-label" for="inputApUrl">訊息平臺網址</label>
+          <div class="form-input-wrapper">
+            <input type="text" id="inputApUrl" class="form-input" placeholder="例如：http://220.1.33.122:8080/IMSP/ONEServiceServlet" spellcheck="false">
+          </div>
+
+          <!-- 2. 簡訊使用帳號 -->
+          <label class="form-label" for="inputSmsUser">簡訊使用帳號</label>
+          <div class="form-input-wrapper">
+            <input type="text" id="inputSmsUser" class="form-input" placeholder="例如：talandAPIU01" spellcheck="false">
+          </div>
+
+          <!-- 3. 簡訊使用密碼 -->
+          <label class="form-label" for="inputSmsPwd">簡訊使用密碼</label>
+          <div class="form-input-wrapper">
+            <input type="password" id="inputSmsPwd" class="form-input password" placeholder="輸入簡訊服務密碼" spellcheck="false">
+            <button type="button" class="btn-eye" data-target="inputSmsPwd" title="切換密碼顯隱">
+              <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg>
+            </button>
+          </div>
+
+          <!-- 4. 寄件伺服器帳號 -->
+          <label class="form-label" for="inputMailUser">寄件伺服器帳號</label>
+          <div class="form-input-wrapper">
+            <input type="text" id="inputMailUser" class="form-input" placeholder="例如：hainfo" spellcheck="false">
+          </div>
+
+          <!-- 5. 寄件伺服器密碼 -->
+          <label class="form-label" for="inputMailPwd">寄件伺服器密碼</label>
+          <div class="form-input-wrapper">
+            <input type="password" id="inputMailPwd" class="form-input password" placeholder="輸入郵件寄件密碼" spellcheck="false">
+            <button type="button" class="btn-eye" data-target="inputMailPwd" title="切換密碼顯隱">
+              <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg>
+            </button>
+          </div>
+
+          <!-- 6. 寄件者名稱 -->
+          <label class="form-label" for="inputMailSenderName">寄件者名稱</label>
+          <div class="form-input-wrapper">
+            <input type="text" id="inputMailSenderName" class="form-input" placeholder="例如：桃園地政事務所" spellcheck="false">
+          </div>
+
+          <!-- 7. 寄件者郵件位置 -->
+          <label class="form-label" for="inputMailSenderAddr">寄件者郵件位置</label>
+          <div class="form-input-wrapper">
+            <input type="text" id="inputMailSenderAddr" class="form-input" placeholder="例如：hainfo@mail.tyland.gov.tw" spellcheck="false">
+          </div>
+
+          <!-- 8. 資料庫 IP 與 Port -->
+          <label class="form-label">資料庫連線</label>
+          <div class="form-group-split">
+            <div class="split-item" style="flex: 2;">
+              <span class="split-label">IP:</span>
+              <input type="text" id="inputDbIp" class="form-input" placeholder="例如：220.1.34.2" spellcheck="false">
+            </div>
+            <div class="split-item" style="flex: 1;">
+              <span class="split-label">Port:</span>
+              <input type="text" id="inputDbPort" class="form-input" placeholder="1521" spellcheck="false">
+            </div>
+            <div class="split-item" style="flex: 1.5;">
+              <span class="split-label">SID:</span>
+              <input type="text" id="inputDbSid" class="form-input" placeholder="例如：HAWEB" spellcheck="false">
+            </div>
+          </div>
+
+          <!-- 9. 資料庫帳號 -->
+          <label class="form-label" for="inputDbUser">資料庫帳號</label>
+          <div class="form-input-wrapper">
+            <input type="text" id="inputDbUser" class="form-input" placeholder="例如：MOIADM" spellcheck="false">
+          </div>
+
+          <!-- 10. 資料庫密碼 -->
+          <label class="form-label" for="inputDbPwd">資料庫密碼</label>
+          <div class="form-input-wrapper">
+            <input type="password" id="inputDbPwd" class="form-input password" placeholder="輸入資料庫存取密碼" spellcheck="false">
+            <button type="button" class="btn-eye" data-target="inputDbPwd" title="切換密碼顯隱">
+              <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Collapsible 進階參數 -->
+      <button type="button" id="btnToggleAdvanced" class="collapsible-trigger">
+        <span>⚙️ 進階排程時段與底層參數 (輪詢週期、發送起訖時分)</span>
+        <span id="advancedArrow">▼</span>
+      </button>
+      <div id="advancedContent" class="collapsible-content">
+        <div class="form-grid">
+          <!-- 輪詢間隔與重送間隔 -->
+          <label class="form-label">輪詢與重送</label>
+          <div class="form-group-split">
+            <div class="split-item">
+              <span class="split-label">輪詢 (分):</span>
+              <input type="number" id="inputSearchTime" class="form-input" min="1" max="60" placeholder="1">
+            </div>
+            <div class="split-item">
+              <span class="split-label">重送 (分):</span>
+              <input type="number" id="inputResendTime" class="form-input" min="1" max="60" placeholder="3">
+            </div>
+          </div>
+
+          <!-- 排程每日發送起訖時段 -->
+          <label class="form-label">每日發送時段</label>
+          <div class="form-group-split">
+            <div class="split-item">
+              <span class="split-label">起始:</span>
+              <input type="text" id="inputStartHours" class="form-input" style="width: 50px;" placeholder="08">
+              <span>:</span>
+              <input type="text" id="inputStartMin" class="form-input" style="width: 50px;" placeholder="30">
+            </div>
+            <div class="split-item">
+              <span class="split-label">結束:</span>
+              <input type="text" id="inputEndHours" class="form-input" style="width: 50px;" placeholder="18">
+              <span>:</span>
+              <input type="text" id="inputEndMin" class="form-input" style="width: 50px;" placeholder="30">
+            </div>
+          </div>
+
+          <!-- Oracle 驅動類別 -->
+          <label class="form-label" for="inputOdriverClass">Oracle 驅動</label>
+          <div class="form-input-wrapper">
+            <input type="text" id="inputOdriverClass" class="form-input" value="oracle.jdbc.driver.OracleDriver" spellcheck="false">
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Sticky Footer -->
+  <footer class="app-footer">
+    <div class="footer-info">
+      <span id="loadStatusText">尚未載入設定</span>
+      <span id="backupNoticeText" style="color: #0284c7;"></span>
+    </div>
+    <div class="footer-actions">
+      <button id="btnFooterReload" class="btn btn-default">重新載入</button>
+      <button id="btnFooterSave" class="btn btn-success">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M17 3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V7l-4-4zm-5 16c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3zm3-10H5V5h10v4z"/></svg>
+        儲存設定 (自動建立備份)
+      </button>
+    </div>
+  </footer>
+
+  <!-- Modal: Diff Preview -->
+  <div id="diffModal" class="modal-overlay">
+    <div class="modal-box">
+      <div class="modal-header">
+        <div class="modal-title">確認儲存並建立備份</div>
+        <button id="btnModalClose" class="alert-close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p style="margin-bottom: 8px;">以下為您本次修改的參數差異對照清單。儲存時將自動在原檔所在目錄備份舊檔：</p>
+        <table class="diff-table">
+          <thead>
+            <tr>
+              <th style="width: 130px;">欄位名稱</th>
+              <th>修改前數值 (原檔)</th>
+              <th>修改後數值 (新檔)</th>
+            </tr>
+          </thead>
+          <tbody id="diffTableBody">
+            <!-- 動態填充差異欄位 -->
+          </tbody>
+        </table>
+        <div style="margin-top: 14px; padding: 10px; background: #f0fdf4; border-radius: 6px; border: 1px solid #bbf7d0; font-size: 11.5px; color: #166534;">
+          <strong>🛡️ 自動備份防護：</strong>確認儲存後，系統將於同目錄自動建立 <code>env.properties.YYYYMMDD_HHMMSS.bak</code>，並以標準 BASE64 與 Big-5 編碼寫入新設定。
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button id="btnModalCancel" class="btn btn-default">取消返回</button>
+        <button id="btnModalConfirm" class="btn btn-success">確認並寫入檔案</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

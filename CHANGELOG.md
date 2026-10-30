@@ -6,6 +6,27 @@
 
 ## [未發布]
 
+### 🛠️ 新增獨立小工具套件庫 (tools/) 與「地籍異動簡訊參數設定工具 (sms-env-editor)」
+
+- **修改目的**：
+  - 於 `LAH-Updater` 建立 `tools/` 模組化資料夾架構，提供維運人員以 Rust (Tauri 2) 開發獨立輕量免安裝維運工具之統一標準。
+  - 針對內政部地籍異動簡訊與郵件發送服務（SMSWEB_MOI）設定檔 `\\220.1.34.221\C$\SMSWEB_MOI\env.properties`，打造專屬可視化編輯器，取代人工手動編碼與舊版 Java 工具相容性問題。
+  - 建立新工具開發之 App 圖示專屬設計規範，嚴禁套用舊圖示，並規範提出方案供使用者確認。
+- **具體修改項目**：
+  - **核心架構與規範 (`tools/README.md`, `AGENTS.md`)**：
+    - 定義 `tools/` 專案結構、`.cargo/config.toml` 獨立 `target-dir` 避免膨脹、以及發布輸出至 `dist/` 之標準管線。
+    - 於 `AGENTS.md` 新增 3.8 節「新增維運小工具與 App 圖示 (ICO) 專屬設計規範」，強制量身設計、提出方案供審查，並產出完整多解析度圖示套裝。
+  - **地籍異動簡訊參數設定工具 (`tools/sms-env-editor/`)**：
+    - `src-tauri/`：基於 Tauri 2 實作，強型別領域模型 `ConfigData`，支援 BASE64 自動加解密、Big-5 (CP950) 無損編碼、變更比對 Diff 與時間戳自動備份 (`env.properties.YYYYMMDD_HHMMSS.bak`)。
+    - `ui/`：純靜態 HTML/CSS/JS 介面，零外部 CDN，精準對齊原始 Java 介面 10 大核心欄位，支援密碼顯隱切換與進階排程參數折疊區。
+    - `generate_icons.ps1`：原生 Windows System.Drawing 圖示生成腳本，產出天青石深藍底座、純白訊息泡泡與琥珀金設定齒輪之多解析度 ICO (16~256) 與 PNG 套件。
+    - `build.py` / `build.bat` / 根目錄 `建立簡訊設定工具.bat`：一鍵 Release 編譯發布至 `dist/地籍異動簡訊參數設定工具.exe` (9.36 MB)。
+  - **版控設定 (`.gitignore`)**：
+    - 忽略 `tools/**/src-tauri/target/` 與 `gen/`。
+- **相容性說明**：
+  - 工具為獨立二進位檔，無外部環境依賴；設定檔編碼完全相容既有 SMSWEB_MOI 服務；不影響 LAH-Updater 其他四大核心工具。
+
+
 ### 🖥️ 優化自動移除 (uninstaller) 與備份還原 (backuper) 工具之版面與精準緊緻尺寸
 
 - **修改目的**：

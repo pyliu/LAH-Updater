@@ -1,0 +1,6 @@
+[build]
+pipelining = false
+target-dir = "C:/Temp/cargo-target/sms-env-editor"
+
+[profile.dev]
+incremental = false
