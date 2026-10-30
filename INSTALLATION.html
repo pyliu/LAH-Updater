@@ -646,6 +646,25 @@
     .screenshot-card img {
       cursor: default !important;
     }
+
+    table {
+      margin: 4px 0 6px 0 !important;
+      font-size: 8pt !important;
+    }
+
+    th, td {
+      padding: 3.5px 7px !important;
+      line-height: 1.35 !important;
+    }
+
+    .step-box {
+      padding: 6px 10px !important;
+      margin-bottom: 6px !important;
+    }
+
+    .step-header {
+      margin-bottom: 3px !important;
+    }
   }
 </style>
 </head>
@@ -720,9 +739,9 @@
       <div>
         <div class="cover-meta">
           <div class="meta-item"><strong>文件編號：</strong><span>LAH-OPS-SOP-202610</span></div>
-          <div class="meta-item"><strong>發布日期：</strong><span>2026 年 10 月 29 日</span></div>
+          <div class="meta-item"><strong>發布日期：</strong><span>2026 年 10 月 30 日 (增補更新)</span></div>
           <div class="meta-item"><strong>適用系統：</strong><span>智慧控管與監控系統 (LAH)</span></div>
-          <div class="meta-item"><strong>維運工具：</strong><span>LAH-Updater v1.7.0 (Rust 核心)</span></div>
+          <div class="meta-item"><strong>維運工具：</strong><span>LAH-Updater v1.7.0+ (Rust 核心)</span></div>
           <div class="meta-item"><strong>適用單位：</strong><span>桃園市各地政事務所 資訊小組</span></div>
           <div class="meta-item"><strong>保密等級：</strong><span>內部維運限閱 (內部專用)</span></div>
         </div>
@@ -776,6 +795,11 @@
           <td>獨立部署或修復綠色版 Node 16 與 PM2 守護服務，保證零全域污染。</td>
         </tr>
         <tr>
+          <td><strong>地籍異動簡訊參數設定工具.exe</strong></td>
+          <td><span class="badge badge-opt">維運工具</span></td>
+          <td>獨立免安裝簡訊設定工具 (SMSWEB_MOI)，支援 BASE64 編解碼與自動備份。</td>
+        </tr>
+        <tr>
           <td><strong>MicrosoftEdgeWebView2RuntimeInstallerX64.exe</strong></td>
           <td><span class="badge badge-opt">系統依賴</span></td>
           <td>微軟 WebView2 離線安裝包。若在純淨伺服器點擊工具無反應時請優先安裝。</td>
@@ -783,7 +807,7 @@
         <tr>
           <td><code>base\</code> (基礎環境包)</td>
           <td>基礎組件</td>
-          <td>內含 Apache 2.4、PHP 7.4、PHP 8.5 FastCGI 及綠色版 Node.js 執行期環境。</td>
+          <td>內含 Apache 2.4、PHP 7.4、PHP 8.5 FastCGI 及綠色可攜版 Node.js 執行期環境。</td>
         </tr>
         <tr>
           <td><code>node_modules\</code> (核心套件包)</td>
@@ -822,7 +846,7 @@
         <span class="step-number">3</span>
         <span class="step-title">Node 與 PM2 零全域污染沙盒隔離架構 (免移除全域 Node)</span>
       </div>
-      <p>最新架構已全面實作沙盒隔離機制。工具不會更動系統登錄檔 <code>Path</code> 與 <code>PM2_HOME</code>，<strong>無須移除本機全域已安裝的 Node.js</strong>（如 Node 20/22）。更新完成後自動於安裝根目錄產出 <strong><code>lah-cmd.bat</code></strong> 專屬維運終端，關閉視窗即自動釋放環境變數。</p>
+      <p>最新架構已全面實作沙盒隔離機制。工具不會更動系統登錄檔 <code>Path</code> 與 <code>PM2_HOME</code>，<strong>無須移除本機全域已安裝的 Node.js</strong>（如 Node 20/22）。所有維運工具皆支援多磁碟路徑動態偵測，更新完成後自動於安裝根目錄產出 <strong><code>lah-cmd.bat</code></strong> 專屬維運終端，關閉視窗即自動釋放環境變數。</p>
     </div>
 
     <div class="alert alert-warning avoid-break">
@@ -857,7 +881,7 @@
       </div>
       <ol style="margin: 3px 0 0 16px; padding: 0; line-height: 1.6;">
         <li>以系統管理員身分執行 <strong><code>智慧控管與監控系統 - 備份與還原工具.exe</code></strong>。</li>
-        <li>確認「系統安裝根目錄」路徑（預設為 <code>C:\AppServ</code>）。</li>
+        <li>確認「系統安裝根目錄」路徑（工具已內建動態偵測，亦可手動點擊瀏覽選取）。</li>
         <li>設定「備份輸出目錄」（請選擇具足夠容量磁區，例如 <code>D:\DEV</code> 或專用備份槽）。</li>
         <li>點擊 <strong>「📦 立即備份重要資料」</strong> 按鈕，工具將自動高速掃描並打包重要資產。</li>
         <li>完成後將產出如 <strong><code>D:\DEV\_LAH_Backup_20261028_091435.zip</code></strong> 之完整備份封裝檔。</li>
@@ -872,7 +896,7 @@
     </div>
 
     <h3>🔍 實務解析：備份檔 (如 _LAH_Backup_20261028_091435.zip) 內含重要資產清單</h3>
-    <p>本系統備份工具已全面擴充保護機制，備份檔內完整收納以下 6 大關鍵系統資產：</p>
+    <p>本系統備份工具已全面擴充保護機制，備份檔內完整收納以下 7 大關鍵系統資產：</p>
     <table>
       <thead>
         <tr>
@@ -904,6 +928,10 @@
         <tr>
           <td><code>LAH-NUXTJS/</code></td>
           <td><strong>前端系統環境：</strong>智慧管控前端網頁站台之在地化環境參數與客製化設定。</td>
+        </tr>
+        <tr>
+          <td><code>lah-cmd.bat</code></td>
+          <td><strong>專屬維運終端腳本：</strong>保留沙盒環境變數設定，還原後可立即啟動維運終端。</td>
         </tr>
       </tbody>
     </table>
@@ -938,7 +966,7 @@
         <span class="step-number green">1</span>
         <span class="step-title">步驟一：啟動自動更新工具</span>
       </div>
-      <p>以系統管理員身分執行 <strong><code>智慧控管與監控系統 - 自動更新工具.exe</code></strong>。工具將自動偵測安裝路徑（預設 <code>C:\AppServ</code>）與各項服務即時狀態。</p>
+      <p>以系統管理員身分執行 <strong><code>智慧控管與監控系統 - 自動更新工具.exe</code></strong>。工具將自動偵測安裝路徑（支援 C 槽與非 C 槽動態探測）與各項服務即時狀態。</p>
     </div>
 
     <div class="step-box avoid-break">
@@ -946,12 +974,12 @@
         <span class="step-number green">2</span>
         <span class="step-title">步驟二：精準調整工作選項勾選（關鍵操作對齊圖 2）</span>
       </div>
-      <p>為避免覆蓋現有正常運作之 Apache 與 PHP 7 設定，請務必遵循以下勾選原則：</p>
+      <p>為避免覆蓋現有正常運作之 Apache 與 PHP 7 設定，可善用中央快選工具列點選「程式修補 (patch)」或依序調整：</p>
       <ul>
-        <li><strong style="color: #dc2626;">【取消勾選】</strong> <strong>APACHE 網頁伺服器核心安裝包</strong>（保持主機原 Apache 運行）。</li>
+        <li><strong style="color: #dc2626;">【取消勾選】</strong> <strong>APACHE 網頁伺服器核心安裝包</strong>（保持主機原 Apache 穩定運行）。</li>
         <li><strong style="color: #dc2626;">【取消勾選】</strong> <strong>PHP 7.4 執行環境安裝包</strong>（保留既有機台 PHP 7 設定與 OCI8 驅動）。</li>
         <li><strong style="color: #dc2626;">【取消勾選】</strong> <strong>核心相依套件模組 (node_modules)</strong>（既有套件完整時無需重複解壓）。</li>
-        <li><strong style="color: #059669;">【保持勾選】</strong> <strong>可攜式 Node.js 執行環境</strong> 與 <strong>PHP 8.5 FastCGI 核心環境</strong>。</li>
+        <li><strong style="color: #059669;">【保持勾選】</strong> <strong>可攜式 Node.js 執行環境</strong>（歸納於基礎包）與 <strong>PHP 8.5 FastCGI 核心環境</strong>。</li>
         <li><strong style="color: #059669;">【保持勾選】</strong> <strong>所有程式更新補丁包</strong>（<code>LAH-API.zip</code>、<code>lah-messenger-server.zip</code>、<code>LAH-NUXTJS.zip</code>、<code>www.zip</code>）。</li>
         <li><strong style="color: #059669;">【保持勾選】</strong> <strong>自動配置系統服務、資安強化配置、更新後自動重啟 Apache 與 PM2</strong>。</li>
       </ul>
@@ -1005,8 +1033,8 @@
       </div>
       <p>以系統管理員身分開啟 <strong><code>智慧控管與監控系統 - 自動移除工具.exe</code></strong>：</p>
       <ol style="margin: 3px 0 0 16px; padding: 0; line-height: 1.6;">
-        <li>確認系統安裝根目錄路徑為 <code>C:\AppServ</code>。</li>
-        <li>保持預設<strong>「全選」</strong>所有清理項（安全卸載 Windows 服務、強制終止行程、清除開機啟動與清空目錄）。</li>
+        <li>確認系統安裝根目錄路徑（工具支援多磁碟動態偵測，亦可手動瀏覽變更）。</li>
+        <li>保持預設<strong>「全選」</strong>所有清理項（安全卸載 Windows 服務、終止所有進程含 php-cgi、徹底清除登錄檔殘留與清空目錄）。</li>
         <li>點擊 <strong>「🚨 開始執行移除作業」</strong> 按鈕。</li>
         <li>於彈出之確認對話框中點選 <strong>「確認並立即執行移除」</strong>，等待進度完成並關閉工具。</li>
       </ol>
@@ -1063,7 +1091,7 @@
         <span class="step-number green">4</span>
         <span class="step-title">步驟四：等待管線全自動佈署完成</span>
       </div>
-      <p>更新引擎將自動完成：① 解壓 Apache 與 PHP 7/8.5 ➔ ② 解壓前端與即時通依賴庫 ➔ ③ 釋放最新業務程式碼 ➔ ④ 掛載還原備份之 SQLite 資料庫與 Oracle 驅動 ➔ ⑤ 註冊 Windows 原生服務與開機自啟 ➔ ⑥ 全系統服務啟動與健康巡檢。</p>
+      <p>更新引擎將自動完成：① 解壓 Apache 與 PHP 7/8.5 ➔ ② 解壓前端與即時通依賴庫 ➔ ③ 釋放最新業務程式碼 ➔ ④ 掛載還原備份之 SQLite 資料庫與 Oracle 驅動 ➔ ⑤ 註冊 Windows 原生服務、配置開機自啟並產出 lah-cmd.bat 終端 ➔ ⑥ 全系統服務啟動與健康巡檢。</p>
     </div>
 
     <div class="page-footer-note">
@@ -1137,8 +1165,8 @@
     <div class="alert alert-success avoid-break" style="margin: 6px 0 8px 0;">
       <div class="alert-icon">💻</div>
       <div>
-        <strong>專屬沙盒維運終端 (lah-cmd.bat)：</strong><br>
-        若需手動檢視或重啟 PM2 守護行程，雙擊執行安裝根目錄 <code>C:\AppServ\lah-cmd.bat</code>，即可在隔離環境執行 <code>pm2 list</code>、<code>pm2 restart all</code> 或 <code>pm2 logs</code>，無需手動配置系統環境變數。
+        <strong>專屬沙盒維運終端 (lah-cmd.bat) 與端點相容：</strong><br>
+        若需檢視或重啟 PM2 守護行程，雙擊執行安裝根目錄 <code>lah-cmd.bat</code>（如 <code>C:\AppServ\lah-cmd.bat</code>），即可在隔離環境執行 <code>pm2 list</code>、<code>pm2 restart all</code> 或 <code>pm2 logs</code>，無需手動配置系統環境變數。此外，Apache 已注入串流端點向後相容 FastCGI 別名映射，前端圖片與報表輸出皆自動對齊雙軌核心。
       </div>
     </div>
 
@@ -1216,12 +1244,12 @@
         </tr>
         <tr>
           <td rowspan="2" style="font-weight:700; background:#ecfdf5; text-align:center;">執行更新</td>
-          <td><span class="chk-box"></span> <strong>情境一 (原機升級)：</strong>已<strong>取消勾選</strong> Apache、PHP7 及 node_modules。</td>
+          <td><span class="chk-box"></span> <strong>情境一 (原機升級)：</strong>已<strong>取消勾選</strong> Apache、PHP7 及 node_modules（可善用集中快選工具列）。</td>
           <td>□ 符合 □ 走情境二</td>
           <td></td>
         </tr>
         <tr>
-          <td><span class="chk-box"></span> <strong>情境二 (全新安裝)：</strong>原機已執行移除工具，更新工具<strong>全選並選取備份 ZIP</strong>。</td>
+          <td><span class="chk-box"></span> <strong>情境二 (全新安裝)：</strong>原機已徹底清理進程與服務，更新工具<strong>全選並選取備份 ZIP</strong>。</td>
           <td>□ 符合 □ 走情境一</td>
           <td></td>
         </tr>
