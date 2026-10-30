@@ -9,9 +9,11 @@ r"""
 4. 依據 zip_fe.* 規則，將 LAH-FE 編譯後檔案打包為 LAH-NUXTJS.zip（前端更新包）。
 5. 依據參數可選打包即時通訊伺服器 (lah-messenger-server.zip)。
 6. 依據參數可選打包前端與即時通核心依賴套件 (LAH-NUXTJS-node_modules.zip, lah-messenger-server-node_modules.zip)。
-7. 依據參數可選打包可攜式 Node.js 綠色環境 (node.zip)。
-8. 產出壓縮檔預設輸出至分享區：d:\DEV\@各所分享區\@智慧管控系統\@更新程式\
-   若該分享區目錄不存在（如於未掛載 D 槽之本機開發環境），自動回退輸出至腳本同層 dist 目錄。
+7. 依據參數可選打包可攜式 Node.js 綠色環境 (node.zip) 與 VC++ 核心程式庫 (vcredist-x64.zip)。
+8. 產出壓縮包預設輸出至專案根目錄之 dist/ 目錄，並自動依類型分流存檔：
+   - 程式更新包：dist/patch/ (www.zip, LAH-API.zip, LAH-NUXTJS.zip, lah-messenger-server.zip)
+   - 核心依賴包：dist/node_modules/ (LAH-NUXTJS-node_modules.zip, lah-messenger-server-node_modules.zip)
+   - 基礎環境包：dist/base/ (node.zip, vcredist-x64.zip)
 """
 import argparse
 import fnmatch
@@ -34,15 +36,17 @@ if sys.stderr and hasattr(sys.stderr, "reconfigure"):
 # 路徑與打包清單設定（對齊 d:\DEV\FreeFileSync\zip_api.* 與 zip_fe.*）
 # ==============================================================================
 
-DEFAULT_OUTPUT_DIR = r"d:\DEV\@各所分享區\@智慧管控系統\@更新程式"
-
 # 對應 zip_api.txt（基底目錄：LAH-API/www - PHP7 API）
 API_INCLUDES = [
     "api",
     "include",
+    "task",
+    "json",
+    "project",
     "vendor",
     "*.php",
     "*.html",
+    "favicon.ico",
     r"assets\js",
     r"assets\sh",
     r"assets\xlsx",
@@ -58,6 +62,11 @@ API_EXCLUDES = [
     r"include\config\AD.ALL.php",
     r"include\config\AD.LOCKED.php",
     ".env",
+    ".git*",
+    ".vscode",
+    "*.log",
+    "*.tmp",
+    "*.bak",
 ]
 
 # LAH-API (API - PHP8 API) 打包規則
@@ -218,9 +227,10 @@ def resolve_project_dirs(script_dir):
 
 
 def is_excluded(rel_path, exclude_patterns):
-    """檢查相對路徑是否符合排除清單（忽略大小寫與斜線方向）"""
+    """檢查相對路徑是否符合排除清單（忽略大小寫與斜線方向，支援全路徑、前綴與子路徑比對）"""
     norm_rel = os.path.normpath(rel_path).lower()
     norm_rel_slash = norm_rel.replace("\\", "/")
+    parts = norm_rel.split(os.sep)
 
     for pattern in exclude_patterns:
         norm_pat = os.path.normpath(pattern).lower()
@@ -229,7 +239,9 @@ def is_excluded(rel_path, exclude_patterns):
             return True
         if norm_rel.startswith(norm_pat + os.sep):
             return True
-        if fnmatch.fnmatch(norm_rel_slash, norm_pat_slash):
+        if fnmatch.fnmatch(norm_rel_slash, norm_pat_slash) or fnmatch.fnmatch(norm_rel_slash, "*/" + norm_pat_slash):
+            return True
+        if "/" not in norm_pat_slash and any(fnmatch.fnmatch(p, norm_pat) for p in parts):
             return True
     return False
 
@@ -446,11 +458,12 @@ def prompt_interactive_targets():
     print("    5. 前端網站 核心套件 (node_modules) (LAH-NUXTJS-node_modules.zip)")
     print("    6. 即時通訊 核心套件 (node_modules) (lah-messenger-server-node_modules.zip)")
     print("    7. Node.js  綠色環境 (含 logrotate) (node.zip)")
+    print("    8. VC++ 核心程式庫 (x64)          (vcredist-x64.zip)")
     print()
     print("  【常用組合快捷】")
     print("    A. 常規程式碼更新包 (1 + 2 + 3 + 4)")
-    print("    B. 僅大型相依套件包 (5 + 6 + 7)")
-    print("    C. 全套完整大包     (1 至 7 全部打包)")
+    print("    B. 僅相依環境套件包 (5 + 6 + 7 + 8)")
+    print("    C. 全套完整大包     (1 至 8 全部打包)")
     print()
     print("    Q. 離開程式")
     print()
@@ -482,6 +495,7 @@ def prompt_interactive_targets():
         do_fe_modules = False
         do_server_modules = False
         do_node = False
+        do_vcredist = False
 
         valid = False
         for tok in tokens:
@@ -506,6 +520,9 @@ def prompt_interactive_targets():
             elif tok == "7":
                 do_node = True
                 valid = True
+            elif tok == "8":
+                do_vcredist = True
+                valid = True
             elif tok == "A":
                 do_api = True
                 do_api8 = True
@@ -516,6 +533,7 @@ def prompt_interactive_targets():
                 do_fe_modules = True
                 do_server_modules = True
                 do_node = True
+                do_vcredist = True
                 valid = True
             elif tok == "C":
                 do_api = True
@@ -525,6 +543,7 @@ def prompt_interactive_targets():
                 do_fe_modules = True
                 do_server_modules = True
                 do_node = True
+                do_vcredist = True
                 valid = True
             elif tok == "Q":
                 print("已取消作業。")
@@ -541,9 +560,10 @@ def prompt_interactive_targets():
             if do_fe_modules: selected_names.append("LAH-NUXTJS-node_modules.zip (前端套件)")
             if do_server_modules: selected_names.append("lah-messenger-server-node_modules.zip (即時通套件)")
             if do_node: selected_names.append("node.zip (綠色環境)")
+            if do_vcredist: selected_names.append("vcredist-x64.zip (VC++ 程式庫)")
 
             print(f"\n已選擇打包項目：{', '.join(selected_names)}\n")
-            return do_api, do_api8, do_fe, do_messenger, do_fe_modules, do_server_modules, do_node
+            return do_api, do_api8, do_fe, do_messenger, do_fe_modules, do_server_modules, do_node, do_vcredist
 
         print("[錯誤] 無任何有效選項，請重新輸入！\n")
 
@@ -563,6 +583,8 @@ def main():
     parser.add_argument("--node-only", action="store_true", help="僅打包可攜式 Node.js 綠色環境 (node.zip)")
     parser.add_argument("--with-node", action="store_true", help="常規打包時一併打包可攜式 Node.js 綠色環境 (node.zip)")
     parser.add_argument("--node", action="store_true", dest="do_node_pkg", help="打包可攜式 Node.js 綠色環境 (node.zip)")
+    parser.add_argument("--vcredist-only", action="store_true", help="僅打包 VC++ 核心程式庫 (vcredist-x64.zip)")
+    parser.add_argument("--with-vcredist", action="store_true", help="常規打包時一併打包 VC++ 核心程式庫 (vcredist-x64.zip)")
     parser.add_argument("--output-dir", default=None, help="指定輸出基底目錄（預設為專案根目錄之 dist 目錄，自動分流至 patch/、node_modules/ 與 base/）")
     args = parser.parse_args()
 
@@ -589,7 +611,7 @@ def main():
     # 決定打包項目：
     # 1. 若無傳入任何命令列參數，進入互動選單模式供使用者自由勾選
     if len(sys.argv) == 1:
-        do_api, do_api8, do_fe, do_messenger, do_fe_modules, do_server_modules, do_node = prompt_interactive_targets()
+        do_api, do_api8, do_fe, do_messenger, do_fe_modules, do_server_modules, do_node, do_vcredist = prompt_interactive_targets()
     # 2. 若傳入特定參數，則依參數執行（支援無人值守與腳本調用）
     elif args.modules_only:
         do_api = False
@@ -599,6 +621,7 @@ def main():
         do_fe_modules = True
         do_server_modules = True
         do_node = False
+        do_vcredist = False
     elif args.node_only:
         do_api = False
         do_api8 = False
@@ -607,11 +630,21 @@ def main():
         do_fe_modules = False
         do_server_modules = False
         do_node = True
+        do_vcredist = False
+    elif args.vcredist_only:
+        do_api = False
+        do_api8 = False
+        do_fe = False
+        do_messenger = False
+        do_fe_modules = False
+        do_server_modules = False
+        do_node = False
+        do_vcredist = True
     else:
         has_specific_target = (
             args.api_only or args.api8_only or args.fe_only or
             args.messenger_only or args.fe_modules or args.server_modules or
-            args.do_node_pkg
+            args.do_node_pkg or args.vcredist_only
         )
         if has_specific_target:
             do_api = args.api_only
@@ -621,6 +654,7 @@ def main():
             do_fe_modules = args.fe_modules or args.with_modules
             do_server_modules = args.server_modules or args.with_modules
             do_node = args.do_node_pkg or args.with_node
+            do_vcredist = args.vcredist_only or args.with_vcredist
         else:
             do_api = True
             do_api8 = True
@@ -629,6 +663,8 @@ def main():
             do_fe_modules = args.with_modules
             do_server_modules = args.with_modules
             do_node = args.with_node
+            vcredist_zip_path = os.path.join(base_dir, "vcredist-x64.zip")
+            do_vcredist = args.with_vcredist or not os.path.isfile(vcredist_zip_path) or args.with_node
 
     print("=" * 60)
     print("智慧控管與監控系統 - 原始碼打包工具 (LAH-API / LAH-FE / lah-messenger-server)")
@@ -719,7 +755,7 @@ def main():
 
     # 8.5. 檢查並打包 VC++ 獨立執行期程式庫至 base/vcredist-x64.zip
     vcredist_zip_path = os.path.join(base_dir, "vcredist-x64.zip")
-    if not os.path.isfile(vcredist_zip_path) or do_node:
+    if do_vcredist:
         build_vcredist_package(base_dir)
 
     # 9. 自動同步更新說明文件至 patch/ 子資料夾
@@ -753,6 +789,8 @@ def main():
         print(f"  - [node_modules] {server_mod_zip}")
     if do_node:
         print(f"  - [base]         {node_zip_path}")
+    if do_vcredist:
+        print(f"  - [base]         {vcredist_zip_path}")
     print("=" * 60)
 
 

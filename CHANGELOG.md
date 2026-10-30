@@ -6,6 +6,24 @@
 
 ## [未發布]
 
+### 📦 系統打包工具 (pack) 補齊後端排程任務與專案資源並支援 VC++ 獨立封裝
+
+- **修改目的**：
+  - 解決後端 PHP7 更新包（`www.zip`）因白名單遺漏 `task/`、`json/`、`project/` 與 `favicon.ico`，導致產線伺服器更新時缺少 `watchdog.php` 定時健康守護排程與最新常用書籤資料之問題。
+  - 將 VC++ 2015–2022 核心程式庫（`vcredist-x64.zip`）納入互動選單（選項 8）與新增命令列獨立參數 `--vcredist-only`。
+  - 清理廢棄之 `DEFAULT_OUTPUT_DIR` 死碼，並強化路徑排除檢查相容子目錄。
+- **具體修改項目**：
+  - `pack/pack.py`：
+    - `API_INCLUDES`：新增 `task`、`json`、`project`、`favicon.ico`。
+    - `API_EXCLUDES`：新增 `.git*`、`.vscode`、`*.log`、`*.tmp`、`*.bak` 通用排除。
+    - `is_excluded`：強化支援深層子路徑匹配，避免深層 `.git*` 與快取檔案誤入壓縮包。
+    - 移除未引用之 `DEFAULT_OUTPUT_DIR` 常數，校準標頭 docstring 對齊 `dist/` 分流結構。
+    - `prompt_interactive_targets`：新增選項 `8. VC++ 核心程式庫 (x64) (vcredist-x64.zip)`，並將 `8` 納入組合 `B` 與 `C`。
+    - `main`：新增 `--vcredist-only` 與 `--with-vcredist` 參數；對齊執行與摘要輸出。
+  - `pack/README.md`：同步更新命令列參數與說明。
+- **相容性說明**：
+  - 產出之 `www.zip` 完整納入 1,000 個檔案，經實測驗證包含 `task/watchdog.php`、`json/bookmarks.json`、`project/bookmark/index.html` 與 `favicon.ico`，且不含任何 `.git` 檔案。
+
 ### 🗑️ 自動移除工具 (uninstaller) 介面捲軸消除與服務脫敏同步
 
 - **修改目的**：對齊 AGENTS.md 介面禁止出現 Scrollbar 之強制規範，消除移除工具啟動時之垂直捲軸；並同步將介面服務選項與後端卸載日誌中的開源技術詞彙（Apache2.4、PM2）全面脫敏為公務系統中性名稱。

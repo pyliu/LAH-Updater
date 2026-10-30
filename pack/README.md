@@ -1,6 +1,6 @@
 # LAH 系統原始碼自動編譯與打包工具 (pack.py)
 
-專門用於將智慧控管與監控系統各平級子專案（`LAH-API`、`LAH-FE`、`lah-messenger-server` 等）編譯並自動封裝為標準更新壓縮包（.zip）。
+專門用於將智慧控管與監控系統各平級子專案（`LAH-API`、`LAH-FE`、`lah-messenger-server` 等）編譯並自動封裝為標準更新壓縮包（.zip），同時支援自動自系統收集 VC++ 執行期程式庫封裝為 `vcredist-x64.zip`。
 
 ---
 
@@ -12,7 +12,7 @@
 |---|---|---|
 | **`dist/patch/`** | `www.zip`<br/>`LAH-API.zip`<br/>`LAH-NUXTJS.zip`<br/>`lah-messenger-server.zip`<br/>`*更新說明*.txt` | 業務程式碼更新包與發布說明文件 |
 | **`dist/node_modules/`** | `LAH-NUXTJS-node_modules.zip` (及別名)<br/>`lah-messenger-server-node_modules.zip` | 前端與即時通伺服端之核心依賴套件包 |
-| **`dist/base/`** | `node.zip` | 可攜式 Node.js 綠色執行環境 |
+| **`dist/base/`** | `node.zip`<br/>`vcredist-x64.zip` | 可攜式 Node.js 綠色執行環境與 VC++ 2015–2022 獨立執行期依賴 |
 
 ---
 
@@ -31,5 +31,6 @@ python pack.py --fe-only            # 僅編譯並打包 LAH-FE (patch/LAH-NUXTJ
 python pack.py --messenger-only     # 僅打包即時通伺服器 (patch/lah-messenger-server.zip)
 python pack.py --modules-only       # 僅打包前端與即時通依賴套件至 node_modules/
 python pack.py --node-only          # 僅打包 Node.js 綠色環境至 base/
+python pack.py --vcredist-only      # 僅收集本機 VC++ 執行期封裝為 base/vcredist-x64.zip
 python pack.py --output-dir <路徑>  # 自訂輸出基底目錄（亦會自動分流至 patch/、node_modules/、base/）
 ```
