@@ -8,7 +8,7 @@
   body {
     font-family: "Microsoft JhengHei UI", "Microsoft JhengHei", "Segoe UI Emoji", "Segoe UI Symbol", sans-serif;
     margin: 0;
-    padding: 12px 16px;
+    padding: 10px 16px;
     background: #f8fafc;
     color: #1e293b;
     user-select: none;
@@ -20,12 +20,12 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    margin-bottom: 8px;
-    padding-bottom: 6px;
+    margin-bottom: 6px;
+    padding-bottom: 5px;
     border-bottom: 1px solid #e2e8f0;
   }
   .header h1 {
-    font-size: 17px;
+    font-size: 16.5px;
     margin: 0;
     font-weight: 700;
     color: #0369a1;
@@ -58,15 +58,15 @@
   .card {
     background: #ffffff;
     border-radius: 8px;
-    padding: 10px 14px;
-    margin-bottom: 8px;
+    padding: 9px 13px;
+    margin-bottom: 7px;
     box-shadow: 0 1px 3px rgba(0,0,0,0.04);
     border: 1px solid #e2e8f0;
   }
   .card-title {
-    font-size: 13.5px;
+    font-size: 13px;
     font-weight: 700;
-    margin: 0 0 8px 0;
+    margin: 0 0 6px 0;
     color: #334155;
     display: flex;
     align-items: center;
@@ -80,7 +80,7 @@
   }
   input[type=text] {
     flex: 1;
-    padding: 6px 10px;
+    padding: 5px 9px;
     border: 1px solid #cbd5e1;
     border-radius: 4px;
     font-size: 13px;
@@ -93,12 +93,12 @@
   }
 
   button {
-    padding: 6px 14px;
+    padding: 5px 12px;
     cursor: pointer;
     border: 1px solid #cbd5e1;
     background: #ffffff;
     border-radius: 4px;
-    font-size: 13px;
+    font-size: 12.5px;
     font-family: inherit;
     transition: all 0.15s ease-in-out;
   }
@@ -110,8 +110,8 @@
     color: #ffffff;
     border-color: #0284c7;
     font-weight: 700;
-    padding: 8px 22px;
-    font-size: 14px;
+    padding: 7px 20px;
+    font-size: 13.5px;
   }
   button.primary:hover:not(:disabled) {
     background: #0369a1;
@@ -134,17 +134,60 @@
     cursor: not-allowed;
   }
 
+  /* 集中式快選工具列 */
+  .quick-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .quick-group {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .quick-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: #475569;
+  }
+  .quick-divider {
+    width: 1px;
+    height: 15px;
+    background: #cbd5e1;
+  }
+  .quick-btn {
+    padding: 3px 9px;
+    font-size: 11.5px;
+    font-weight: 600;
+    border-radius: 4px;
+    border: 1px solid #cbd5e1;
+    background: #ffffff;
+    color: #334155;
+    cursor: pointer;
+    transition: all 0.15s ease-in-out;
+  }
+  .quick-btn:hover {
+    background: #f1f5f9;
+    border-color: #94a3b8;
+  }
+  .quick-btn.category:hover {
+    background: #e0f2fe;
+    border-color: #7dd3fc;
+    color: #0369a1;
+  }
+
   /* 雙欄主版面 */
   .main-layout {
     display: grid;
     grid-template-columns: 1fr 1.15fr;
-    gap: 12px;
+    gap: 10px;
   }
 
   .options-list {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 6px;
   }
 
   .checkbox-item {
@@ -153,7 +196,7 @@
     gap: 8px;
     font-size: 12.5px;
     cursor: pointer;
-    padding: 4px 6px;
+    padding: 3px 6px;
     border-radius: 4px;
   }
   .checkbox-item:hover {
@@ -170,8 +213,8 @@
   .pkg-item {
     border: 1px solid #e2e8f0;
     border-radius: 6px;
-    padding: 5px 8px;
-    margin-bottom: 4px;
+    padding: 4px 8px;
+    margin-bottom: 3.5px;
     background: #ffffff;
     transition: background 0.15s;
   }
@@ -194,12 +237,12 @@
   }
   .pkg-title {
     font-weight: 600;
-    font-size: 13px;
+    font-size: 12.5px;
     color: #1e293b;
   }
   .pkg-badge {
     font-size: 11px;
-    padding: 2px 6px;
+    padding: 1.5px 6px;
     border-radius: 3px;
     font-weight: 600;
   }
@@ -212,9 +255,9 @@
     color: #64748b;
   }
   .pkg-meta {
-    font-size: 11.5px;
+    font-size: 11px;
     color: #64748b;
-    margin-top: 2px;
+    margin-top: 1px;
     padding-left: 23px;
   }
 
@@ -227,8 +270,8 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-top: 8px;
-    padding: 10px 0 6px 0;
+    margin-top: 6px;
+    padding: 8px 0 2px 0;
     border-top: 1px solid #e2e8f0;
   }
   #btn_apply_config_now:hover:not(:disabled) {
@@ -236,7 +279,7 @@
     border-color: #7dd3fc !important;
   }
   .status-text {
-    font-size: 12.5px;
+    font-size: 12px;
     color: #475569;
   }
   .footer-actions {
@@ -393,13 +436,36 @@
     </div>
   </div>
 
+  <!-- 集中式整合快選工具列 -->
+  <div class="card" style="padding: 6px 12px; margin-bottom: 7px;">
+    <div class="quick-toolbar">
+      <div class="quick-group">
+        <span class="quick-label">⚡ 快速選取：</span>
+        <button id="btn_select_all" class="quick-btn" title="一鍵選取所有可用更新包">✅ 全部選取</button>
+        <button id="btn_deselect_all" class="quick-btn" title="一鍵取消所有更新包勾選">⬜ 全部取消</button>
+      </div>
+      <div class="quick-divider"></div>
+      <div class="quick-group">
+        <span class="quick-label">📂 分類快選 (智慧切換)：</span>
+        <button id="btn_select_base" class="quick-btn category" title="切換基礎環境 (base: Apache24, php7, php85, node) 勾選狀態">🏛️ 基礎環境 (base)</button>
+        <button id="btn_select_patch" class="quick-btn category" title="切換程式修補 (patch: www, LAH-API, LAH-NUXTJS, messenger) 勾選狀態">📦 程式修補 (patch)</button>
+        <button id="btn_select_modules" class="quick-btn category" title="切換核心套件 (node_modules) 勾選狀態">🧩 核心套件 (node_modules)</button>
+      </div>
+    </div>
+  </div>
+
   <!-- 雙欄主要工作區 -->
   <div class="main-layout">
     
     <!-- 左欄：環境配置與自動化服務 -->
     <div class="left-col">
       <div class="card">
-        <div class="card-title">⚙️ 系統服務與自動化配置</div>
+        <div class="card-title">
+          <span>⚙️ 系統服務與自動化配置</span>
+          <button id="btn_apply_config_now" class="secondary" style="padding: 2.5px 8px; font-size: 11px; font-weight: 600; color: #0369a1; border-color: #bae6fd; background: #f0f9ff; display: inline-flex; align-items: center; gap: 4px;">
+            ⚡ 立即套用配置與註冊服務
+          </button>
+        </div>
         <div class="options-list">
           <label class="checkbox-item">
             <input type="checkbox" id="chk_auto_apache" checked>
@@ -429,9 +495,6 @@
             <input type="text" id="txt_backup_zip" placeholder="請選取 _LAH_Backup_*.zip">
             <button id="btn_browse_backup" style="padding:4px 10px; font-size:12px;">瀏覽...</button>
           </div>
-          <button id="btn_apply_config_now" class="secondary" style="width: 100%; margin-top: 6px; padding: 6px 12px; font-size: 12.5px; font-weight: 600; color: #0369a1; border-color: #bae6fd; background: #f0f9ff; display: flex; align-items: center; justify-content: center; gap: 6px;">
-            ⚡ 立即套用配置與註冊服務
-          </button>
         </div>
       </div>
 
@@ -439,7 +502,7 @@
       <div class="card">
         <div class="card-title">
           <span>🏛️ 基礎環境安裝包</span>
-          <span style="font-size:11px; color:#64748b;">Apache / PHP</span>
+          <span style="font-size:11px; color:#64748b;">Apache / PHP / Node.js</span>
         </div>
         <div id="base_pkg_list"></div>
       </div>
@@ -450,10 +513,7 @@
       <div class="card">
         <div class="card-title">
           <span>📦 應用模組更新包</span>
-          <div style="display:flex; gap:6px;">
-            <button id="btn_select_all" style="padding:2px 8px; font-size:11px;">全選</button>
-            <button id="btn_deselect_all" style="padding:2px 8px; font-size:11px;">全部取消</button>
-          </div>
+          <span style="font-size:11px; color:#64748b;">PHP / 前端 / 即時通</span>
         </div>
         <div id="app_pkg_list"></div>
       </div>
@@ -470,7 +530,7 @@
     </div>
   </div>
 
-  <!-- 【新增需求】預設目錄不存在引導對話框 (Modal) -->
+  <!-- 預設目錄不存在引導對話框 (Modal) -->
   <div id="modal_root_missing" class="modal-overlay">
     <div class="modal-content" style="max-width: 580px;">
       <div class="modal-header">

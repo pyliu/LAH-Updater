@@ -148,7 +148,7 @@ pub const ALL_PACKAGE_SPECS: &[PackageSpec] = &[
         rel_target: "node",
         expected_folder: "node",
         alt_folders: &[],
-        is_base_env: false,
+        is_base_env: true,
         is_nodejs: true,
         is_sub_package: false,
     },

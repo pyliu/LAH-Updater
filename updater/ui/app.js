@@ -74,9 +74,15 @@ const DEFAULT_PACKAGES = [
     name: "node.zip",
     title: "Node.js 綠色執行環境 (node.zip)",
     rel_target: "node",
-    is_base_env: false,
+    is_base_env: true,
   },
 ];
+
+const PKG_CATEGORIES = {
+  base: ['apache24', 'php7', 'php85', 'node'],
+  patch: ['www', 'lah_api', 'lah_nuxtjs', 'messenger'],
+  node_modules: ['lah_nuxtjs_modules', 'messenger_modules'],
+};
 
 let state = {
   packages: DEFAULT_PACKAGES.map((p) => ({
@@ -397,10 +403,10 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById("modal_release_notes").classList.remove("active");
   });
 
-  // 全選 / 全部取消
-  document.getElementById("btn_select_all").addEventListener("click", () => {
+  // 集中式快選：全部選取 (全站所有可用更新包)
+  document.getElementById("btn_select_all")?.addEventListener("click", () => {
     state.packages.forEach((pkg) => {
-      if (!pkg.is_base_env && pkg.exists) {
+      if (pkg.exists) {
         pkg.checked = true;
         const el = document.getElementById(`chk_pkg_${pkg.id}`);
         if (el) el.checked = true;
@@ -408,16 +414,42 @@ document.addEventListener("DOMContentLoaded", () => {
     });
     updateSummaryText();
   });
-  document.getElementById("btn_deselect_all").addEventListener("click", () => {
+
+  // 集中式快選：全部取消 (全站所有更新包)
+  document.getElementById("btn_deselect_all")?.addEventListener("click", () => {
     state.packages.forEach((pkg) => {
-      if (!pkg.is_base_env) {
-        pkg.checked = false;
-        const el = document.getElementById(`chk_pkg_${pkg.id}`);
-        if (el) el.checked = false;
-      }
+      pkg.checked = false;
+      const el = document.getElementById(`chk_pkg_${pkg.id}`);
+      if (el) el.checked = false;
     });
     updateSummaryText();
   });
+
+  // 分類快選 (智慧 Toggle：若未全選則全選；若已全選則取消選取)
+  function setupCategoryToggle(btnId, catKey) {
+    const btn = document.getElementById(btnId);
+    if (!btn) return;
+    btn.addEventListener("click", () => {
+      const ids = PKG_CATEGORIES[catKey] || [];
+      const targetPkgs = state.packages.filter((p) => ids.includes(p.id) && p.exists);
+      if (targetPkgs.length === 0) return;
+
+      const allChecked = targetPkgs.every((p) => p.checked);
+      const newChecked = !allChecked;
+
+      targetPkgs.forEach((pkg) => {
+        pkg.checked = newChecked;
+        const el = document.getElementById(`chk_pkg_${pkg.id}`);
+        if (el) el.checked = newChecked;
+      });
+
+      updateSummaryText();
+    });
+  }
+
+  setupCategoryToggle("btn_select_base", "base");
+  setupCategoryToggle("btn_select_patch", "patch");
+  setupCategoryToggle("btn_select_modules", "node_modules");
 
   // 備份檔勾選展開
   document.getElementById("chk_restore_backup").addEventListener("change", (e) => {
