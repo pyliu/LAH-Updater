@@ -739,9 +739,9 @@
       <div>
         <div class="cover-meta">
           <div class="meta-item"><strong>文件編號：</strong><span>LAH-OPS-SOP-202610</span></div>
-          <div class="meta-item"><strong>發布日期：</strong><span>2026 年 10 月 30 日 (增補更新)</span></div>
+          <div class="meta-item"><strong>發布日期：</strong><span>2026 年 10 月 31 日 (管理儀表板增補修訂版)</span></div>
           <div class="meta-item"><strong>適用系統：</strong><span>智慧控管與監控系統 (LAH)</span></div>
-          <div class="meta-item"><strong>維運工具：</strong><span>LAH-Updater v1.7.0+ (Rust 核心)</span></div>
+          <div class="meta-item"><strong>維運工具：</strong><span>LAH-Updater v1.7.0+ (Rust 核心，含全功能管理儀表板)</span></div>
           <div class="meta-item"><strong>適用單位：</strong><span>桃園市各地政事務所 資訊小組</span></div>
           <div class="meta-item"><strong>保密等級：</strong><span>內部維運限閱 (內部專用)</span></div>
         </div>
@@ -793,6 +793,11 @@
           <td><strong>智慧控管與監控系統 - 可攜 Node 安裝工具.exe</strong></td>
           <td><span class="badge badge-opt">專屬環境</span></td>
           <td>獨立部署或修復綠色版 Node 16 與 PM2 守護服務，保證零全域污染。</td>
+        </tr>
+        <tr>
+          <td><strong>智慧控管與監控系統 - 管理儀表板.exe</strong></td>
+          <td><span class="badge badge-req">專屬維運</span></td>
+          <td>專屬單一執行檔原生儀表板！更新完成自動同步至根目錄並建立桌面捷徑；整合系統服務、PM2 進程控制、Auto-Tail 動態日誌、資源指標與通訊埠探針。</td>
         </tr>
         <tr>
           <td><strong>地籍異動簡訊參數設定工具.exe</strong></td>
@@ -991,6 +996,7 @@
         <span class="step-title">步驟三：點擊「開始執行更新作業」等待結束</span>
       </div>
       <p>點擊右下角 <strong>「🚀 開始執行更新作業」</strong>。安裝管線將依序解壓程式碼、注入 PHP2Shell 防護規則、啟動 PHP 8.5 FastCGI 並重啟服務，最後彈現健康巡檢報告即完成升級！</p>
+      <p style="margin-top:4px; font-size:8.5pt; color:#0369a1;">💡 <strong>管理儀表板熱部署與捷徑建立：</strong>更新完成時若同目錄包含管理儀表板執行檔，管線將自動複製至安裝根目錄，並在 Windows 公用桌面與使用者桌面建立快捷啟動方式，對話框亦提供「📊 開啟管理儀表板」按鈕供即刻喚醒確認。</p>
     </div>
 
     <div class="page-footer-note">
@@ -1091,7 +1097,7 @@
         <span class="step-number green">4</span>
         <span class="step-title">步驟四：等待管線全自動佈署完成</span>
       </div>
-      <p>更新引擎將自動完成：① 解壓 Apache 與 PHP 7/8.5 ➔ ② 解壓前端與即時通依賴庫 ➔ ③ 釋放最新業務程式碼 ➔ ④ 掛載還原備份之 SQLite 資料庫與 Oracle 驅動 ➔ ⑤ 註冊 Windows 原生服務、配置開機自啟並產出 lah-cmd.bat 終端 ➔ ⑥ 全系統服務啟動與健康巡檢。</p>
+      <p>更新引擎將自動完成：① 解壓 Apache 與 PHP 7/8.5 ➔ ② 解壓前端與即時通依賴庫 ➔ ③ 釋放最新業務程式碼 ➔ ④ 掛載還原備份之 SQLite 資料庫與 Oracle 驅動 ➔ ⑤ 註冊 Windows 原生服務、配置開機自啟並產出 lah-cmd.bat 終端 ➔ ⑥ 自動同步部署管理儀表板至安裝根目錄並建立桌面捷徑 ➔ ⑦ 全系統服務啟動與健康巡檢。</p>
     </div>
 
     <div class="page-footer-note">
@@ -1154,6 +1160,14 @@
         </tr>
       </tbody>
     </table>
+
+    <h3>🖥️ 一站式維運管理儀表板驗證 (LAH-Dashboard)</h3>
+    <ol style="margin: 2px 0 6px 16px; padding: 0; line-height: 1.6;">
+      <li>更新完成後，可直接於更新完成對話框點擊 <strong>「📊 開啟管理儀表板」</strong>，或雙擊桌面捷徑 <strong>「智慧控管與監控系統 - 管理儀表板」</strong>。</li>
+      <li><strong>服務監控（分頁一）：</strong>確認 Windows 系統服務層 (<code>LAH_Web_Service</code>、<code>LAH_PM2_Service</code>) 與 PM2 應用進程層 (<code>LAH-FE</code>、<code>LAH-WSS</code>、<code>LAH-SCHEDULER</code>、<code>lah-api-v85</code>) 全數呈現綠燈 <strong>[運行中]</strong>。</li>
+      <li><strong>動態日誌（分頁二）：</strong>各受管進程支援即時串流日誌 (Auto-Tail)，亦可於記事本中直接開啟實體日誌檔案。</li>
+      <li><strong>系統指標與探針（分頁三）：</strong>提供即時 CPU 負載、實體記憶體用量、磁碟空間與五大通訊埠 (80, 8080, 8081, 8082, 8085) 即時 TCP 心跳探針，秒級掌握主機健康。</li>
+    </ol>
 
     <h3>🌐 瀏覽器實機端點驗證標準</h3>
     <ol style="margin: 2px 0 6px 16px; padding: 0; line-height: 1.6;">
@@ -1254,9 +1268,14 @@
           <td></td>
         </tr>
         <tr>
-          <td rowspan="3" style="font-weight:700; background:#fdf2f8; text-align:center;">驗證上線</td>
+          <td rowspan="4" style="font-weight:700; background:#fdf2f8; text-align:center;">驗證上線</td>
           <td><span class="chk-box"></span> <strong>連接埠巡檢：</strong>Port 80, 8085, 8080, 8081, 8082 經檢測全數為 [OK]。</td>
           <td>□ 全數合格</td>
+          <td></td>
+        </tr>
+        <tr>
+          <td><span class="chk-box"></span> <strong>管理儀表板：</strong>確認桌面已建立捷徑，開啟確認 Apache 與 PM2 各服務進程全數綠燈運行。</td>
+          <td>□ 測試正常</td>
           <td></td>
         </tr>
         <tr>
