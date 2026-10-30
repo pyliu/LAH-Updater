@@ -270,6 +270,66 @@
     padding-left: 23px;
   }
 
+  /* 系統端點與維運提示卡片 */
+  .endpoint-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 4.5px 8px;
+    margin-bottom: 6px;
+  }
+  .endpoint-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 4px;
+    padding: 3px 7px;
+    font-size: 11.5px;
+  }
+  .endpoint-name {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    color: #334155;
+    font-weight: 500;
+  }
+  .endpoint-port {
+    font-family: Consolas, monospace;
+    font-weight: 700;
+    font-size: 11px;
+    color: #0369a1;
+    background: #e0f2fe;
+    padding: 1px 5px;
+    border-radius: 3px;
+  }
+  .maint-tip-box {
+    background: #f0fdf4;
+    border: 1px solid #bbf7d0;
+    border-radius: 5px;
+    padding: 5px 8px;
+    font-size: 11px;
+    color: #166534;
+    line-height: 1.45;
+  }
+  .maint-tip-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 4px;
+    margin-bottom: 2px;
+  }
+  .maint-tip-item:last-child {
+    margin-bottom: 0;
+  }
+  .maint-tip-item code {
+    background: #dcfce7;
+    color: #15803d;
+    padding: 0 4px;
+    border-radius: 3px;
+    font-family: Consolas, monospace;
+    font-weight: 600;
+  }
+
   /* 底部固定列 */
   .footer-bar {
     position: sticky;
@@ -525,6 +585,44 @@
           <span style="font-size:11px; color:#64748b;">PHP / 前端 / 即時通</span>
         </div>
         <div id="app_pkg_list"></div>
+      </div>
+
+      <!-- 系統架構端點與維運叮嚀 -->
+      <div class="card" style="padding: 7px 11px; margin-bottom: 0;">
+        <div class="card-title" style="margin-bottom: 5px;">
+          <span>🌐 系統服務端點與維運指引</span>
+          <span style="font-size:11px; font-weight:600; color:#0369a1; background:#e0f2fe; padding:1px 6px; border-radius:3px;">
+            綠色隔離沙盒
+          </span>
+        </div>
+        <div class="endpoint-grid">
+          <div class="endpoint-item" title="Apache HTTP 服務（前端入口與 API 反向代理）">
+            <span class="endpoint-name">🌐 系統入口 (Apache)</span>
+            <span class="endpoint-port">:80</span>
+          </div>
+          <div class="endpoint-item" title="Nuxt.js Vue 前端智慧管控服務">
+            <span class="endpoint-name">🖥️ 智慧管控網頁 (Nuxt)</span>
+            <span class="endpoint-port">:8080</span>
+          </div>
+          <div class="endpoint-item" title="Node.js WebSocket 即時通訊廣播服務">
+            <span class="endpoint-name">💬 即時通訊長連線 (WS)</span>
+            <span class="endpoint-port">:8081</span>
+          </div>
+          <div class="endpoint-item" title="Node.js Express HTTP 附件與檔案上傳服務">
+            <span class="endpoint-name">📎 即時通附件服務 (HTTP)</span>
+            <span class="endpoint-port">:8082</span>
+          </div>
+        </div>
+        <div class="maint-tip-box">
+          <div class="maint-tip-item">
+            <span>💡</span>
+            <span><b>常規程式修補</b>：日常更新僅需勾選「<code>📦 程式修補 (patch)</code>」，無須重複解壓龐大核心套件。</span>
+          </div>
+          <div class="maint-tip-item">
+            <span>🛡️</span>
+            <span><b>專屬隔離沙盒</b>：安裝根目錄附帶 <code>lah-cmd.bat</code>，雙擊可開啟專屬終端且絕不干擾主機全域環境。</span>
+          </div>
+        </div>
       </div>
     </div>
 
