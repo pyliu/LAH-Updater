@@ -13,9 +13,9 @@
         "label": "main",
         "title": "智慧控管與監控系統 - 可攜 Node 安裝工具",
         "width": 960,
-        "height": 640,
+        "height": 560,
         "minWidth": 860,
-        "minHeight": 580,
+        "minHeight": 500,
         "center": true
       }
     ],
@@ -26,4 +26,3 @@
     "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.ico"]
   }
 }
-

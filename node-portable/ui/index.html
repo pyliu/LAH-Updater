@@ -8,7 +8,7 @@
   body {
     font-family: "Microsoft JhengHei UI", "Microsoft JhengHei", "Segoe UI Emoji", "Segoe UI Symbol", sans-serif;
     margin: 0;
-    padding: 16px 20px;
+    padding: 13px 18px;
     background: #f8fafc;
     color: #1e293b;
     user-select: none;
@@ -20,12 +20,12 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    margin-bottom: 12px;
-    padding-bottom: 8px;
+    margin-bottom: 8px;
+    padding-bottom: 6px;
     border-bottom: 1px solid #e2e8f0;
   }
   .header h1 {
-    font-size: 17px;
+    font-size: 16.5px;
     margin: 0;
     font-weight: 700;
     color: #166534;
@@ -36,7 +36,7 @@
   .admin-badge {
     font-size: 12px;
     font-weight: 700;
-    padding: 3px 8px;
+    padding: 2.5px 8px;
     border-radius: 4px;
   }
   .admin-badge.is-admin {
@@ -53,15 +53,15 @@
   .card {
     background: #ffffff;
     border-radius: 8px;
-    padding: 12px 16px;
-    margin-bottom: 12px;
+    padding: 11px 15px;
+    margin-bottom: 8px;
     box-shadow: 0 1px 3px rgba(0,0,0,0.04);
     border: 1px solid #e2e8f0;
   }
   .card-title {
-    font-size: 14px;
+    font-size: 13.5px;
     font-weight: 700;
-    margin: 0 0 10px 0;
+    margin: 0 0 7px 0;
     color: #334155;
     display: flex;
     align-items: center;
@@ -75,7 +75,7 @@
   }
   input[type=text] {
     flex: 1;
-    padding: 7px 10px;
+    padding: 6px 10px;
     border: 1px solid #cbd5e1;
     border-radius: 4px;
     font-size: 13px;
@@ -83,12 +83,12 @@
   }
   input[type=text]:focus {
     outline: none;
-    border-color: #3b82f6;
-    box-shadow: 0 0 0 2px rgba(59,130,246,0.15);
+    border-color: #16a34a;
+    box-shadow: 0 0 0 2px rgba(22,163,74,0.15);
   }
 
   button {
-    padding: 6px 14px;
+    padding: 5.5px 13px;
     cursor: pointer;
     border: 1px solid #cbd5e1;
     background: #ffffff;
@@ -105,8 +105,8 @@
     color: #ffffff;
     border-color: #16a34a;
     font-weight: 700;
-    padding: 8px 20px;
-    font-size: 14px;
+    padding: 7px 18px;
+    font-size: 13.5px;
   }
   button.danger:hover:not(:disabled) {
     background: #166534;
@@ -116,30 +116,20 @@
     cursor: not-allowed;
   }
 
-  /* 移除項目雙等寬欄位排版 */
-  .quick-buttons {
-    display: flex;
-    gap: 6px;
-  }
-  .quick-buttons button {
-    padding: 3px 10px;
-    font-size: 12px;
-  }
-
   .options-grid {
     display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 8px 16px;
-    margin-top: 6px;
+    grid-template-columns: 1fr;
+    gap: 6px;
+    margin-top: 4px;
   }
   .checkbox-item {
     display: flex;
     align-items: flex-start;
-    gap: 8px;
-    font-size: 13px;
-    line-height: 1.4;
+    gap: 7px;
+    font-size: 12.5px;
+    line-height: 1.35;
     cursor: pointer;
-    padding: 4px 6px;
+    padding: 3px 5px;
     border-radius: 4px;
   }
   .checkbox-item:hover {
@@ -149,19 +139,8 @@
     margin-top: 2px;
     cursor: pointer;
     accent-color: #16a34a;
-    width: 15px;
-    height: 15px;
-  }
-  .backup-hint-box {
-    grid-column: span 2;
-    background: #fef2f2;
-    border: 1px solid #dcfce7;
-    color: #991b1b;
-    padding: 6px 12px;
-    border-radius: 6px;
-    font-size: 12px;
-    font-weight: 600;
-    margin-bottom: 4px;
+    width: 14px;
+    height: 14px;
   }
 
   /* 底部固定操作列 */
@@ -170,7 +149,7 @@
     justify-content: flex-end;
     align-items: center;
     gap: 10px;
-    margin-top: 8px;
+    margin-top: 6px;
   }
 
   /* 彈出訊息視窗 (Modal Overlay) */
@@ -257,20 +236,6 @@
   .log-line.warning { color: #ce9178; }
   .log-line.error { color: #f44747; font-weight: bold; }
   .log-line.time { color: #6a9955; }
-
-  /* 確認對話框 */
-  .confirm-list {
-    max-height: 160px;
-    overflow-y: auto;
-    background: #f8fafc;
-    border: 1px solid #e2e8f0;
-    border-radius: 6px;
-    padding: 8px 12px;
-    margin: 10px 0;
-    font-size: 12px;
-    line-height: 1.6;
-    color: #334155;
-  }
 </style>
 </head>
 <body>
@@ -315,16 +280,17 @@
 
   <div class="card">
     <div class="card-title"><span>🔎 環境狀態</span><button id="btn_rescan">重新偵測</button></div>
-    <div id="scan_box" style="line-height:1.8; font-size:12px;">偵測中...</div>
+    <div id="scan_box" style="line-height:1.75; font-size:12px;">偵測中...</div>
   </div>
 
   <div class="card">
-    <div class="card-title">⚙️ 安裝選項</div>
-    <div class="options-grid" style="grid-template-columns: 1fr;">
-      <label class="checkbox-item"><input type="checkbox" id="chk_path" checked><span>⚡ 將 node 目錄置於系統與使用者 PATH 最前端（取代既有全域 Node / PM2）</span></label>
-      <label class="checkbox-item"><input type="checkbox" id="chk_home" checked><span>🏠 設定系統與使用者環境變數 PM2_HOME（&lt;根目錄&gt;\.pm2 並清理舊殘留變數）</span></label>
+    <div class="card-title">⚙️ 系統服務與執行選項</div>
+    <div style="background:#f0fdf4; border:1px solid #bbf7d0; border-radius:6px; padding:6px 11px; margin-bottom:7px; font-size:12px; color:#166534; line-height:1.45;">
+      🛡️ <b>零全域污染沙盒架構</b>：安裝時自動自系統與使用者環境變數（HKLM/HKCU）清理舊可攜殘留，並於根目錄建立專屬維運終端 <code>lah-cmd.bat</code>。綠色 Node 與 PM2 僅於服務與專屬沙盒內自給自足，絕不干擾本機全域 Node 開發環境。
+    </div>
+    <div class="options-grid">
+      <label class="checkbox-item"><input type="checkbox" id="chk_service" checked><span>⚙️ 註冊開機自啟服務 PM2_Portable_Service（守護程序並隨開機自動啟動）</span></label>
       <label class="checkbox-item"><input type="checkbox" id="chk_logrotate" checked><span>📦 直接由便攜版 node_modules 掛載並啟動 pm2-logrotate 日誌輪替模組（自動啟用日誌壓縮）</span></label>
-      <label class="checkbox-item"><input type="checkbox" id="chk_service" checked><span>⚙️ 註冊開機自啟服務 PM2_Portable_Service（停用舊 pm2.exe 服務並守護程序）</span></label>
       <label class="checkbox-item"><input type="checkbox" id="chk_resurrect" checked><span>🔄 立即執行 pm2 resurrect 還原既有程式 dump</span></label>
     </div>
   </div>
@@ -364,4 +330,3 @@
 <script src="app.js"></script>
 </body>
 </html>
-

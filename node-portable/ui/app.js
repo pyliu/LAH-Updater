@@ -101,10 +101,8 @@ $("btn_start").onclick = async () => {
   }
   const options = {
     root_dir: rootDir,
-    register_path: $("chk_path").checked,
-    set_pm2_home: $("chk_home").checked,
-    install_logrotate: $("chk_logrotate").checked,
     register_service: $("chk_service").checked,
+    install_logrotate: $("chk_logrotate").checked,
     resurrect: $("chk_resurrect").checked,
   };
 

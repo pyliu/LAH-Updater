@@ -164,13 +164,9 @@ pub fn execute_install(
         return fail("PM2 修補失敗，node 目錄不存在".to_string());
     }
 
-    progress_fn(80.0, "接管系統與使用者環境變數...");
-    if options.register_path {
-        register_path_to_user_environment(&node_dir, log_fn);
-    }
-    if options.set_pm2_home {
-        register_pm2_home_and_clean_legacy_env(&root.join(".pm2"), log_fn);
-    }
+    progress_fn(80.0, "🛡️ 套用零全域污染沙盒隔離與建立維運終端...");
+    register_path_to_user_environment(&node_dir, log_fn);
+    register_pm2_home_and_clean_legacy_env(&root.join(".pm2"), log_fn);
 
     progress_fn(86.0, "驗證安裝結果...");
     let Some(nv) = node_version(&root) else {
@@ -202,10 +198,10 @@ pub fn execute_install(
     }
 
     progress_fn(100.0, "安裝完成");
-    log_fn("🎉 可攜 Node.js 與 PM2 安裝完成！新開啟的命令提示字元即可直接使用 node / pm2。", "success");
+    log_fn("🎉 可攜 Node.js 與 PM2 安裝完成！已就緒專屬維運終端 (lah-cmd.bat)，全域環境完全不受影響。", "success");
     InstallReport {
         success: true,
-        message: format!("Node.js {} 安裝完成", nv),
+        message: format!("Node.js {} 安裝完成（沙盒模式）", nv),
         elapsed_secs: started.elapsed().as_secs_f64(),
     }
 }

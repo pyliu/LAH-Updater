@@ -7,12 +7,14 @@ fn default_true() -> bool {
 #[derive(Debug, Clone, Deserialize)]
 pub struct InstallOptions {
     pub root_dir: String,
-    pub register_path: bool,
-    pub set_pm2_home: bool,
     pub register_service: bool,
     pub resurrect: bool,
     #[serde(default = "default_true")]
     pub install_logrotate: bool,
+    #[serde(default)]
+    pub register_path: bool,
+    #[serde(default)]
+    pub set_pm2_home: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
