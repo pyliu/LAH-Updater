@@ -104,9 +104,12 @@ function appendLog(message, level = "info") {
 // 監聽後端進度與日誌事件
 listen("progress", ({ payload }) => {
   const pct = Math.round(payload.percent);
-  $("progress_bar").value = payload.percent;
-  $("progress_percent").textContent = `${pct}%`;
-  $("status_text").textContent = payload.message || "處理中...";
+  const bar = $("progress_bar");
+  if (bar) bar.value = payload.percent;
+  const pctEl = $("progress_percent") || $("percent_text");
+  if (pctEl) pctEl.textContent = `${pct}%`;
+  const statusEl = $("status_text");
+  if (statusEl) statusEl.textContent = payload.message || "處理中...";
 });
 
 listen("log", ({ payload }) => {
@@ -132,8 +135,17 @@ async function exitApp() {
   }
 }
 
-// 開始移除按鈕
-$("btn_start").onclick = async () => {
+// 二次確認狀態暫存
+let pendingUninstallOptions = null;
+
+function closeConfirmModal() {
+  const modal = $("modal_confirm");
+  if (modal) modal.classList.remove("active");
+  pendingUninstallOptions = null;
+}
+
+// 開始移除按鈕：開啟 UI 內置二次確認視窗 (完全不呼叫原生 confirm 以免非同步 Promise 提前穿透)
+$("btn_start").onclick = () => {
   const opts = getOptions();
   if (!opts.root_dir) {
     alert("請先指定系統安裝根目錄！");
@@ -148,38 +160,75 @@ $("btn_start").onclick = async () => {
     return;
   }
 
-  // 整理清單並彈出二次確認
-  const selectedSummary = CHECKBOX_ITEMS.filter((item) => opts[item.key])
-    .map((item) => `  ${item.label}`)
-    .join("\n");
+  pendingUninstallOptions = opts;
 
-  const confirmMsg =
-    `⚠️ 【重要警告：即將執行系統移除】\n\n` +
-    `安裝根目錄：\n  ${opts.root_dir}\n\n` +
-    `已勾選將被執行的操作項目 (共 ${selectedCount} 項)：\n` +
-    `${selectedSummary}\n\n` +
-    `※ 系統將在清除前自動於根目錄產出壓縮備份檔。\n` +
-    `您確定要繼續執行移除作業嗎？`;
-
-  if (!confirm(confirmMsg)) {
-    return;
+  // 填寫確認彈窗資訊
+  if ($("confirm_target_dir")) {
+    $("confirm_target_dir").textContent = opts.root_dir;
+  }
+  const listEl = $("confirm_items_list");
+  if (listEl) {
+    listEl.innerHTML = "";
+    for (const item of CHECKBOX_ITEMS) {
+      if (opts[item.key]) {
+        const row = document.createElement("div");
+        row.textContent = item.label;
+        listEl.appendChild(row);
+      }
+    }
   }
 
-  // 切換 UI 狀態為忙碌中並打開進度彈窗
+  const modal = $("modal_confirm");
+  if (modal) modal.classList.add("active");
+};
+
+// 取消確認視窗
+$("btn_confirm_cancel").onclick = closeConfirmModal;
+
+// 點擊確認彈窗遮罩背景取消
+$("modal_confirm").onclick = (e) => {
+  if (e.target === $("modal_confirm")) closeConfirmModal();
+};
+
+// 鍵盤 Esc 關閉確認視窗
+window.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") {
+    if ($("modal_confirm") && $("modal_confirm").classList.contains("active")) {
+      closeConfirmModal();
+    }
+  }
+});
+
+// 使用者於二次確認視窗明確點擊「確認並立即執行移除」按鈕後，才真正啟動移除流程！
+$("btn_confirm_ok").onclick = async () => {
+  if (!pendingUninstallOptions || isBusy) return;
+  const opts = pendingUninstallOptions;
+  closeConfirmModal();
+
   isBusy = true;
   $("btn_start").disabled = true;
   $("btn_exit").disabled = true;
-  $("btn_close_modal").disabled = true;
-  $("btn_close_modal").textContent = "移除進行中...";
-  $("btn_modal_back").style.display = "none";
-  $("log_box").innerHTML = "";
-  $("progress_bar").value = 0;
-  $("progress_percent").textContent = "0%";
-  $("status_text").textContent = "正在準備啟動移除工作流程...";
-
-  $("modal_progress").classList.add("active");
 
   try {
+    const btnClose = $("btn_close_modal");
+    if (btnClose) {
+      btnClose.disabled = true;
+      btnClose.textContent = "移除進行中...";
+    }
+    const btnBack = $("btn_modal_back");
+    if (btnBack) btnBack.style.display = "none";
+    const logBox = $("log_box");
+    if (logBox) logBox.innerHTML = "";
+    const pBar = $("progress_bar");
+    if (pBar) pBar.value = 0;
+    const pctEl = $("progress_percent") || $("percent_text");
+    if (pctEl) pctEl.textContent = "0%";
+    const statusEl = $("status_text");
+    if (statusEl) statusEl.textContent = "正在準備啟動移除工作流程...";
+
+    const modal = $("modal_progress");
+    if (modal) modal.classList.add("active");
+
     const res = await invoke("run_uninstall", { options: opts });
     if (res.success) {
       appendLog("\n==================================================", "success");
@@ -188,21 +237,36 @@ $("btn_start").onclick = async () => {
         appendLog(`📦 刪除前備份壓縮檔存放位置: ${res.backup_path}`, "success");
       }
       appendLog("==================================================", "success");
-      $("status_text").textContent = "移除作業已圓滿完成！";
-      $("btn_close_modal").disabled = false;
-      $("btn_close_modal").textContent = "完成並結束";
+      if (statusEl) statusEl.textContent = "移除作業已圓滿完成！";
+      if (btnClose) {
+        btnClose.disabled = false;
+        btnClose.textContent = "完成並結束";
+      }
     } else {
-      $("status_text").textContent = `⚠️ 移除過程發生錯誤：${res.message}`;
-      $("btn_modal_back").style.display = "inline-block";
-      $("btn_close_modal").disabled = false;
-      $("btn_close_modal").textContent = "關閉離開";
+      if (statusEl) statusEl.textContent = `⚠️ 移除過程發生錯誤：${res.message}`;
+      if (btnBack) btnBack.style.display = "inline-block";
+      if (btnClose) {
+        btnClose.disabled = false;
+        btnClose.textContent = "關閉離開";
+      }
     }
   } catch (err) {
     appendLog(`❌ 執行移除作業發生嚴重異常: ${err}`, "error");
-    $("status_text").textContent = "移除過程發生異常！";
-    $("btn_modal_back").style.display = "inline-block";
-    $("btn_close_modal").disabled = false;
-    $("btn_close_modal").textContent = "關閉離開";
+    const statusEl = $("status_text");
+    if (statusEl) statusEl.textContent = "移除過程發生異常！";
+    const btnBack = $("btn_modal_back");
+    if (btnBack) btnBack.style.display = "inline-block";
+    const btnClose = $("btn_close_modal");
+    if (btnClose) {
+      btnClose.disabled = false;
+      btnClose.textContent = "關閉離開";
+    }
+    const modal = $("modal_progress");
+    if (!modal || !modal.classList.contains("active")) {
+      alert(`移除作業發生異常: ${err}`);
+      $("btn_start").disabled = false;
+      $("btn_exit").disabled = false;
+    }
   } finally {
     isBusy = false;
   }

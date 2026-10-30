@@ -154,5 +154,24 @@ $("restore").onclick = async () => {
   }
 };
 
+let fitTimer = null;
+function autoFitWindow() {
+  if (fitTimer) cancelAnimationFrame(fitTimer);
+  fitTimer = requestAnimationFrame(() => {
+    const cards = document.querySelectorAll('.card');
+    if (!cards || cards.length === 0) return;
+    const lastCard = cards[cards.length - 1];
+    const requiredHeight = Math.ceil(lastCard.offsetTop + lastCard.offsetHeight + 14 + 4);
+    invoke('fit_window_to_content', { clientHeight: requiredHeight }).catch((err) => {
+      console.warn('自適應視窗高度呼叫失敗:', err);
+    });
+  });
+}
+
 // 初始化
-initRootDir();
+initRootDir().then(() => {
+  autoFitWindow();
+});
+window.addEventListener('DOMContentLoaded', () => {
+  autoFitWindow();
+});

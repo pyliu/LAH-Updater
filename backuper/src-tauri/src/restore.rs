@@ -16,7 +16,7 @@ pub struct RestoreReport {
     pub undo_files: u64,
 }
 
-const PS_LIST_EXE: &str = "Get-CimInstance Win32_Process -Filter \"Name='httpd.exe' or Name='node.exe' or Name='php-cgi.exe'\" | ForEach-Object { $_.ExecutablePath }";
+const PS_LIST_EXE: &str = "Get-CimInstance Win32_Process -Filter \"Name='httpd.exe' or Name='node.exe' or Name='php-cgi.exe' or Name='lah-web-service.exe' or Name='lah-service.exe' or Name='pm2-service.exe'\" | ForEach-Object { $_.ExecutablePath }";
 
 /// 回傳執行檔位於 `root` 底下、仍在執行的 httpd/node/php-cgi 路徑。僅檢查屬於該安裝目錄的行程，
 /// 避免被機器上其他無關的 node/php-cgi 誤擋。UNC 根目錄無法檢查本機行程，回傳空陣列。

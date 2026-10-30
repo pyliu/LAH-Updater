@@ -703,7 +703,7 @@
           <strong>全域核心安全護欄：</strong>
           1. <code>LAH-API</code> 是後端唯一的 Oracle 9i 地政業務資料樞紐，前端 <code>LAH-FE</code> 與 <code>lah-messenger</code> 桌面端嚴禁直接穿透存取資料庫。<br>
           2. <code>lah-messenger-server</code> 專職負責高併發 WebSocket 雙向長連線推播與附件處理，採用頻道獨立分庫 <code>db/&lt;channel&gt;.db</code>。<br>
-          3. <code>LAH-Updater</code> 為全系統維運與更新中心，透過跨目錄探索自動辨識並部署 8 大系統安裝包。
+          3. <code>LAH-Updater</code> 為全系統維運與更新中心，透過跨目錄探索自動辨識並部署 11 大系統安裝包。
         </div>
       </div>
     </section>
@@ -787,10 +787,10 @@
       </div>
     </section>
 
-    <!-- 第 3 區：LAH-Updater 五大維運與自動化模組實作詳解 -->
+    <!-- 第 3 區：LAH-Updater 六大維運與自動化模組實作詳解 -->
     <section id="updater-overview" class="section-card">
       <h2 class="section-title">
-        <span>🚀</span> LAH-Updater 五大維運與自動化模組實作詳解
+        <span>🚀</span> LAH-Updater 六大維運與自動化模組實作詳解
       </h2>
       <p class="section-intro">
         點擊下方頁籤切換檢視各獨立工具的架構設計、核心管線、防呆自癒與操作指引：
@@ -803,14 +803,15 @@
         <button class="tab-btn" onclick="switchTab('tab-uninstaller')">3. 解除安裝工具 (uninstaller)</button>
         <button class="tab-btn" onclick="switchTab('tab-backuper')">4. 自動備份工具 (backuper)</button>
         <button class="tab-btn" onclick="switchTab('tab-pack')">5. 原始碼打包 (pack.py)</button>
+        <button class="tab-btn" onclick="switchTab('tab-sms')">6. 簡訊設定工具 (sms-env-editor)</button>
       </div>
 
       <!-- Tab 1: updater -->
       <div id="tab-updater" class="tab-content active">
         <h3 style="color: var(--accent-cyan); margin-bottom: 10px;">智慧控管與監控系統 - 自動更新工具 (updater)</h3>
         <p style="font-size: 0.92rem; color: var(--text-light); margin-bottom: 14px;">
-          執行檔產物：<code>dist/智慧控管與監控系統 - 自動更新工具.exe</code> (約 11.8 MB)<br>
-          核心職責：一鍵覆蓋更新應用、自動配置 Apache 2.4、PHP 7.4、PHP 8.5 FCGI Proxy、套用資安加固、接管可攜 Node 16 與 PM2 WinSW 系統服務。
+          執行檔產物：<code>dist/智慧控管與監控系統 - 自動更新工具.exe</code> (約 11.86 MB)<br>
+          核心職責：一鍵覆蓋更新應用、自動配置 Web 沙盒服務 (LAH_Web_Service)、VC++ 依賴補齊、PHP 7.4 / PHP 8.5 FCGI Proxy、套用資安加固、接管可攜 Node 16 與 PM2 零全域污染沙盒服務 (LAH_PM2_Service)。
         </p>
 
         <div class="diagram-container">
@@ -901,7 +902,7 @@ ode 等雙層</text>
     <text x="672" y="116" text-anchor="middle" fill="#ffffff" font-size="14" font-weight="700">4</text>
     <text x="672" y="145" text-anchor="middle" fill="#f8fafc" font-size="13" font-weight="700">Node 與 PM2 治理</text>
     <line x1="600" y1="158" x2="745" y2="158" stroke="#334155" />
-    <text x="600" y="180" fill="#c084fc" font-size="11">‧ 雙層 PATH (HKLM+HKCU)</text>
+    <text x="600" y="180" fill="#c084fc" font-size="11">‧ 零全域污染沙盒隔離</text>
     <text x="600" y="200" fill="#c084fc" font-size="11">‧ 接管 PM2_HOME 至 .pm2</text>
     <text x="600" y="220" fill="#c084fc" font-size="11">‧ 淨化 @jessety 舊設定</text>
     <text x="600" y="240" fill="#c084fc" font-size="11">‧ 防禦 MODULE_NOT_FOUND</text>
@@ -957,15 +958,15 @@ ode 等雙層</text>
       <div id="tab-portable" class="tab-content">
         <h3 style="color: var(--accent-purple); margin-bottom: 10px;">智慧控管與監控系統 - 可攜 Node 安裝工具 (node-portable)</h3>
         <p style="font-size: 0.92rem; color: var(--text-light); margin-bottom: 14px;">
-          執行檔產物：<code>dist/智慧控管與監控系統 - 可攜 Node 安裝工具.exe</code> (約 11.45 MB)<br>
-          核心職責：專注於極速離線安裝綠色版 Node.js 16.20.2 與 PM2 5.3.1，建立開機自啟 WinSW 系統服務 (<code>LAH_PM2_Service</code>)，並掛載 <code>pm2-logrotate</code>。
+          執行檔產物：<code>dist/智慧控管與監控系統 - 可攜 Node 安裝工具.exe</code> (約 11.50 MB)<br>
+          核心職責：專注於極速離線安裝綠色版 Node.js 16.20.2 與 PM2 5.3.1，採零全域污染沙盒隔離模式，建立開機自啟 WinSW 系統服務 (<code>PM2_Portable_Service</code>)，並掛載 <code>pm2-logrotate</code>。
         </p>
 
         <div class="grid-2">
           <div>
             <h4 style="color: #ffffff; margin-bottom: 8px;">🔧 模組功能清單</h4>
             <ul class="project-detail-list">
-              <li><strong>一鍵環境變數接管：</strong>自動將 <code>&lt;root&gt;/node</code> 寫入系統 (HKLM) 與使用者 (HKCU) <code>PATH</code> 最前方。</li>
+              <li><strong>零全域污染沙盒模式：</strong>絕不更動系統全域環境變數，自動清理登錄檔舊殘留並生成專屬維運終端 <code>lah-cmd.bat</code>。</li>
               <li><strong>PM2_HOME 統一：</strong>將全域 PM2 根目錄導向至 <code>&lt;root&gt;/.pm2</code>，徹底杜絕多版本衝突。</li>
               <li><strong>pm2-logrotate 預先掛載：</strong>在 Node 解壓時即預先就緒日誌輪替模組，支援自動 gzip 壓縮與自訂保留天數。</li>
             </ul>
@@ -974,7 +975,7 @@ ode 等雙層</text>
             <h4 style="color: #ffffff; margin-bottom: 8px;">🔨 便捷編譯與產出</h4>
             <div class="code-block">
               <code># 在 LAH-Updater 目錄下執行
-建立可攜式NODE安裝工具.bat
+建立可攜NODE工具.bat
 # 或執行 Python 建置腳本
 python node-portable/build.py</code>
               <button class="copy-btn" onclick="copyCode(this)">複製</button>
@@ -988,13 +989,13 @@ python node-portable/build.py</code>
       <div id="tab-uninstaller" class="tab-content">
         <h3 style="color: var(--accent-rose); margin-bottom: 10px;">智慧控管與監控系統 - 解除安裝工具 (uninstaller)</h3>
         <p style="font-size: 0.92rem; color: var(--text-light); margin-bottom: 14px;">
-          執行檔產物：<code>dist/智慧控管與監控系統 - 解除安裝工具.exe</code> (約 11.2 MB)<br>
-          核心職責：完全安全地註銷 Apache 與 PM2 系統服務、清理登錄檔環境變數、終止後台進程並安全清理系統安裝目錄。
+          執行檔產物：<code>dist/智慧控管與監控系統 - 自動移除工具.exe</code> (約 10.71 MB)<br>
+          核心職責：完全安全地註銷 LAH_Web_Service 與 LAH_PM2_Service 系統服務、終止後台進程、內置二次確認彈窗防呆並安全清理系統安裝目錄。
         </p>
         <ul class="project-detail-list">
-          <li><strong>服務註銷：</strong>自動執行 <code>winsw uninstall</code> 移除 <code>LAH_PM2_Service</code>，並以 <code>httpd.exe -k uninstall</code> 註銷 Apache 服務。</li>
-          <li><strong>變數清理：</strong>自動自系統與使用者環境變數 <code>PATH</code> 中移除本系統相關路徑，還原系統預設乾淨狀態。</li>
-          <li><strong>行程終止：</strong>精準終止該安裝目錄下運行的 <code>node.exe</code> 與 <code>httpd.exe</code>，不干擾其他獨立程序。</li>
+          <li><strong>服務註銷：</strong>自動執行 <code>winsw uninstall</code> 移除 <code>LAH_Web_Service</code> 與 <code>LAH_PM2_Service</code>，並向下相容清理舊版 <code>Apache2.4</code>。</li>
+          <li><strong>擬真確認：</strong>內置自訂二次確認對話框，清楚列出即將執行的操作項目清單，支援 Esc 與遮罩取消。</li>
+          <li><strong>行程終止：</strong>精準終止該安裝目錄下運行的 <code>node.exe</code>、<code>httpd.exe</code> 與 <code>php-cgi.exe</code>，不干擾其他獨立程序。</li>
         </ul>
       </div>
 
@@ -1002,11 +1003,11 @@ python node-portable/build.py</code>
       <div id="tab-backuper" class="tab-content">
         <h3 style="color: var(--accent-amber); margin-bottom: 10px;">智慧控管與監控系統 - 自動備份工具 (backuper)</h3>
         <p style="font-size: 0.92rem; color: var(--text-light); margin-bottom: 14px;">
-          執行檔產物：<code>dist/智慧控管與監控系統 - 自動備份工具.exe</code> (約 11.3 MB)<br>
+          執行檔產物：<code>dist/智慧控管與監控系統 - 備份與還原工具.exe</code> (約 11.09 MB)<br>
           核心職責：在執行重大升級或移轉前，將自訂組態、SQLite 資料庫、環境變數與重要設定檔打包為時間戳記壓縮包。
         </p>
         <ul class="project-detail-list">
-          <li><strong>備份範圍：</strong><code>Apache24/conf/httpd.conf</code>、<code>php7/php.ini</code>、<code>php85/php.ini</code>、<code>*.db</code> (SQLite 資料庫)、各子專案 <code>.env</code>。</li>
+          <li><strong>備份範圍：</strong><code>Apache24/conf/httpd.conf</code>、<code>php7/php.ini</code>、<code>php85/php.ini</code>、<code>*.db</code> (SQLite 資料庫)、各子專案 <code>.env</code>、Oracle 驅動、自訂資料庫 DLL 與 <code>lah-cmd.bat</code>。</li>
           <li><strong>相容還原：</strong>產出之備份包（<code>backup_YYYYMMDD_HHMMSS.zip</code>）可直接由自動更新工具勾選「從備份還原自訂配置」一鍵回補。</li>
         </ul>
       </div>
@@ -1016,7 +1017,7 @@ python node-portable/build.py</code>
         <h3 style="color: #38bdf8; margin-bottom: 10px;">系統原始碼打包腳本 (pack.py)</h3>
         <p style="font-size: 0.92rem; color: var(--text-light); margin-bottom: 14px;">
           腳本位置：<code>LAH-Updater/pack/pack.py</code> (由 <code>打包智慧控管及監控系統.bat</code> 呼叫)<br>
-          核心職責：採用 Python 3.10+ 標準庫（零第三方相依套件），自動對工作區子專案執行規範打包，並依照安裝包類型<strong>自動三向分流至 dist 目錄</strong>。
+          核心職責：採用 Python 3.10+ 標準庫（零第三方相依套件），自動對工作區子專案執行規範打包（含自動封裝 VC++ 執行期 <code>vcredist-x64.zip</code>），並依照安裝包類型<strong>自動三向分流至 dist 目錄</strong>。
         </p>
         <div class="diagram-container">
           
@@ -1123,6 +1124,37 @@ python node-portable/build.py</code>
 </svg>
 
           <div class="diagram-caption">圖 3：pack.py 三向自動分流與更新器端對齊探測流向圖</div>
+        </div>
+      </div>
+
+      <!-- Tab 6: sms -->
+      <div id="tab-sms" class="tab-content">
+        <h3 style="color: #ec4899; margin-bottom: 10px;">地籍異動簡訊參數設定工具 (sms-env-editor)</h3>
+        <p style="font-size: 0.92rem; color: var(--text-light); margin-bottom: 14px;">
+          執行檔產物：<code>dist/地籍異動簡訊參數設定工具.exe</code> (約 10.5 MB)<br>
+          核心職責：專為內政部地籍異動簡訊與郵件發送服務（SMSWEB_MOI）提供可視化設定介面，支援 BASE64 自動加解密、Big-5/CP950 編碼無損相容、變更差異預覽與自動建立時間戳備份。
+        </p>
+        <div class="grid-2">
+          <div>
+            <h4 style="color: #ffffff; margin-bottom: 8px;">🌟 核心功能與防呆設計</h4>
+            <ul class="project-detail-list">
+              <li><strong>預設連線路徑：</strong>預設自動載入 <code>\220.1.34.221\C$\SMSWEB_MOI\env.properties</code>，亦支援自由切換本機與網路磁碟。</li>
+              <li><strong>BASE64 自動編解碼：</strong>簡訊帳密、郵件帳密、Oracle 帳密與連線 URL 於讀取時自動解密呈現，儲存時自動加密寫回。</li>
+              <li><strong>Big-5 繁體中文支援：</strong>完美相容 Java 舊版程式對 Big-5 / CP950 編碼之嚴格要求，不破壞既有參數結構。</li>
+              <li><strong>差異預覽與備份：</strong>儲存前彈出變更差異（Diff）確認彈窗，寫入前自動於同目錄建立時間戳記備份。</li>
+            </ul>
+          </div>
+          <div>
+            <h4 style="color: #ffffff; margin-bottom: 8px;">🔨 便捷編譯與產出</h4>
+            <div class="code-block">
+              <code># 在 LAH-Updater 目錄下執行
+建立簡訊設定工具.bat
+# 或執行 Python 建置腳本
+python tools/sms-env-editor/build.py</code>
+              <button class="copy-btn" onclick="copyCode(this)">複製</button>
+            </div>
+            <p style="font-size: 0.8rem; color: var(--text-muted);">編譯後產出自動複製至 <code>dist/地籍異動簡訊參數設定工具.exe</code>。</p>
+          </div>
         </div>
       </div>
     </section>
@@ -1292,8 +1324,8 @@ ode</code></td>
   <text x="355" y="217" fill="#94a3b8" font-size="10">強制設為 &lt;root&gt;\.pm2，隔離 C:\ProgramData\pm2</text>
 
   <rect x="345" y="235" width="270" height="46" rx="6" fill="#0f172a" stroke="#0284c7" />
-  <text x="355" y="255" fill="#e0f2fe" font-size="11" font-weight="700">3. 雙層環境變數治理 (HKLM+HKCU)</text>
-  <text x="355" y="272" fill="#94a3b8" font-size="10">自動剔除舊版 nodejs，將本機 node 置於首位</text>
+  <text x="355" y="255" fill="#e0f2fe" font-size="11" font-weight="700">3. 零全域污染與專屬終端 (lah-cmd.bat)</text>
+  <text x="355" y="272" fill="#94a3b8" font-size="10">清理舊登錄檔殘留，絕不污染系統全域環境變數</text>
 
   <rect x="345" y="290" width="270" height="46" rx="6" fill="#0f172a" stroke="#0284c7" />
   <text x="355" y="310" fill="#e0f2fe" font-size="11" font-weight="700">4. 模組淨化與 try-catch 異常防禦</text>
@@ -1436,9 +1468,11 @@ ode</code> 置於首位，確保命令提示字元直接呼叫可攜版。
           <ul class="project-detail-list">
             <li><code>打包智慧控管及監控系統.bat</code>：全系統原始碼與依賴打包，自動輸出至 <code>dist/patch</code>, <code>dist/node_modules</code>, <code>dist/base</code>。</li>
             <li><code>建立自動更新工具.bat</code>：編譯 Tauri 2 自動更新工具二進位檔。</li>
-            <li><code>建立可攜式NODE安裝工具.bat</code>：編譯可攜式 Node 安裝工具。</li>
+            <li><code>建立可攜NODE工具.bat</code>：編譯可攜式 Node 安裝工具。</li>
             <li><code>建立解除安裝工具.bat</code>：編譯系統安全解除安裝工具。</li>
             <li><code>建立自動備份工具.bat</code>：編譯系統重要組態自動備份工具。</li>
+            <li><code>建立簡訊設定工具.bat</code>：編譯地籍異動簡訊參數設定工具。</li>
+            <li><code>校準現有服務資安脫敏名稱.bat</code>：免重裝服務一鍵線上熱校準 services.msc 顯示名稱與描述。</li>
           </ul>
         </div>
       </div>

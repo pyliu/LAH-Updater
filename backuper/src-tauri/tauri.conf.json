@@ -13,16 +13,23 @@
         "label": "main",
         "title": "智慧控管與監控系統 - 備份與還原工具",
         "width": 780,
-        "height": 440,
+        "height": 500,
         "minWidth": 660,
         "minHeight": 400,
         "center": true
       }
     ],
-    "security": { "csp": null }
+    "security": {
+      "csp": null
+    }
   },
   "bundle": {
     "active": false,
-    "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.ico"]
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.ico"
+    ]
   }
 }

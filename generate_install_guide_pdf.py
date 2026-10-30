@@ -796,7 +796,7 @@ HTML_CONTENT = f"""<!DOCTYPE html>
   <div class="alert alert-danger avoid-break">
     <div class="alert-icon">🚨</div>
     <div>
-      <strong>資安防呆叮嚀：</strong>自動移除工具將安全停止 Apache/PM2 服務並釋放佔用之 Port 80, 8080, 8081, 8082。執行前請再三確認備份檔已妥善存放於非 <code>C:\AppServ</code> 之目錄！
+      <strong>資安防呆叮嚀：</strong>自動移除工具將安全停止 Web 入口服務與背景服務總線 (LAH_Web_Service / LAH_PM2_Service) 並釋放佔用之連接埠。執行前請再三確認備份檔已妥善存放於非 <code>C:\AppServ</code> 之目錄！
     </div>
   </div>
 
@@ -878,7 +878,7 @@ HTML_CONTENT = f"""<!DOCTYPE html>
       <tr>
         <td><strong>Port 80</strong></td>
         <td>Apache 網頁伺服器</td>
-        <td>Apache httpd 服務</td>
+        <td>WinSW 沙盒守護 (LAH_Web_Service)</td>
         <td><span class="badge badge-ok">[OK] LISTENING</span> 承載舊版網頁與 PHP 7.4 業務 API 轉發。</td>
       </tr>
       <tr>
