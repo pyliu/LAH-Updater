@@ -223,7 +223,16 @@
   }
   .pkg-item.missing {
     opacity: 0.55;
-    background: #fafafa;
+    background: #f8fafc;
+    border-color: #f1f5f9;
+    cursor: not-allowed;
+    user-select: none;
+  }
+  .pkg-item.missing:hover {
+    background: #f8fafc;
+  }
+  .pkg-item.missing * {
+    cursor: not-allowed !important;
   }
   .pkg-header {
     display: flex;
