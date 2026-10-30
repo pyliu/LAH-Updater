@@ -1,7 +1,7 @@
 <service>
   <id>LAH_Web_Service</id>
-  <name>LAH 智慧管控 - Web 網頁伺服器 (Apache 2.4)</name>
-  <description>開機自動以 C:\AppServ\Apache24\bin\httpd.exe 喚醒並守護 LAH 網頁與 API 閘道服務，具備開機免登入自啟與零全域環境變數污染防護。</description>
+  <name>LAH 智慧管控：應用系統入口與 API 閘道服務</name>
+  <description>提供地政智慧管控系統前端介面存取、業務查詢 API 轉發與安全反向代理，負責核心通訊連線與身分驗證傳輸。</description>
   <executable>C:\AppServ\Apache24\bin\httpd.exe</executable>
   <arguments>-d C:\AppServ\Apache24</arguments>
   <workingdirectory>C:\AppServ\Apache24</workingdirectory>

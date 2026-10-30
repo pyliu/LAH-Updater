@@ -1,7 +1,7 @@
 <service>
   <id>LAH_PM2_Service</id>
-  <name>LAH 智慧管控 - PM2 背景服務與守護進程</name>
-  <description>開機自動以 C:\AppServ\node\node.exe 喚醒並守護 LAH 5 大核心服務（LAH-FE、LAH-SCHEDULER、LAH-WSS、lah-api-v85、pm2-logrotate），具備開機免登入自啟與健康巡檢能力。</description>
+  <name>LAH 智慧管控：背景服務總線與健康管理系統</name>
+  <description>協調地政管控平台背景多工任務執行、即時事件分發與系統運作指標監測，確保關鍵作業永續運作。</description>
   <executable>C:\AppServ\node\node.exe</executable>
   <arguments>C:\AppServ\node\service\service_runner.js</arguments>
   <workingdirectory>C:\AppServ</workingdirectory>
