@@ -1158,7 +1158,7 @@ const loadHostMetrics = async () => {
       ]);
     }
 
-    // 4. LAH 服務群組記憶體占用卡片
+    // 4. LAH 服務群組記憶體占用卡片 (單排直立微型卡不換行)
     if (m.lah_memory) {
       const lahMb = (m.lah_memory.total_bytes / 1024 / 1024).toFixed(1);
       el.valLahMem.textContent = lahMb;
@@ -1172,17 +1172,32 @@ const loadHostMetrics = async () => {
           const badgeClass = item.category === 'apache' ? 'apache' : 'pm2';
           const badgeText = item.category === 'apache' ? 'Apache' : 'PM2';
 
+          // 解析名稱與 PID，呈現簡潔直立微型卡
+          let displayName = item.name;
+          let pidStr = item.pid > 0 ? `PID: ${item.pid}` : '-';
+          const pidMatch = item.name.match(/^(.*?)\s*\(PID:\s*(\d+)\)$/);
+          if (pidMatch) {
+            displayName = pidMatch[1];
+            pidStr = `PID: ${pidMatch[2]}`;
+          } else if (item.category === 'apache') {
+            displayName = 'Apache 2.4';
+            pidStr = item.pid > 0 ? `PID: ${item.pid}` : '主進程';
+          }
+
           memHtml += `
-            <div class="mem-item-row">
-              <div class="mem-item-info">
+            <div class="mem-micro-card" title="${item.name} - ${item.memory_formatted}">
+              <div class="mem-micro-header">
                 <span class="mem-item-badge ${badgeClass}">${badgeText}</span>
-                <span class="mem-item-name" title="${item.name}">${item.name}</span>
+                <span class="mem-micro-name">${displayName}</span>
               </div>
-              <div class="mem-item-bar-box">
-                <div class="mem-mini-bar-bg">
+              <div class="mem-micro-val">
+                <span class="mem-micro-num">${item.memory_formatted}</span>
+              </div>
+              <div class="mem-micro-footer">
+                <span class="mem-micro-pid">${pidStr}</span>
+                <div class="mem-mini-bar-bg" title="佔群組最高 ${barWidth}%">
                   <div class="mem-mini-bar-fill" style="width: ${barWidth}%;"></div>
                 </div>
-                <span class="mem-item-size">${item.memory_formatted}</span>
               </div>
             </div>
           `;

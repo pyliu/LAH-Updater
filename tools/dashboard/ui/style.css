@@ -895,12 +895,22 @@ body {
   gap: 14px;
 }
 
+.metrics-row-4 {
+  grid-template-columns: repeat(4, 1fr);
+}
+
 .metrics-row-3 {
   grid-template-columns: repeat(3, 1fr);
 }
 
 .metrics-row-2 {
   grid-template-columns: 1.6fr 1fr;
+}
+
+@media (max-width: 1200px) {
+  .metrics-row-4 {
+    grid-template-columns: repeat(2, 1fr);
+  }
 }
 
 .metric-card {
@@ -911,6 +921,32 @@ body {
 
 .perf-card {
   min-height: 175px;
+}
+
+.disk-perf-card {
+  min-height: 175px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.disk-perf-card .disk-progress-container {
+  width: 100%;
+  margin-top: 6px;
+}
+
+.disk-perf-card .progress-bar-bg {
+  height: 10px;
+  background-color: var(--bg-viewport);
+  border: 1px solid var(--border-color);
+  border-radius: 5px;
+  overflow: hidden;
+}
+
+.disk-perf-card .progress-bar-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.3s ease;
 }
 
 .chart-container {
@@ -965,6 +1001,154 @@ body {
 
 .service-mem-card {
   min-height: 175px;
+}
+
+.service-mem-card-full {
+  width: 100%;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+}
+
+.service-mem-card-full .metric-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.service-mem-card-full .metric-header-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.service-mem-card-full .metric-header-right {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.service-mem-card-full .metric-header-right .metric-value {
+  font-size: calc(18px * var(--font-scale));
+  font-weight: 700;
+  font-family: var(--font-mono);
+  color: var(--primary-hover);
+}
+
+.service-mem-card-full .metric-header-right .metric-unit {
+  font-size: calc(12px * var(--font-scale));
+  color: var(--text-dim);
+  font-weight: 600;
+}
+
+.service-mem-carousel {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  gap: 12px;
+  overflow-x: auto;
+  padding-bottom: 6px;
+  align-items: stretch;
+}
+
+.service-mem-carousel::-webkit-scrollbar {
+  height: 6px;
+}
+.service-mem-carousel::-webkit-scrollbar-track {
+  background: var(--bg-viewport);
+  border-radius: 3px;
+}
+.service-mem-carousel::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 3px;
+}
+.service-mem-carousel::-webkit-scrollbar-thumb:hover {
+  background: var(--text-dim);
+}
+
+.mem-micro-card {
+  flex: 0 0 170px;
+  min-width: 155px;
+  background: var(--bg-viewport);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 6px;
+  transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.mem-micro-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--primary);
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.15);
+}
+
+.mem-micro-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.mem-micro-name {
+  font-size: calc(11px * var(--font-scale));
+  font-weight: 600;
+  color: var(--text-main);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: right;
+  flex: 1;
+}
+
+.mem-micro-val {
+  margin: 4px 0;
+  text-align: center;
+}
+
+.mem-micro-num {
+  font-family: var(--font-mono);
+  font-size: calc(16px * var(--font-scale));
+  font-weight: 700;
+  color: #38bdf8;
+  letter-spacing: -0.5px;
+}
+
+.mem-micro-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding-top: 4px;
+  border-top: 1px dashed rgba(128, 128, 128, 0.2);
+}
+
+.mem-micro-pid {
+  font-family: var(--font-mono);
+  font-size: calc(10px * var(--font-scale));
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+.mem-micro-footer .mem-mini-bar-bg {
+  flex: 1;
+  max-width: 60px;
+  height: 5px;
+  background-color: rgba(128, 128, 128, 0.2);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.mem-micro-footer .mem-mini-bar-fill {
+  height: 100%;
+  background-color: var(--primary);
+  border-radius: 2px;
 }
 
 .metric-badge-pct {

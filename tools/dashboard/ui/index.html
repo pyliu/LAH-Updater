@@ -229,8 +229,8 @@
 
       <!-- 分頁三：系統指標與快捷維運 -->
       <section id="tab-metrics" class="tab-pane">
-        <!-- 主機資源指標卡片列 - 第一排：核心效能趨勢 (CPU, 記憶體, 網路即時流量) -->
-        <div class="metrics-grid metrics-row-3">
+        <!-- 主機資源指標卡片列 - 第一排：核心效能與儲存 (CPU, 記憶體, 網路即時流量, 安裝磁碟剩餘空間) -->
+        <div class="metrics-grid metrics-row-4">
           <div class="card metric-card perf-card">
             <div class="metric-header">
               <span class="metric-title">CPU 總使用率</span>
@@ -281,26 +281,8 @@
               <canvas id="chartNet" class="perf-canvas" width="280" height="65"></canvas>
             </div>
           </div>
-        </div>
 
-        <!-- 主機資源指標卡片列 - 第二排：業務服務與儲存 (LAH 服務記憶體占用, 磁碟剩餘空間) -->
-        <div class="metrics-grid metrics-row-2 mt-3">
-          <div class="card metric-card service-mem-card">
-            <div class="metric-header">
-              <span class="metric-title">LAH 服務群組記憶體占用</span>
-              <span class="metric-icon">⚡</span>
-            </div>
-            <div class="metric-value-box">
-              <span class="metric-value" id="valLahMem">-</span>
-              <span class="metric-unit">MB</span>
-              <span class="metric-badge-pct" id="badgeLahMemPct">佔系統 -%</span>
-            </div>
-            <div class="service-mem-container" id="lahMemList">
-              <div class="loading-mem-row">正在統計 Apache 與 PM2 各服務進程記憶體...</div>
-            </div>
-          </div>
-
-          <div class="card metric-card">
+          <div class="card metric-card perf-card disk-perf-card">
             <div class="metric-header">
               <span class="metric-title">安裝磁碟剩餘空間</span>
               <span class="metric-icon">💾</span>
@@ -309,10 +291,30 @@
               <span class="metric-value" id="valDiskFree">-</span>
               <span class="metric-unit">GB</span>
             </div>
-            <div class="progress-bar-bg">
-              <div class="progress-bar-fill" id="barDisk" style="width: 0%;"></div>
-            </div>
             <div class="metric-subtext" id="textDiskDetails">剩餘 - GB / 總計 - GB</div>
+            <div class="disk-progress-container">
+              <div class="progress-bar-bg">
+                <div class="progress-bar-fill" id="barDisk" style="width: 0%;"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 主機資源指標卡片列 - 第二排：LAH 服務群組系統記憶體占用 (整排卡片橫向單排不換行) -->
+        <div class="card metric-card service-mem-card-full mt-3">
+          <div class="metric-header">
+            <div class="metric-header-left">
+              <span class="metric-icon">⚡</span>
+              <span class="metric-title">LAH 服務群組記憶體占用</span>
+            </div>
+            <div class="metric-header-right">
+              <span class="metric-value" id="valLahMem">-</span>
+              <span class="metric-unit">MB</span>
+              <span class="metric-badge-pct" id="badgeLahMemPct">佔系統 -%</span>
+            </div>
+          </div>
+          <div class="service-mem-carousel" id="lahMemList">
+            <div class="loading-mem-row">正在統計 Apache 與 PM2 各服務進程記憶體...</div>
           </div>
         </div>
 
