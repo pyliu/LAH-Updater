@@ -27,23 +27,6 @@ $RECYCLE.BIN/
 # Local test update packages & release notes (prevent accidental commits)
 *.zip
 *更新說明*.txt
-!updater/20261025_系統更新說明.txt
-
-# backuper (Tauri) build artifacts
-backuper/src-tauri/target/
-backuper/src-tauri/gen/
-
-# uninstaller (Tauri) build artifacts
-uninstaller/src-tauri/target/
-uninstaller/src-tauri/gen/
-
-# updater (Tauri) build artifacts
-updater/src-tauri/target/
-updater/src-tauri/gen/
-
-# node-portable (Tauri) build artifacts
-node-portable/src-tauri/target/
-node-portable/src-tauri/gen/
 
 # tools (Tauri) build artifacts
 tools/**/src-tauri/target/
