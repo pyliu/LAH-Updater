@@ -457,7 +457,7 @@ pub fn apply_apache_security_hardening(conf_path: &Path, root_dir: &Path, log_fn
     let root_fwd = root_dir.to_string_lossy().replace('\\', "/");
 
     // 1. ServerTokens Prod
-    let re_tokens = Regex::new(r#"(?m)^\s*#?\s*ServerTokens\s+.*$"#).unwrap();
+    let re_tokens = Regex::new(r#"(?m)^[ \t]*#?[ \t]*ServerTokens[ \t]+.*$"#).unwrap();
     if re_tokens.is_match(&content) {
         content = re_tokens.replace(&content, "ServerTokens Prod").to_string();
     } else {
@@ -465,7 +465,7 @@ pub fn apply_apache_security_hardening(conf_path: &Path, root_dir: &Path, log_fn
     }
 
     // 2. ServerSignature Off
-    let re_sig = Regex::new(r#"(?m)^\s*#?\s*ServerSignature\s+.*$"#).unwrap();
+    let re_sig = Regex::new(r#"(?m)^[ \t]*#?[ \t]*ServerSignature[ \t]+.*$"#).unwrap();
     if re_sig.is_match(&content) {
         content = re_sig.replace(&content, "ServerSignature Off").to_string();
     } else {
@@ -497,7 +497,8 @@ pub fn apply_apache_security_hardening(conf_path: &Path, root_dir: &Path, log_fn
             <FilesMatch \"\\.(php|php5|php7|php8|phtml|phar|cgi|pl|asp|aspx|jsp)$\">\n\
                 Require all denied\n\
             </FilesMatch>\n\
-        </Directory>\n"
+        </Directory>\n\
+        {PHP2SHELL_END}\n"
     );
 
     // 清理舊版本可能遺留之重複百分比符號語法錯誤
@@ -506,12 +507,35 @@ pub fn apply_apache_security_hardening(conf_path: &Path, root_dir: &Path, log_fn
         .replace("%{%THE_REQUEST}", "%{THE_REQUEST}")
         .replace("%{%REQUEST_FILENAME}", "%{REQUEST_FILENAME}");
 
-    let existing_sec_re = Regex::new(r#"(?s)# =+\s*# PHP2Shell \(CVE-2024-4577.*?</Directory>\s*"#).unwrap();
+    let existing_sec_re = Regex::new(&format!(r"(?s)# =+\s*# PHP2Shell \(CVE-2024-4577.*?{}", regex::escape(PHP2SHELL_END))).unwrap();
+    let legacy_sec_re = Regex::new(r#"(?s)# =+\s*# PHP2Shell \(CVE-2024-4577.*?</Directory>\s*"#).unwrap();
     if existing_sec_re.is_match(&content) {
-        content = existing_sec_re.replace(&content, NoExpand(&php2shell_block)).to_string();
-    } else if !content.contains("PHP2Shell (CVE-2024-4577") {
+        content = existing_sec_re.replace(&content, NoExpand(php2shell_block.trim())).to_string();
+    } else if legacy_sec_re.is_match(&content) {
+        // 舊版區塊無結尾標記，每次更新只取代第一個 Directory，會殘留並累積重複的 Directory 區塊
+        const PLACEHOLDER: &str = "\u{0}LAH_PHP2SHELL_BLOCK\u{0}";
+        content = legacy_sec_re.replace(&content, NoExpand(PLACEHOLDER)).to_string();
+        let re_stray = Regex::new(r#"(?s)<Directory\s+"[^"]*/www/(?:assets|export|uploads)">.*?</Directory>\s*"#).unwrap();
+        content = re_stray.replace_all(&content, "").to_string();
+        content = content.replace(PLACEHOLDER, &format!("{}\n", php2shell_block.trim()));
+    } else {
         content.push_str(&php2shell_block);
         log_fn("  ✓ Apache httpd.conf 已套用資安防護與 CVE-2024-4577 PHP2Shell 緩解設定", "success");
+    }
+
+    // 4. 敏感檔案拒絕 (.env、SQLite 資料庫、備份與日誌、dot 目錄)
+    let sensitive_block = build_sensitive_deny_block(&root_fwd);
+    let existing_sensitive_re = Regex::new(&format!(
+        r"(?s){}.*?{}",
+        regex::escape(SENSITIVE_DENY_BEGIN),
+        regex::escape(SENSITIVE_DENY_END)
+    ))
+    .unwrap();
+    if existing_sensitive_re.is_match(&content) {
+        content = existing_sensitive_re.replace(&content, NoExpand(&sensitive_block)).to_string();
+    } else {
+        content.push_str(&format!("\n{}\n", sensitive_block));
+        log_fn("  ✓ Apache httpd.conf 已套用敏感檔案拒絕規則 (.env / *.db / dot 目錄)", "success");
     }
 
     let changed = content != orig;
@@ -519,6 +543,33 @@ pub fn apply_apache_security_hardening(conf_path: &Path, root_dir: &Path, log_fn
         let _ = fs::write(conf_path, content);
     }
     (true, changed)
+}
+
+const PHP2SHELL_END: &str = "# === End PHP2Shell Mitigation ===";
+const SENSITIVE_DENY_BEGIN: &str = "# === Sensitive Files Deny (.env / SQLite / dot-dir) ===";
+const SENSITIVE_DENY_END: &str = "# === End Sensitive Files Deny ===";
+
+/// 全域拒絕敏感檔案，不論 DocumentRoot 或 Alias 皆生效。
+/// `.env.example` 為前端「下載範本」功能所需，刻意放行。
+/// 檔名規則皆不分大小寫，且涵蓋 Windows 結尾 `.`/空白與 `::$DATA` 變體。
+fn build_sensitive_deny_block(root_fwd: &str) -> String {
+    let root_re = regex::escape(root_fwd);
+    format!(
+        "{SENSITIVE_DENY_BEGIN}\n\
+<FilesMatch \"(?i)^\\.(?!env\\.example$)\">\n\
+    Require all denied\n\
+</FilesMatch>\n\
+<FilesMatch \"(?i)\\.(db|sqlite3?|bak|sql|log)([. ]+|:.*)?$|\\.(db|sqlite3?)-(wal|shm|journal)$\">\n\
+    Require all denied\n\
+</FilesMatch>\n\
+<FilesMatch \"(?i)^composer\\.(json|lock)$\">\n\
+    Require all denied\n\
+</FilesMatch>\n\
+<DirectoryMatch \"(?i)^{root_re}/(?:.*/)?\\.(?!well-known/)[^/]+/\">\n\
+    Require all denied\n\
+</DirectoryMatch>\n\
+{SENSITIVE_DENY_END}"
+    )
 }
 
 pub fn apply_php_security_hardening(ini_path: &Path, log_fn: &dyn Fn(&str, &str)) -> bool {
@@ -625,6 +676,69 @@ mod tests {
         assert!(final_fcgi_conf2.contains(r#"SCRIPT_FILENAME "$1""#));
         assert!(!final_fcgi_conf2.contains(r#"SCRIPT_FILENAME """#));
         assert!(!final_fcgi_conf2.contains(r#"SCRIPT_FILENAME "$$1""#));
+
+        let _ = fs::remove_dir_all(&temp_root);
+    }
+
+    #[test]
+    fn test_security_hardening_denies_sensitive_files_idempotently() {
+        let temp_root = std::env::temp_dir().join(format!("lah_test_sensitive_{}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()));
+        fs::create_dir_all(&temp_root).unwrap();
+        let conf_path = temp_root.join("httpd.conf");
+        fs::write(&conf_path, "ServerRoot \"C:/x\"\n").unwrap();
+
+        let (ok, changed) = apply_apache_security_hardening(&conf_path, &temp_root, &|_, _| {});
+        assert!(ok);
+        assert!(changed);
+        let first = fs::read_to_string(&conf_path).unwrap();
+        assert_eq!(first.matches(SENSITIVE_DENY_BEGIN).count(), 1);
+        assert_eq!(first.matches(SENSITIVE_DENY_END).count(), 1);
+        assert!(first.contains(r#"<FilesMatch "(?i)^\.(?!env\.example$)">"#));
+        assert!(first.contains(r#"<FilesMatch "(?i)\.(db|sqlite3?|bak|sql|log)([. ]+|:.*)?$|\.(db|sqlite3?)-(wal|shm|journal)$">"#));
+        assert!(first.contains(r#"<FilesMatch "(?i)^composer\.(json|lock)$">"#));
+        assert!(first.contains(r"\.(?!well-known/)[^/]+/"));
+        assert!(first.contains("<DirectoryMatch"));
+        let root_re = regex::escape(&temp_root.to_string_lossy().replace('\\', "/"));
+        assert!(first.contains(&format!("^{root_re}/")));
+
+        let (_, changed2) = apply_apache_security_hardening(&conf_path, &temp_root, &|_, _| {});
+        assert!(!changed2);
+        assert_eq!(fs::read_to_string(&conf_path).unwrap(), first);
+
+        let stale = first.replace("Require all denied\n</DirectoryMatch>", "Require all granted\n</DirectoryMatch>");
+        fs::write(&conf_path, stale).unwrap();
+        let (_, changed3) = apply_apache_security_hardening(&conf_path, &temp_root, &|_, _| {});
+        assert!(changed3);
+        let healed = fs::read_to_string(&conf_path).unwrap();
+        assert_eq!(healed.matches(SENSITIVE_DENY_BEGIN).count(), 1);
+        assert_eq!(healed, first);
+
+        let _ = fs::remove_dir_all(&temp_root);
+    }
+
+    #[test]
+    fn test_security_hardening_collapses_legacy_duplicate_blocks() {
+        let temp_root = std::env::temp_dir().join(format!("lah_test_legacy_{}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()));
+        fs::create_dir_all(&temp_root).unwrap();
+        let conf_path = temp_root.join("httpd.conf");
+        let root_fwd = temp_root.to_string_lossy().replace('\\', "/");
+        let dir = |name: &str| format!("<Directory \"{root_fwd}/www/{name}\">\n<FilesMatch \"\\.(php)$\">\nRequire all denied\n</FilesMatch>\n</Directory>\n");
+        let legacy = format!(
+            "ServerRoot \"C:/x\"\n# =====\n# PHP2Shell (CVE-2024-4577 PHP-CGI Argument Injection & WebShell) Mitigation\n# =====\n{}{}{}{}{}",
+            dir("assets"), dir("export"), dir("uploads"), dir("export"), dir("uploads")
+        );
+        fs::write(&conf_path, legacy).unwrap();
+
+        apply_apache_security_hardening(&conf_path, &temp_root, &|_, _| {});
+        let once = fs::read_to_string(&conf_path).unwrap();
+        for name in ["assets", "export", "uploads"] {
+            assert_eq!(once.matches(&format!("{root_fwd}/www/{name}\">")).count(), 1, "{name}");
+        }
+        assert_eq!(once.matches(PHP2SHELL_END).count(), 1);
+
+        let (_, changed) = apply_apache_security_hardening(&conf_path, &temp_root, &|_, _| {});
+        assert!(!changed);
+        assert_eq!(fs::read_to_string(&conf_path).unwrap(), once);
 
         let _ = fs::remove_dir_all(&temp_root);
     }
