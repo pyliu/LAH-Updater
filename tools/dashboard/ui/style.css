@@ -4,7 +4,10 @@
    ========================================================================== */
 
 :root {
-  --font-scale: 1.15; /* 預設 "中" (+15%) */
+  --font-base: 1.2; /* 整體基礎字級放大 20% */
+  --font-user-scale: 1.15; /* 預設 "中" (+15%) */
+  --font-scale: calc(var(--font-base) * var(--font-user-scale));
+  color-scheme: dark;
 
   /* 深色主題 (預設) */
   --bg-main: #0b1320;
@@ -38,6 +41,7 @@
 }
 
 [data-theme="light"] {
+  color-scheme: light;
   /* 明亮主題 */
   --bg-main: #f1f5f9;
   --bg-header: linear-gradient(180deg, #ffffff 0%, #f1f5f9 100%);
@@ -161,7 +165,7 @@ body {
   border: 1px solid rgba(14, 165, 233, 0.3);
   padding: 1px 8px;
   border-radius: 12px;
-  font-size: 11px;
+  font-size: calc(11px * var(--font-scale));
   color: var(--primary-hover);
   margin-top: 2px;
   font-family: var(--font-mono);
@@ -463,7 +467,7 @@ body {
   gap: 5px;
   padding: 2px 8px;
   border-radius: 12px;
-  font-size: 11px;
+  font-size: calc(11px * var(--font-scale));
   font-weight: 600;
 }
 
@@ -484,6 +488,28 @@ body {
   background-color: rgba(148, 163, 184, 0.15);
   color: #94a3b8;
   border: 1px solid rgba(148, 163, 184, 0.3);
+}
+
+.status-pill.restarting {
+  background-color: rgba(245, 158, 11, 0.2);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.5);
+  animation: pulse-glow 1s infinite alternate;
+}
+
+@keyframes pulse-glow {
+  0% { opacity: 0.65; }
+  100% { opacity: 1; }
+}
+
+.spin-icon {
+  display: inline-block;
+  font-size: 11px;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  100% { transform: rotate(360deg); }
 }
 
 .status-dot {
@@ -548,6 +574,59 @@ body {
 .form-select option:disabled {
   color: var(--text-dim);
   background-color: var(--bg-subcard);
+}
+
+/* 明亮主題原生下拉彈窗配色強制鎖定 - 防止 Windows 暗色外觀導致黑字黑底 */
+[data-theme="light"] select,
+[data-theme="light"] .form-select,
+[data-theme="light"] .form-input,
+[data-theme="light"] .pill-select {
+  color-scheme: light !important;
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  border-color: #cbd5e1 !important;
+}
+
+[data-theme="light"] select option,
+[data-theme="light"] .form-select option,
+[data-theme="light"] .pill-select option {
+  color-scheme: light !important;
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+}
+
+[data-theme="light"] select option:disabled,
+[data-theme="light"] .form-select option:disabled {
+  color: #94a3b8 !important;
+  background-color: #f1f5f9 !important;
+}
+
+/* 深色主題原生下拉彈窗配色強制鎖定 */
+:root select,
+[data-theme="dark"] select,
+[data-theme="dark"] .form-select,
+[data-theme="dark"] .form-input,
+[data-theme="dark"] .pill-select {
+  color-scheme: dark !important;
+  background-color: #0d1626 !important;
+  color: #f8fafc !important;
+  border-color: #22334d !important;
+}
+
+:root select option,
+[data-theme="dark"] select option,
+[data-theme="dark"] .form-select option,
+[data-theme="dark"] .pill-select option {
+  color-scheme: dark !important;
+  background-color: #151f32 !important;
+  color: #f8fafc !important;
+}
+
+:root select option:disabled,
+[data-theme="dark"] select option:disabled,
+[data-theme="dark"] .form-select option:disabled {
+  color: #64748b !important;
+  background-color: #0e1728 !important;
 }
 
 .form-input::placeholder {
@@ -627,16 +706,360 @@ body {
 }
 
 /* ==========================================================================
+   5.1 核心組態編輯器樣式
+   ========================================================================== */
+.config-control-bar {
+  flex-shrink: 0;
+  margin-bottom: 0;
+  padding: 10px 14px;
+}
+
+.config-toolbar-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.config-action-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.backup-select-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background-color: var(--bg-subcard);
+  border: 1px solid var(--border-color);
+  padding: 2px 6px;
+  border-radius: 6px;
+}
+
+.backup-select-group label {
+  font-size: calc(11px * var(--font-scale));
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.pill-select-sm {
+  font-size: calc(11px * var(--font-scale)) !important;
+  padding: 2px 4px !important;
+  max-width: 170px;
+}
+
+.config-info-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border-color);
+  font-size: calc(11px * var(--font-scale));
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+}
+
+.config-meta-right {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.dirty-badge {
+  background-color: rgba(245, 158, 11, 0.2);
+  color: #f59e0b;
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-weight: 700;
+  font-size: calc(10.5px * var(--font-scale));
+}
+
+.config-editor-viewport {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: row;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+}
+
+.config-editor-pane {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+.config-editor-pane.example-pane {
+  border-left: 2px solid var(--primary);
+  background-color: var(--bg-subcard);
+}
+
+.example-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 12px;
+  background-color: var(--bg-card);
+  border-bottom: 1px solid var(--border-color);
+  font-size: calc(11px * var(--font-scale));
+  font-family: var(--font-mono);
+}
+
+.example-title {
+  color: var(--text-main);
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.badge-readonly {
+  background: rgba(148, 163, 184, 0.2);
+  color: var(--text-dim);
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-size: calc(9.5px * var(--font-scale));
+  font-weight: 600;
+}
+
+.example-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.btn-xs {
+  padding: 2px 7px;
+  font-size: calc(10.5px * var(--font-scale));
+  border-radius: 4px;
+  height: 24px;
+}
+
+.config-textarea {
+  flex: 1;
+  width: 100%;
+  height: 100%;
+  border: none;
+  outline: none;
+  padding: 12px 14px;
+  background-color: var(--bg-viewport);
+  color: #e2e8f0;
+  font-family: var(--font-mono);
+  font-size: calc(12px * var(--font-scale));
+  line-height: 1.55;
+  resize: none;
+  tab-size: 4;
+}
+
+.example-textarea {
+  background-color: rgba(0, 0, 0, 0.18);
+  opacity: 0.92;
+  cursor: default;
+}
+
+[data-theme="light"] .example-textarea {
+  background-color: #f8fafc;
+  color: #334155;
+}
+
+.config-textarea.nowrap,
+.config-textarea.no-wrap {
+  white-space: pre;
+  overflow-x: auto;
+}
+
+[data-theme="light"] .config-textarea {
+  background-color: #ffffff;
+  color: #0f172a;
+}
+
+/* ==========================================================================
    6. 系統指標與快捷工具樣式
    ========================================================================== */
 .metrics-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
   gap: 14px;
+}
+
+.metrics-row-3 {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.metrics-row-2 {
+  grid-template-columns: 1.6fr 1fr;
 }
 
 .metric-card {
   padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+}
+
+.perf-card {
+  min-height: 175px;
+}
+
+.chart-container {
+  width: 100%;
+  height: 65px;
+  margin-top: 8px;
+  position: relative;
+  background-color: var(--bg-viewport);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.perf-canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.net-speed-box {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+
+.net-speed-item {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  font-family: var(--font-mono);
+  font-size: calc(13px * var(--font-scale));
+}
+
+.net-speed-item.rx {
+  color: #38bdf8;
+}
+
+.net-speed-item.tx {
+  color: #f59e0b;
+}
+
+.net-dir {
+  font-size: calc(11px * var(--font-scale));
+  opacity: 0.85;
+}
+
+.net-val {
+  font-weight: 700;
+}
+
+.service-mem-card {
+  min-height: 175px;
+}
+
+.metric-badge-pct {
+  background: rgba(14, 165, 233, 0.2);
+  color: var(--primary-hover);
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: calc(11px * var(--font-scale));
+  margin-left: 8px;
+  font-weight: 600;
+  border: 1px solid rgba(14, 165, 233, 0.4);
+}
+
+.service-mem-container {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 6px;
+  max-height: 110px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.loading-mem-row {
+  font-size: calc(11px * var(--font-scale));
+  color: var(--text-dim);
+  text-align: center;
+  padding: 10px 0;
+}
+
+.mem-item-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: calc(11px * var(--font-scale));
+  font-family: var(--font-mono);
+}
+
+.mem-item-info {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  flex: 1;
+}
+
+.mem-item-badge {
+  font-size: calc(9.5px * var(--font-scale));
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.mem-item-badge.apache {
+  background-color: rgba(239, 68, 68, 0.2);
+  color: #f87171;
+  border: 1px solid rgba(239, 68, 68, 0.4);
+}
+
+.mem-item-badge.pm2 {
+  background-color: rgba(16, 185, 129, 0.2);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.4);
+}
+
+.mem-item-name {
+  color: var(--text-main);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mem-item-bar-box {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.mem-mini-bar-bg {
+  width: 55px;
+  height: 5px;
+  background-color: rgba(128, 128, 128, 0.2);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.mem-mini-bar-fill {
+  height: 100%;
+  background-color: var(--primary);
+  border-radius: 2px;
+}
+
+.mem-item-size {
+  color: var(--text-muted);
+  width: 65px;
+  text-align: right;
+  font-weight: 600;
 }
 
 .metric-header {
@@ -692,7 +1115,7 @@ body {
 }
 
 .metric-subtext {
-  font-size: 11px;
+  font-size: calc(11px * var(--font-scale));
   color: var(--text-dim);
 }
 
@@ -876,14 +1299,14 @@ body {
 }
 
 .modal-title {
-  font-size: 15px;
+  font-size: calc(15px * var(--font-scale));
   font-weight: 700;
   color: var(--text-main);
   margin-bottom: 8px;
 }
 
 .modal-body {
-  font-size: 13px;
+  font-size: calc(13px * var(--font-scale));
   color: var(--text-muted);
   line-height: 1.6;
   margin-bottom: 18px;

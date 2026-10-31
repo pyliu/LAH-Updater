@@ -1,6 +1,10 @@
 use crate::services::CREATE_NO_WINDOW;
 use crate::types::Pm2ProcessInfo;
+use flate2::write::GzEncoder;
+use flate2::Compression;
 use serde_json::Value;
+use std::fs::{self, File, OpenOptions};
+use std::io::{copy, BufReader, BufWriter};
 use std::os::windows::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -154,10 +158,99 @@ pub fn pm2_start(root_dir: &Path, target: &str) -> Result<String, String> {
 }
 
 pub fn pm2_trigger_logrotate(root_dir: &Path) -> Result<String, String> {
-    let (ok, stdout, stderr) = run_pm2_command(root_dir, &["trigger", "pm2-logrotate", "rotate"]);
-    if ok {
-        Ok("已成功觸發 pm2-logrotate 日誌輪替！".to_string())
+    let now = chrono::Local::now();
+    let timestamp = now.format("%Y-%m-%d_%H-%M-%S").to_string();
+
+    let search_dirs = [
+        root_dir.join("logs"),
+        root_dir.join(".pm2").join("logs"),
+        root_dir.join("Apache24").join("logs"),
+    ];
+
+    let min_size_bytes: u64 = 100 * 1024; // 100 KB 閥值
+    let mut rotated_count = 0;
+    let mut total_freed_bytes: u64 = 0;
+
+    for dir in &search_dirs {
+        if !dir.is_dir() {
+            continue;
+        }
+
+        let entries = match fs::read_dir(dir) {
+            Ok(e) => e,
+            Err(_) => continue,
+        };
+
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if !path.is_file() {
+                continue;
+            }
+
+            let file_name = match path.file_name().and_then(|n| n.to_str()) {
+                Some(n) => n,
+                None => continue,
+            };
+
+            // 僅處理以 .log 結尾，且非歷史歸檔檔（不包含 '__' 且不以 .gz 結尾）
+            if !file_name.ends_with(".log") || file_name.contains("__") || file_name.ends_with(".gz") {
+                continue;
+            }
+
+            let metadata = match fs::metadata(&path) {
+                Ok(m) => m,
+                Err(_) => continue,
+            };
+
+            let file_size = metadata.len();
+            if file_size < min_size_bytes {
+                continue;
+            }
+
+            // 準備壓縮目標檔名: <stem>__<timestamp>.log.gz
+            let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("log");
+            let gz_name = format!("{}__{}.log.gz", stem, timestamp);
+            let gz_path = dir.join(gz_name);
+
+            // 執行原生 Gzip 串流壓縮
+            let compress_success = (|| -> Result<(), std::io::Error> {
+                let src_file = File::open(&path)?;
+                let mut reader = BufReader::new(src_file);
+
+                let dst_file = File::create(&gz_path)?;
+                let writer = BufWriter::new(dst_file);
+                let mut encoder = GzEncoder::new(writer, Compression::best());
+
+                copy(&mut reader, &mut encoder)?;
+                encoder.finish()?;
+                Ok(())
+            })();
+
+            if compress_success.is_ok() {
+                // 壓縮完成後截斷清空原日誌檔案
+                if let Ok(file) = OpenOptions::new().write(true).truncate(true).open(&path) {
+                    drop(file);
+                    rotated_count += 1;
+                    total_freed_bytes += file_size;
+                } else {
+                    let _ = fs::write(&path, b"");
+                    rotated_count += 1;
+                    total_freed_bytes += file_size;
+                }
+            }
+        }
+    }
+
+    // 呼叫 pm2 reloadLogs 通知所有 PM2 進程安全釋放舊檔案句柄
+    let _ = run_pm2_command(root_dir, &["reloadLogs"]);
+
+    if rotated_count > 0 {
+        let freed_mb = (total_freed_bytes as f64) / (1024.0 * 1024.0);
+        Ok(format!(
+            "已成功壓縮輪替 {} 個日誌檔案，釋放 {:.2} MB 磁碟空間，並已重載日誌句柄！",
+            rotated_count, freed_mb
+        ))
     } else {
-        Err(format!("觸發日誌輪替失敗：{}\n{}", stderr, stdout))
+        Ok("目前活躍日誌大小皆在 100 KB 以內，已為您執行 pm2 reloadLogs 保持日誌流暢。".to_string())
     }
 }

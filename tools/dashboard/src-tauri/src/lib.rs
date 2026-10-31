@@ -1,3 +1,4 @@
+pub mod configs;
 pub mod logs;
 pub mod pm2;
 pub mod services;
@@ -186,7 +187,8 @@ fn restart_all_services() -> CommandActionResult {
 #[tauri::command]
 fn get_host_metrics() -> HostMetrics {
     let root = resolve_root_dir();
-    sysinfo::query_host_metrics(&root)
+    let pm2_procs = pm2::query_pm2_processes(&root).unwrap_or_default();
+    sysinfo::query_host_metrics(&root, &pm2_procs)
 }
 
 #[tauri::command]
@@ -335,6 +337,43 @@ fn trigger_logrotate() -> CommandActionResult {
     }
 }
 
+#[tauri::command]
+fn get_core_configs() -> Vec<types::ConfigFileInfo> {
+    let root = resolve_root_dir();
+    configs::list_core_configs(&root)
+}
+
+#[tauri::command]
+fn read_config_content(path: String) -> Result<String, String> {
+    configs::read_config_file(&path)
+}
+
+#[tauri::command]
+fn save_config_content(path: String, content: String) -> types::ConfigSaveResult {
+    let root = resolve_root_dir();
+    configs::write_config_file(&root, &path, &content)
+}
+
+#[tauri::command]
+fn get_config_backups(path: String) -> Vec<types::ConfigBackupInfo> {
+    configs::list_config_backups(&path)
+}
+
+#[tauri::command]
+fn restore_config_backup(target_path: String, backup_path: String) -> CommandActionResult {
+    configs::restore_config_backup(&target_path, &backup_path)
+}
+
+#[tauri::command]
+fn pick_custom_config() -> Option<String> {
+    configs::pick_custom_config_file()
+}
+
+#[tauri::command]
+fn get_config_example_content(path: String) -> Result<String, String> {
+    configs::read_config_example_file(&path)
+}
+
 pub fn run() {
     tauri::Builder::default()
         .setup(|app| {
@@ -364,6 +403,13 @@ pub fn run() {
             open_web_frontend,
             check_apache_syntax,
             trigger_logrotate,
+            get_core_configs,
+            read_config_content,
+            save_config_content,
+            get_config_backups,
+            restore_config_backup,
+            pick_custom_config,
+            get_config_example_content,
         ])
         .run(tauri::generate_context!())
         .expect("error while running lah-dashboard");

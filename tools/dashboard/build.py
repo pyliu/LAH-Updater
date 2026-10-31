@@ -82,11 +82,24 @@ def main():
             appserv_dir = r"C:\AppServ"
             if os.path.isdir(appserv_dir):
                 target_appserv_exe = os.path.join(appserv_dir, out_exe_name)
+                deployed = False
                 try:
                     shutil.copy2(out_exe_path, target_appserv_exe)
+                    deployed = True
+                except Exception:
+                    # Windows 進程鎖定防護：允許將運行中執行檔更名為 .old 後覆蓋新版
+                    import time
+                    bak_path = f"{target_appserv_exe}.old_{int(time.time())}"
+                    try:
+                        os.rename(target_appserv_exe, bak_path)
+                        shutil.copy2(out_exe_path, target_appserv_exe)
+                        deployed = True
+                        print(f"[OK] 偵測到進程鎖定，已將舊版本更名備份為 {bak_path} 並成功替換新版！")
+                    except Exception as e_rename:
+                        print(f"[WARN] 同步部署至 {target_appserv_exe} 時發生鎖定且無法更名: {e_rename}")
+
+                if deployed:
                     print(f"[OK] 已同步部署至安裝根目錄：\n  -> {target_appserv_exe}")
-                except Exception as e:
-                    print(f"[WARN] 同步部署至 {target_appserv_exe} 時略過: {e}")
         else:
             print("[WARN] 編譯指令成功，但在預期目標路徑未找到 lah-dashboard.exe！")
     else:

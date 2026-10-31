@@ -1645,6 +1645,7 @@ name = "lah-dashboard"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "flate2",
  "regex",
  "serde",
  "serde_json",
