@@ -18,7 +18,7 @@
 - **個別操作**：支援個別啟動、停止、重新啟動，並即時反映 CPU、記憶體占用與重啟計數。
 
 ### 1.3 即時日誌檢視器（分頁二）
-- **全模組日誌自動探測**：涵蓋前端網站、即時通訊、排程引擎、PHP 8.5、Apache（error/access）、WinSW wrapper 包裝日誌與 pm2-logrotate 運作紀錄。
+- **全模組日誌自動探測**：涵蓋前端網站、即時通訊、排程引擎、PHP 8.5、LAH-API 核心業務日誌（`www\log`）、Apache（error/access）、WinSW wrapper 包裝日誌與 pm2-logrotate 運作紀錄。
 - **動態串流追蹤**：支援 Auto-Tail 即時追蹤、關鍵字即時篩選、清空畫布與「以 Windows 記事本開啟」實體檔案。
 
 ### 1.4 系統指標與快捷維運（分頁三）

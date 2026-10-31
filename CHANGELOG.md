@@ -6,6 +6,23 @@
 
 ## [未發布]
 
+### 🖥️ 管理儀表板日誌來源擴充「LAH-API 核心業務日誌 (www\log)」與「輪詢下限定位 5 秒」
+
+- **修改目的**：
+  - 補齊即時日誌檢視器缺少之 LAH-API 核心業務日誌（`www\log`），提供維運人員一站式檢視後端 PHP 業務例外、SQL 警告與 API 存取日誌，並支援回溯檢視歷史未壓縮日誌檔案。
+  - 將管理儀表板背景自動輪詢頻率之下限鎖定在 5 秒（移除 3 秒高頻選項），避免高頻呼叫造成伺服器頓挫與 CPU 開銷，並強化前端 localStorage 之防呆校準。
+- **具體修改項目**：
+  - `tools/dashboard/src-tauri/src/logs.rs`：
+    - 實作 `find_all_matching_files` 與 `build_log_info`，動態掃描 `www\log` 目錄下之 `.log` 檔案（支援 `root\www\log` 與開發工作區 `LAH-API\www\log` 容錯路徑）。
+    - 依修改時間降序排列，最新檔標註為 `LAH-API 核心業務日誌 (www\log: 最新 log-YYYY-MM-DD.log)`，歷史日誌標註為 `LAH-API 歷史業務日誌 (www\log: log-YYYY-MM-DD.log)`（最多保留 5 筆）。
+    - 查無檔案時顯示 `LAH-API 核心業務日誌 (www\log) [無日誌]`。
+  - `tools/dashboard/ui/index.html`：
+    - 下拉選單移除 `<option value="3000">3 秒</option>`，最低門檻設定為「5 秒 (預設)」。
+  - `tools/dashboard/ui/app.js`：
+    - 初始化與下拉切換加入安全防呆下限（若小於 5000ms 自動校準為 5000ms）。
+- **相容性說明**：
+  - 既有日誌檢視機制（Auto-Tail、關鍵字過濾、記事本開啟、複製畫布）完全相容，無任何外部依賴。
+
 ### 🖥️ 管理儀表板沙盒終端機支援「視窗放大滿版操作」與「單排緊緻工具列」
 
 - **修改目的**：

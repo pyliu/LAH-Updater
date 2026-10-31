@@ -6,8 +6,12 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 fn find_latest_matching_file(dir: &Path, prefix: &str, suffix: &str) -> Option<PathBuf> {
+    find_all_matching_files(dir, prefix, suffix).into_iter().next()
+}
+
+fn find_all_matching_files(dir: &Path, prefix: &str, suffix: &str) -> Vec<PathBuf> {
     if !dir.is_dir() {
-        return None;
+        return Vec::new();
     }
     let mut files: Vec<PathBuf> = Vec::new();
     if let Ok(entries) = fs::read_dir(dir) {
@@ -15,7 +19,9 @@ fn find_latest_matching_file(dir: &Path, prefix: &str, suffix: &str) -> Option<P
             let path = entry.path();
             if path.is_file() {
                 if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
-                    if name.starts_with(prefix) && name.ends_with(suffix) {
+                    if (prefix.is_empty() || name.starts_with(prefix))
+                        && (suffix.is_empty() || name.ends_with(suffix))
+                    {
                         files.push(path);
                     }
                 }
@@ -23,19 +29,56 @@ fn find_latest_matching_file(dir: &Path, prefix: &str, suffix: &str) -> Option<P
         }
     }
 
-    files.into_iter().max_by_key(|p| {
-        fs::metadata(p)
+    files.sort_by(|a, b| {
+        let meta_b = fs::metadata(b)
             .and_then(|m| m.modified())
-            .unwrap_or(std::time::SystemTime::UNIX_EPOCH)
-    })
+            .unwrap_or(std::time::SystemTime::UNIX_EPOCH);
+        let meta_a = fs::metadata(a)
+            .and_then(|m| m.modified())
+            .unwrap_or(std::time::SystemTime::UNIX_EPOCH);
+        meta_b.cmp(&meta_a)
+    });
+
+    files
+}
+
+fn build_log_info(key: String, label: String, path_str: String, exists: bool) -> LogFileInfo {
+    let mut size_bytes = 0;
+    let mut modified = "-".to_string();
+
+    if exists {
+        if let Ok(meta) = fs::metadata(&path_str) {
+            size_bytes = meta.len();
+            if let Ok(mtime) = meta.modified() {
+                let dt: DateTime<Local> = mtime.into();
+                modified = dt.format("%Y-%m-%d %H:%M:%S").to_string();
+            }
+        }
+    }
+
+    LogFileInfo {
+        key,
+        label,
+        path: path_str,
+        exists,
+        size_bytes,
+        modified,
+    }
 }
 
 pub fn list_available_logs(root_dir: &Path) -> Vec<LogFileInfo> {
     let logs_dir = root_dir.join("logs");
     let pm2_logs_dir = root_dir.join(".pm2").join("logs");
     let apache_logs_dir = root_dir.join("Apache24").join("logs");
+    let www_logs_dir = if root_dir.join("www").join("log").is_dir() {
+        root_dir.join("www").join("log")
+    } else if root_dir.join("LAH-API").join("www").join("log").is_dir() {
+        root_dir.join("LAH-API").join("www").join("log")
+    } else {
+        root_dir.join("www").join("log")
+    };
 
-    let targets = [
+    let before_api_targets = [
         ("fe_out", "LAH-FE 前端標準輸出", &logs_dir, "fe_out", ".log"),
         ("fe_err", "LAH-FE 前端錯誤日誌", &logs_dir, "fe_err", ".log"),
         (
@@ -80,6 +123,9 @@ pub fn list_available_logs(root_dir: &Path) -> Vec<LogFileInfo> {
             "lah-api-v85-error",
             ".log",
         ),
+    ];
+
+    let after_api_targets = [
         (
             "apache_error",
             "Apache 2.4 錯誤日誌",
@@ -118,7 +164,9 @@ pub fn list_available_logs(root_dir: &Path) -> Vec<LogFileInfo> {
     ];
 
     let mut result = Vec::new();
-    for (key, label, dir, prefix, suffix) in targets {
+
+    // 1. 前端、即時通、排程與 PM2 FastCGI
+    for (key, label, dir, prefix, suffix) in before_api_targets {
         let file_path = if suffix.is_empty() {
             let p = dir.join(prefix);
             if p.is_file() {
@@ -136,27 +184,59 @@ pub fn list_available_logs(root_dir: &Path) -> Vec<LogFileInfo> {
             .map(|p| p.to_string_lossy().to_string())
             .unwrap_or_else(|| dir.join(format!("{}{}", prefix, suffix)).to_string_lossy().to_string());
 
-        let mut size_bytes = 0;
-        let mut modified = "-".to_string();
+        result.push(build_log_info(key.to_string(), label.to_string(), path_str, exists));
+    }
 
-        if let Some(ref p) = file_path {
-            if let Ok(meta) = fs::metadata(p) {
-                size_bytes = meta.len();
-                if let Ok(mtime) = meta.modified() {
-                    let dt: DateTime<Local> = mtime.into();
-                    modified = dt.format("%Y-%m-%d %H:%M:%S").to_string();
-                }
-            }
+    // 2. LAH-API 核心業務日誌 (www\log)
+    let www_log_files = find_all_matching_files(&www_logs_dir, "", ".log");
+    if www_log_files.is_empty() {
+        let fallback_path = www_logs_dir.join(format!("log-{}.log", Local::now().format("%Y-%m-%d")));
+        result.push(build_log_info(
+            "api_www_log".to_string(),
+            "LAH-API 核心業務日誌 (www\\log)".to_string(),
+            fallback_path.to_string_lossy().to_string(),
+            false,
+        ));
+    } else {
+        // 最多納入最新 5 筆日誌檔案（通常為今天與最近數日）
+        for (idx, p) in www_log_files.into_iter().take(5).enumerate() {
+            let file_name = p.file_name().and_then(|n| n.to_str()).unwrap_or("log.log");
+            let label = if idx == 0 {
+                format!("LAH-API 核心業務日誌 (www\\log: 最新 {})", file_name)
+            } else {
+                format!("LAH-API 歷史業務日誌 (www\\log: {})", file_name)
+            };
+
+            let path_str = p.to_string_lossy().to_string();
+            result.push(build_log_info(
+                format!("api_www_log_{}", idx),
+                label,
+                path_str,
+                true,
+            ));
         }
+    }
 
-        result.push(LogFileInfo {
-            key: key.to_string(),
-            label: label.to_string(),
-            path: path_str,
-            exists,
-            size_bytes,
-            modified,
-        });
+    // 3. Apache 2.4、Windows 系統服務與 PM2 日誌輪替
+    for (key, label, dir, prefix, suffix) in after_api_targets {
+        let file_path = if suffix.is_empty() {
+            let p = dir.join(prefix);
+            if p.is_file() {
+                Some(p)
+            } else {
+                None
+            }
+        } else {
+            find_latest_matching_file(dir, prefix, suffix)
+        };
+
+        let exists = file_path.is_some();
+        let path_str = file_path
+            .as_ref()
+            .map(|p| p.to_string_lossy().to_string())
+            .unwrap_or_else(|| dir.join(format!("{}{}", prefix, suffix)).to_string_lossy().to_string());
+
+        result.push(build_log_info(key.to_string(), label.to_string(), path_str, exists));
     }
 
     result
