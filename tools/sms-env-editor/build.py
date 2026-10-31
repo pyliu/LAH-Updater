@@ -23,6 +23,19 @@ def main():
     script_dir = os.path.dirname(os.path.abspath(__file__))
     src_tauri_dir = os.path.join(script_dir, "src-tauri")
 
+    # 自動版本號規範：以天為單位 +1，同步更新 version.json, Cargo.toml, tauri.conf.json 與 UI
+    current_ver = "0.1.0"
+    try:
+        common_dir = os.path.abspath(os.path.join(script_dir, "..", "common"))
+        if common_dir not in sys.path:
+            sys.path.insert(0, common_dir)
+        import version_helper
+
+        current_ver = version_helper.bump_version_if_needed(script_dir)
+        print(f"[*] 發布版本號：v{current_ver}")
+    except Exception as e:
+        print(f"[WARN] 自動版本號同步略過或異常：{e}")
+
     if not os.path.isdir(src_tauri_dir):
         print(f"[ERROR] 找不到 Rust 原始碼目錄：{src_tauri_dir}")
         sys.exit(1)

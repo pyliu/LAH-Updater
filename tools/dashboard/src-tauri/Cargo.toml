@@ -1,6 +1,6 @@
 [package]
 name = "lah-dashboard"
-version = "0.1.0"
+version = "0.1.1"
 description = "智慧控管與監控系統 - 管理儀表板"
 edition = "2021"
 

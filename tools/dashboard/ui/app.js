@@ -131,8 +131,9 @@ const el = {
   barDisk: document.getElementById('barDisk'),
   textDiskDetails: document.getElementById('textDiskDetails'),
   portProbeGrid: document.getElementById('portProbeGrid'),
-  valNetRx: document.getElementById('valNetRx'),
-  valNetTx: document.getElementById('valNetTx'),
+  valNetTotal: document.getElementById('valNetTotal'),
+  unitNetTotal: document.getElementById('unitNetTotal'),
+  textNetDetails: document.getElementById('textNetDetails'),
   chartCpu: document.getElementById('chartCpu'),
   chartMem: document.getElementById('chartMem'),
   chartNet: document.getElementById('chartNet'),
@@ -194,6 +195,16 @@ const formatBytes = (bytes) => {
   const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
   const i = Math.floor(Math.log(bytes) / Math.log(k));
   return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+};
+
+const formatSpeed = (bytesPerSec) => {
+  if (!bytesPerSec || bytesPerSec <= 0) return { val: '0', unit: 'B/s' };
+  const k = 1024;
+  const units = ['B/s', 'KB/s', 'MB/s', 'GB/s'];
+  const i = Math.floor(Math.log(bytesPerSec) / Math.log(k));
+  const safeI = Math.min(Math.max(0, i), units.length - 1);
+  const val = parseFloat((bytesPerSec / Math.pow(k, safeI)).toFixed(safeI === 0 ? 0 : 1));
+  return { val: String(val), unit: units[safeI] };
 };
 
 const formatUptime = (timestampMs) => {
@@ -1180,11 +1191,19 @@ const loadHostMetrics = async () => {
 
     // 3. 網路即時流量與雙色趨勢圖
     if (m.network) {
-      el.valNetRx.textContent = m.network.rx_formatted;
-      el.valNetTx.textContent = m.network.tx_formatted;
+      const rxBytes = m.network.rx_bytes_per_sec || 0;
+      const txBytes = m.network.tx_bytes_per_sec || 0;
+      const totalBytes = rxBytes + txBytes;
+      const totalSpeed = formatSpeed(totalBytes);
 
-      state.netRxHistory.push(m.network.rx_bytes_per_sec);
-      state.netTxHistory.push(m.network.tx_bytes_per_sec);
+      if (el.valNetTotal) el.valNetTotal.textContent = totalSpeed.val;
+      if (el.unitNetTotal) el.unitNetTotal.textContent = totalSpeed.unit;
+      if (el.textNetDetails) {
+        el.textNetDetails.innerHTML = `↓ <span class="net-detail-badge rx">${m.network.rx_formatted}</span>　↑ <span class="net-detail-badge tx">${m.network.tx_formatted}</span>`;
+      }
+
+      state.netRxHistory.push(rxBytes);
+      state.netTxHistory.push(txBytes);
       if (state.netRxHistory.length > 60) state.netRxHistory.shift();
       if (state.netTxHistory.length > 60) state.netTxHistory.shift();
 

@@ -452,7 +452,7 @@ document.addEventListener("DOMContentLoaded", () => {
     updateSummaryText();
   });
 
-  // 分類快選 (智慧 Toggle：若未全選則全選；若已全選則取消選取)
+  // 分類快選 (獨占選取：僅選取該分類且取消其他分類；若已全選該分類則再次點擊取消)
   function setupCategoryToggle(btnId, catKey) {
     const btn = document.getElementById(btnId);
     if (!btn) return;
@@ -461,14 +461,27 @@ document.addEventListener("DOMContentLoaded", () => {
       const targetPkgs = state.packages.filter((p) => ids.includes(p.id) && p.exists);
       if (targetPkgs.length === 0) return;
 
-      const allChecked = targetPkgs.every((p) => p.checked);
-      const newChecked = !allChecked;
+      // 檢查是否「當前僅有此分類被全選，且其他分類皆未選」
+      const isTargetAllChecked = targetPkgs.every((p) => p.checked);
+      const isOtherAnyChecked = state.packages.some((p) => !ids.includes(p.id) && p.checked && p.exists);
+      const isExclusiveSelected = isTargetAllChecked && !isOtherAnyChecked;
 
-      targetPkgs.forEach((pkg) => {
-        pkg.checked = newChecked;
-        const el = document.getElementById(`chk_pkg_${pkg.id}`);
-        if (el) el.checked = newChecked;
-      });
+      if (isExclusiveSelected) {
+        // 若已經是該分類獨占全選狀態，再次點擊則取消該分類選取（全清空）
+        targetPkgs.forEach((pkg) => {
+          pkg.checked = false;
+          const el = document.getElementById(`chk_pkg_${pkg.id}`);
+          if (el) el.checked = false;
+        });
+      } else {
+        // 獨占選取：該分類就緒項目全選，其他所有分類項目取消勾選
+        state.packages.forEach((pkg) => {
+          const shouldCheck = ids.includes(pkg.id) && pkg.exists;
+          pkg.checked = shouldCheck;
+          const el = document.getElementById(`chk_pkg_${pkg.id}`);
+          if (el) el.checked = shouldCheck;
+        });
+      }
 
       updateSummaryText();
     });

@@ -266,17 +266,11 @@
               <span class="metric-title">網路即時流量</span>
               <span class="metric-icon">🌐</span>
             </div>
-            <div class="net-speed-box">
-              <div class="net-speed-item rx">
-                <span class="net-dir">↓ 接收：</span>
-                <span class="net-val" id="valNetRx">0 B/s</span>
-              </div>
-              <div class="net-speed-item tx">
-                <span class="net-dir">↑ 傳送：</span>
-                <span class="net-val" id="valNetTx">0 B/s</span>
-              </div>
+            <div class="metric-value-box">
+              <span class="metric-value" id="valNetTotal">-</span>
+              <span class="metric-unit" id="unitNetTotal">B/s</span>
             </div>
-            <div class="metric-subtext">實體網路 60 秒收發波動</div>
+            <div class="metric-subtext" id="textNetDetails">↓ 0 B/s　↑ 0 B/s</div>
             <div class="chart-container">
               <canvas id="chartNet" class="perf-canvas" width="280" height="65"></canvas>
             </div>
@@ -506,7 +500,7 @@
       </div>
       <div class="footer-right">
         <span id="lastUpdatedTime">最後更新：-</span>
-        <span class="version-tag">v0.1.0</span>
+        <span class="version-tag">v0.1.1</span>
       </div>
     </footer>
   </div>
