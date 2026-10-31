@@ -87,7 +87,16 @@ where
 
     for (idx, pkg) in selected_pkgs.iter().enumerate() {
         let zip_p = PathBuf::from(&pkg.zip_path);
-        let tgt_p = PathBuf::from(&pkg.target_path);
+
+        // 強制依據後端 ALL_PACKAGE_SPECS 與 root_path 計算目標目錄，徹底與前端狀態解耦防呆
+        let spec_opt = ALL_PACKAGE_SPECS.iter().find(|s| s.id == pkg.id);
+        let tgt_p = if let Some(spec) = spec_opt {
+            root_path.join(spec.rel_target)
+        } else if !pkg.expected_folder.is_empty() {
+            root_path.join(&pkg.expected_folder)
+        } else {
+            PathBuf::from(&pkg.target_path)
+        };
 
         if !zip_p.is_file() {
             log_event(&format!("⚠️ 找不到安裝包檔案: {}", zip_p.display()), "warning");
@@ -199,6 +208,7 @@ where
     let php7_tgt = root_path.join("php7");
     let php85_tgt = root_path.join("php85");
     let node_tgt = root_path.join("node");
+    let has_apache_binary = apache_tgt.join("bin").join("httpd.exe").is_file();
 
     // =========================================================================
     // 【階段 1/5】配置 PHP 7.4 與 Apache mod_php
@@ -207,12 +217,14 @@ where
         set_prog(88, "[階段 1/5] 正在配置 PHP 7.4 設定檔 (php.ini)...");
         ensure_php_ini_configured(&php7_tgt, false, &log_event);
     }
-    if apache_tgt.is_dir() {
+    if has_apache_binary {
         set_prog(89, "[階段 1/5] 正在配置 Apache 2.4 + PHP 7.4 與註冊服務...");
         configure_apache_mod_php7(&apache_tgt, &root_path, if php7_tgt.is_dir() { Some(&php7_tgt) } else { None }, &log_event);
         if options.auto_register_apache || has_base_env_update || query_apache_service().as_deref() != Some(LAH_WEB_SERVICE_NAME) {
             install_apache_service(&apache_tgt, LAH_WEB_SERVICE_NAME, &log_event);
         }
+    } else if apache_tgt.is_dir() {
+        log_event("ℹ️ 目錄包含 Apache24 資料夾但未偵測到 bin/httpd.exe 核心執行檔，跳過 Apache 模組配置與服務註冊", "info");
     }
 
     // =========================================================================
@@ -223,7 +235,7 @@ where
         if php85_tgt.is_dir() {
             ensure_php_ini_configured(&php85_tgt, true, &log_event);
         }
-        if apache_tgt.is_dir() {
+        if has_apache_binary {
             configure_apache_fcgi_proxy(&apache_tgt, &root_path, if php85_tgt.is_dir() { Some(&php85_tgt) } else { None }, &log_event);
         }
     }
@@ -233,7 +245,7 @@ where
     // =========================================================================
     if options.auto_security_hardening {
         set_prog(93, "[階段 3/5] 正在套用資安防護與 PHP2Shell 緩解設定...");
-        if apache_tgt.is_dir() {
+        if has_apache_binary {
             let conf_f = apache_tgt.join("conf").join("httpd.conf");
             if conf_f.is_file() {
                 apply_apache_security_hardening(&conf_f, &root_path, &log_event);
@@ -252,7 +264,7 @@ where
             }
         }
     }
-    if apache_tgt.is_dir() {
+    if has_apache_binary {
         check_apache_syntax(&apache_tgt, &log_event);
     }
 
@@ -300,14 +312,14 @@ where
             stop_service(&target_svc, &log_event);
             start_service(&target_svc, &log_event);
         }
-    } else if options.restart_apache || has_base_env_update || has_apache_app_update {
+    } else if (options.restart_apache || has_base_env_update || has_apache_app_update) && has_apache_binary {
         set_prog(98, &format!("[階段 5/5] 正在啟動 Apache 服務 [{target_svc}]..."));
         start_service(&target_svc, &log_event);
     }
 
     // 全方位服務健康確認
     set_prog(98, "正在進行全系統服務與通訊埠健康巡檢...");
-    let (_, health_report) = verify_all_services_health(&root_path, if apache_tgt.is_dir() { Some(&apache_tgt) } else { None }, &log_event);
+    let (_, health_report) = verify_all_services_health(&root_path, if has_apache_binary { Some(&apache_tgt) } else { None }, &log_event);
 
     // 探測同目錄下之管理儀表板，若存在則複製至安裝根目錄並建立桌面捷徑
     set_prog(99, "正在檢查管理儀表板與建立桌面捷徑...");
@@ -365,6 +377,7 @@ where
     let php7_tgt = root_path.join("php7");
     let php85_tgt = root_path.join("php85");
     let node_tgt = root_path.join("node");
+    let has_apache_binary = apache_tgt.join("bin").join("httpd.exe").is_file();
 
     // 1. 雙層巢狀目錄自癒攤平
     set_prog(10, "正在檢查目錄結構...");
@@ -380,13 +393,15 @@ where
         set_prog(25, "正在配置 PHP 7.4 (php.ini)...");
         ensure_php_ini_configured(&php7_tgt, false, &log_event);
     }
-    if apache_tgt.is_dir() {
+    if has_apache_binary {
         set_prog(35, "正在配置 Apache 2.4 (httpd.conf) 與 mod_php7 模組...");
         configure_apache_mod_php7(&apache_tgt, &root_path, if php7_tgt.is_dir() { Some(&php7_tgt) } else { None }, &log_event);
         if options.auto_register_apache || query_apache_service().as_deref() != Some(LAH_WEB_SERVICE_NAME) {
             set_prog(45, &format!("正在註冊 Web 沙盒服務 [{LAH_WEB_SERVICE_NAME}]..."));
             install_apache_service(&apache_tgt, LAH_WEB_SERVICE_NAME, &log_event);
         }
+    } else if apache_tgt.is_dir() {
+        log_event("ℹ️ 目錄包含 Apache24 資料夾但未偵測到 bin/httpd.exe 核心執行檔，跳過 Apache 模組配置與服務註冊", "info");
     }
 
     // 4. 配置 PHP 8.5 與 FCGI Proxy
@@ -395,7 +410,7 @@ where
         if php85_tgt.is_dir() {
             ensure_php_ini_configured(&php85_tgt, true, &log_event);
         }
-        if apache_tgt.is_dir() {
+        if has_apache_binary {
             configure_apache_fcgi_proxy(&apache_tgt, &root_path, if php85_tgt.is_dir() { Some(&php85_tgt) } else { None }, &log_event);
         }
     }
@@ -403,7 +418,7 @@ where
     // 5. 套用資安強化
     if options.auto_security_hardening {
         set_prog(65, "正在套用資安強化 (隱藏版本標頭、CVE-2024-4577 緩解防護)...");
-        if apache_tgt.is_dir() {
+        if has_apache_binary {
             let conf_f = apache_tgt.join("conf").join("httpd.conf");
             if conf_f.is_file() {
                 apply_apache_security_hardening(&conf_f, &root_path, &log_event);
@@ -423,7 +438,7 @@ where
         }
     }
 
-    if apache_tgt.is_dir() {
+    if has_apache_binary {
         check_apache_syntax(&apache_tgt, &log_event);
     }
 

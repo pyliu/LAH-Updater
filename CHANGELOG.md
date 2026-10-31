@@ -6,6 +6,22 @@
 
 ## [未發布]
 
+### 🛡️ 自動更新管線目標路徑解耦防呆與 Apache 執行檔存在性檢查
+
+- **修改目的**：
+  - 安裝包目標目錄計算強制改以更新工具後端 `ALL_PACKAGE_SPECS` 與 `root_path` 嚴格推導，徹底與前端狀態解耦防呆，防止異常相對路徑。
+  - 加入 Apache 核心執行檔 `bin/httpd.exe` 存在性防呆檢查；當環境僅有空目錄或未安裝 Apache 執行檔時，主動跳過 Apache 模組配置、服務註冊與語法驗證，避免部署中斷。
+- **具體修改項目**：
+  - `tools/updater/src-tauri/src/pipeline.rs`：
+    - 強制依 `ALL_PACKAGE_SPECS` 與 `root_path` 推導解壓目標路徑。
+    - 引入 `has_apache_binary` 判斷，於管線各階段跳過缺少二進位檔之 Apache 操作。
+  - `tools/updater/src-tauri/Cargo.toml` 與 `tauri.conf.json`：
+    - 版本號跨日自適應遞增至 `v0.1.1`。
+  - `tools/updater/version.json`：
+    - 建立版本持久化紀錄檔。
+- **相容性說明**：
+  - 向下相容既有安裝包解壓與配置管線，提升極端目錄狀態之容錯力。
+
 ### 📖 伺服器安裝操作手冊移除 ZIP 壓縮檔內雙擊之操作禁忌說明
 
 - **修改目的**：
