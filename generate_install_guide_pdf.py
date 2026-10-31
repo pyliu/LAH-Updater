@@ -606,14 +606,6 @@ HTML_CONTENT = f"""<!DOCTYPE html>
     </div>
     <p>最新架構已全面實作沙盒隔離機制。工具不會更動系統登錄檔 <code>Path</code> 與 <code>PM2_HOME</code>，<strong>無須移除本機全域已安裝的 Node.js</strong>（如 Node 20/22）。所有維運工具皆支援多磁碟路徑動態偵測，更新完成後自動於安裝根目錄產出 <strong><code>lah-cmd.bat</code></strong> 專屬維運終端，關閉視窗即自動釋放環境變數。</p>
   </div>
-
-  <div class="alert alert-warning avoid-break">
-    <div class="alert-icon">⚠️</div>
-    <div>
-      <strong>操作禁忌：</strong>切勿直接在 ZIP 壓縮檔內雙擊執行工具！請將 <code>dist\\</code> 目錄整包解壓至本機磁碟（如 <code>C:\\LAH-Dist\\</code> 或 <code>D:\\LAH-Dist\\</code>），並以<strong>「系統管理員身分」</strong>開啟執行檔。
-    </div>
-  </div>
-
   <div class="page-footer-note">
     <span>桃園市各地政事務所 智慧控管與監控系統維運手冊</span>
     <span>機密等級：內部維運限閱</span>
