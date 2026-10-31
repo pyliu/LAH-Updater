@@ -1267,8 +1267,8 @@ python tools/sms-env-editor/build.py</code>
             <ul class="project-detail-list">
               <li><strong>雙軌服務控管：</strong>統一管控 Windows 服務層（<code>LAH_Web_Service</code>、<code>LAH_PM2_Service</code>）與 PM2 進程層（<code>LAH-FE</code>、<code>LAH-WSS</code>、<code>LAH-SCHEDULER</code>、<code>lah-api-v85</code>），支援個別啟動/停止/重啟與頂部一鍵全域重啟。</li>
               <li><strong>即時串流日誌：</strong>自動探測全系統各模組日誌，支援 Auto-Tail 動態追蹤、關鍵字即時篩選、清空畫面與以記事本直接開啟實體日誌檔案。</li>
-              <li><strong>指標與健康探針：</strong>主機 CPU 總負載與記憶體 60 秒趨勢折線圖、雙向網路流量圖、LAH 服務群組記憶體占用排名卡片，外加五大連接埠（80, 8080, 8081, 8082, 8085）即時 TCP 心跳檢查。</li>
-              <li><strong>核心組態編輯器：</strong>免翻目錄直接編輯 Apache、PHP、環境變數 <code>.env</code> 與 Winsw xml，具備自動時間戳備份、一鍵還原、Apache 語法預檢防呆，以及 <code>.env.example</code> 雙欄範本即時比對。</li>
+              <li><strong>指標與健康探針：</strong>四大核心 KPI（CPU、記憶體、26px 雙向流量彩色明細、安裝磁碟進度條）水平齊平對齊，LAH 服務群組記憶體占用微型卡單排滾動呈現，外加五大關鍵連接埠（80, 8080, 8081, 8082, 8085）即時 TCP 心跳檢查。</li>
+              <li><strong>核心組態編輯器：</strong>免翻目錄直接編輯 Apache、PHP、環境變數 <code>.env</code> 與三大 PM2 進程組態（<code>ecosystem.config.js</code>），具備強制單排緊湊工具列、自動時間戳備份、一鍵還原、Apache 與 PM2 (<code>node -c</code>) 雙軌語法預檢防護，以及 <code>.env.example</code> 雙欄範本即時比對。</li>
               <li><strong>沙盒終端機：</strong>內建純離線 xterm.js 專業虛擬終端與 Node 16 / PM2 / Apache 2.4 / OCI 私有環境。支援直接鍵盤鍵入、歷史指令、快捷工具列，以及 UTF-8 與 CP950 (Big5 繁體中文) 雙向聯動編碼切換。</li>
               <li><strong>快捷維運箱：</strong>一鍵喚醒 <code>lah-cmd.bat</code> 沙盒終端、前端入口、Apache 組態語法驗證（<code>httpd -t</code>）與日誌目錄。</li>
             </ul>

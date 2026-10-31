@@ -19,7 +19,7 @@
 | **`tools/uninstaller/`** | **自動移除工具**<br/>`智慧控管與監控系統 - 自動移除工具.exe` | Tauri 2 (Rust) | 完整停止並刪除 Windows 系統服務（`LAH_Web_Service`、`LAH_PM2_Service` 與向下相容 `Apache2.4`）、精確終止殘留進程（含 `php-cgi.exe`）、清理開機自啟動與工作排程、清理舊有登錄檔殘留 `PATH`、註銷 Apache FastCGI 轉發、內置擬真二次確認對話框、解除唯讀安全刪除檔案並深度清理安裝根目錄（嚴格保護備份檔）。 |
 | **`tools/backuper/`** | **備份與還原工具**<br/>`智慧控管與監控系統 - 備份與還原工具.exe` | Tauri 2 (Rust) | 支援系統重要資料與設定（即時通 `db/`、`uploads/`、各專案 `.env`、`AD.php`、`www/assets/`、`php.ini`、`httpd.conf`、`.pm2`、`lah-cmd.bat`）打包備份；擴充涵蓋 Oracle `instantclient_11_2` 與 PHP 自訂資料庫擴充 DLL（OCI8 / SQLSRV）；還原前自動建立 `restore_undo_*.zip` 復原點，支援動態視窗高度自適應與彈現式進度對話框。 |
 | **`tools/node-portable/`** | **可攜 Node 安裝工具**<br/>`智慧控管與監控系統 - 可攜 Node 安裝工具.exe` | Tauri 2 (Rust) | 因應資安要求提供純綠色版 Node.js 16.20.2 與 PM2 離線安裝，採**零全域污染沙盒隔離模式**（不修改系統或使用者 `PATH`，主動清理登錄檔舊殘留並產出專屬維運終端 `lah-cmd.bat`），直接掛載內建 `pm2-logrotate`（v3.0.0）、清理 `dump.pm2` 舊路徑、註冊開機背景自啟服務 `PM2_Portable_Service`（WinSW）並具備每 60 秒 Daemon 自癒機制。 |
-| **`tools/dashboard/`** | **管理儀表板**<br/>`智慧控管與監控系統 - 管理儀表板.exe` | Tauri 2 (Rust) | 整合 Windows 系統服務監控與控制（`LAH_Web_Service`、`LAH_PM2_Service`）、PM2 應用進程層（`LAH-FE`、`LAH-WSS`、`LAH-SCHEDULER`、`lah-api-v85`）、即時串流日誌檢視器（Auto-Tail 動態追蹤、關鍵字過濾、外部記事本開啟）、主機資源指標（CPU、RAM、磁碟容量）與五大連接埠（80, 8080, 8081, 8082, 8085）健康探針之全功能管理儀表板。 |
+| **`tools/dashboard/`** | **管理儀表板**<br/>`智慧控管與監控系統 - 管理儀表板.exe` | Tauri 2 (Rust) | 整合 Windows 系統服務監控與控制（`LAH_Web_Service`、`LAH_PM2_Service`）、PM2 應用進程層（`LAH-FE`、`LAH-WSS`、`LAH-SCHEDULER`、`lah-api-v85`）、即時串流日誌檢視器、四大核心資源指標（CPU、RAM、即時雙向流量、磁碟空間水平齊平對稱）、五大連接埠健康探針、核心組態編輯器（支援 Apache、PHP、環境變數與三大 PM2 ecosystem 進程組態，具備自動備份、語法預檢防護與單排緊湊工具列）以及純離線 xterm.js 沙盒終端機之全功能維運儀表板。 |
 | **`tools/sms-env-editor/`** | **地籍異動簡訊參數設定工具**<br/>`地籍異動簡訊參數設定工具.exe` | Tauri 2 (Rust) | 內政部地籍異動簡訊與郵件發送服務（`SMSWEB_MOI\env.properties`）專用可視化設定工具。預設載入 `\\220.1.34.221\C$\SMSWEB_MOI\env.properties`，支援平臺網址、簡訊/郵件/Oracle 帳密 BASE64 自動加解密、Big-5 / CP950 編碼無損相容、儲存前 Diff 差異預覽與自動時間戳記備份。 |
 | **`pack/`** | **原始碼打包發布工具**<br/>`pack.py` | Python 3.10+ 標準庫 | 供開發管理人員遍歷工作區內平級子專案（`LAH-API`、`LAH-FE`、`lah-messenger-server` 等）全自動產出標準更新壓縮包（含自動收集系統 VC++ 執行期 DLL 封裝為 `vcredist-x64.zip`），依三向分流結構輸出至 `dist/patch/`、`dist/node_modules/`、`dist/base/`。 |
 
@@ -36,7 +36,7 @@
 | **`vcredist-x64.zip` / `vcredist*.zip`** | `Apache24\bin` | VC++ 2015–2022 獨立執行期依賴（自動補齊至 `Apache24\bin`、`php7` 與 `php85`，達成零全域依賴） |
 | **`php-7.4.*.zip` / `php7.zip`** | `php7` | PHP 7.4 執行環境 (舊軌 API 依賴) |
 | **`php-8.*.zip` / `php85.zip`** | `php85` | PHP 8.5 執行環境 (現代化 FastCGI 核心，監聽 Port 8085) |
-| **`node.zip`** | `node` | Node.js 16.20.2 綠色執行環境 (含 npm, pm2, pm2-logrotate, WinSW 服務核心) |
+| **`node.zip`** | `node` | Node.js 16.20.2 綠色執行環境 (含 npm, pm2, pm2-logrotate；WinSW 守護核心由 updater 與 node-portable 內建二進位動態釋出與適配) |
 
 ### 2. 業務程式更新包 (優先搜尋 `patch/` 資料夾)
 | 壓縮包檔名 | 預設相對路徑 | 說明 |

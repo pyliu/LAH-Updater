@@ -6,6 +6,89 @@
 
 ## [未發布]
 
+### 📦 原始碼打包腳本排除可攜式 Node 中的服務目錄並清理 node.zip 歷史殘留
+
+- **修改目的**：
+  - 可攜式 Node.js 執行環境應維持純淨，避免本機安裝之 Windows 服務目錄（`node\service`）被誤包入 `dist/base/node.zip`。
+  - 正式維運工具（`updater` 與 `node-portable`）均已二進位內嵌最新的 WinSW 守護核心與腳本，並依伺服器目標路徑動態釋出與適配 XML 設定，因此壓縮包內預置之寫死路徑服務檔案屬於多餘殘留且具衝突風險。
+- **具體修改項目**：
+  - `pack/pack.py`：
+    - 於 `NODE_EXCLUDES` 打包排除規則加入 `node\service` 與 `service`，遍歷打包時自動過濾本機服務檔案。
+  - `dist/base/node.zip`：
+    - 安全自現有壓縮包中移除 `node/service/lah-service.exe`、`node/service/lah-service.xml` 與 `node/service/service_runner.js` 3 個檔案，條目數由 7,861 筆收斂為 7,858 筆。
+- **相容性說明**：
+  - 本機運作中之 `C:\AppServ\node\service` 檔案不受影響；正式更新與安裝工具之動態釋出機制保持相容。
+
+### 🖥️ 管理儀表板核心組態編輯器工具列單排緊湊化並移除 XML 服務組態
+
+- **修改目的**：
+  - 移除組態選單中不存在且無須手動編輯之 Apache 與 PM2 XML 服務組態，精簡選單項目。
+  - 將工具列操作區重構為單排緊湊併列，消除垂直折行對代碼編輯區可視高度之擠壓。
+- **具體修改項目**：
+  - `tools/dashboard/src-tauri/src/configs.rs`：
+    - 自 `list_core_configs` 移除 `apache_winsw` 與 `pm2_winsw` 項目定義。
+  - `tools/dashboard/ui/style.css`：
+    - 工具列容器 `.config-toolbar-row` 設定為強制單行（`flex-wrap: nowrap`，支援極端窄螢幕水平滾動）。
+    - 組態下拉選單彈性自適應寬度（`max-width: 330px`，文字過長自動省略號截斷）。
+    - 儲存、歷史還原、外部記事本開啟與自動換行按鈕全部設定抗壓縮（`flex-shrink: 0`）。
+- **相容性說明**：
+  - 組態讀取、儲存與語法預檢功能完全保持相容。
+
+### 🖥️ 管理儀表板核心組態編輯器新增 PM2 進程組態與 node -c 語法預檢防護
+
+- **修改目的**：
+  - 支援管理人員直接於儀表板編輯三大核心 PM2 進程設定檔，無須手動深入各專案目錄。
+  - 儲存前自動執行 JavaScript 語法預檢，阻斷因人為筆誤或語法錯誤造成守護進程崩潰之風險。
+  - 儲存後依組態類型提供分流精確重啟提示，避免全域非必要重啟。
+- **具體修改項目**：
+  - `tools/dashboard/src-tauri/src/configs.rs`：
+    - 新增三大進程組態項目：前端與排程（`LAH-NUXTJS/ecosystem.config.js`）、即時通訊（`lah-messenger-server/ecosystem.config.js`）與 API FastCGI（`LAH-API/ecosystem.config.js`）。
+    - 於 `save_core_config` 加入 PM2 ecosystem 偵測，儲存前調用 `node -c` 預檢語法，失敗時回傳具體行號與錯誤訊息並阻擋儲存。
+  - `tools/dashboard/ui/app.js`：
+    - 依組態種類分流提示重啟目標，支援個別重啟前端、即時通、API FastCGI 或 Apache。
+- **相容性說明**：
+  - 向下相容既有 Apache 組態語法預檢與自動時間戳備份機制。
+
+### 🛠️ 維運工具版本號跨日自動遞增規範與通用模組整合
+
+- **修改目的**：
+  - 建立維運工具版本號標準遞增規範：以天為單位自動 +1，數字 1 至 9 逢 9 進位且末碼歸零（如 0.1.0 當天建置為 0.1.1）。
+  - 將版本號計算邏輯抽離為獨立共用模組，避免各工具重複實作或版本號不同步。
+- **具體修改項目**：
+  - `tools/common/version_helper.py`：
+    - 實作版本號跨日檢查與自適應進位演算，支援自動更新 `Cargo.toml` 與 `tauri.conf.json`。
+  - `tools/*/build.py`：
+    - 全面整合至 `updater`、`node-portable`、`uninstaller`、`backuper`、`dashboard` 與 `sms-env-editor` 6 個工具之建置腳本中。
+- **相容性說明**：
+  - 版本號格式保持 SemVer 規範相容。
+
+### 🖥️ 系統指標四大核心 KPI 卡片排版齊平與網路流量卡片改版
+
+- **修改目的**：
+  - 解決網路即時流量卡片大數字缺漏與圖表未對齊下緣之視覺落差。
+  - 解決安裝磁碟空間數值與左側卡片垂直高度不對稱之排版問題，使四大 KPI 卡片達到一致之視覺比重。
+- **具體修改項目**：
+  - `tools/dashboard/ui/app.js`：
+    - 網路流量數值重構為 26px 醒目總流量大數字，副標題以青藍（接收）與橘黃（傳送）彩色呈現即時雙向速率。
+    - 趨勢折線圖配置貼齊容器下緣。
+  - `tools/dashboard/ui/style.css`：
+    - 安裝磁碟卡片調整佈局，移除分散對齊，進度條高度設定為 65px，使大數字、副標題與底部圖表與左側 CPU、記憶體及流量卡片水平完美對稱切齊。
+- **相容性說明**：
+  - 純前端樣式與數值格式化優化，指標採集頻率保持相容。
+
+### 🛡️ 管理儀表板雙軌逾時防護、初次啟動防呆與全域重啟遮罩
+
+- **修改目的**：
+  - 避免底層系統指令（`sc.exe`, `net.exe`）於伺服器高負載或逾時異常時卡住整體介面輪詢。
+  - 針對初次啟動但關鍵服務未啟動之情況提供防呆警示，並於一鍵重啟全部時加入全域操作遮罩防止重複觸發。
+- **具體修改項目**：
+  - `tools/dashboard/src-tauri/src/services.rs`：
+    - 實作具備 8 秒超時中斷保護之命令執行緒通道。
+  - `tools/dashboard/ui/app.js` 與 `style.css`：
+    - 新增初次啟動防呆檢查提示與全螢幕高頻重啟遮罩。
+- **相容性說明**：
+  - 服務狀態採集與重啟指令保持相容。
+
 ### 🖥️ 管理儀表板「系統指標與快捷維運」第一排擴充 4 欄並列與第二排單排微型卡重構
 
 - **修改目的**：
