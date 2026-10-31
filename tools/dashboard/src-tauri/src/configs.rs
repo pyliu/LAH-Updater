@@ -150,24 +150,6 @@ pub fn list_core_configs(root_dir: &Path) -> Vec<ConfigFileInfo> {
             "pm2",
         ),
         (
-            "apache_winsw",
-            "Apache 系統服務組態 (lah-web-service.xml)",
-            root_dir
-                .join("Apache24")
-                .join("bin")
-                .join("lah-web-service.xml"),
-            "apache",
-        ),
-        (
-            "pm2_winsw",
-            "PM2 系統服務組態 (lah-pm2-service.xml)",
-            root_dir
-                .join("node")
-                .join("service")
-                .join("lah-pm2-service.xml"),
-            "pm2",
-        ),
-        (
             "pm2_fe_ecosystem",
             "PM2 前端與排程進程組態 (LAH-NUXTJS/ecosystem.config.js)",
             fe_ecosystem,

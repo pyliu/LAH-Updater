@@ -160,6 +160,8 @@ NODE_MODULES_EXCLUDES = [
 # Node.js 綠色環境打包排除規則
 NODE_EXCLUDES = [
     r"node\node_modules\.cache",
+    r"node\service",
+    r"service",
     r"*\.cache\*",
     "*.log",
     "*.tmp",

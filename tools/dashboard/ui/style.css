@@ -716,21 +716,56 @@ body {
 .config-control-bar {
   flex-shrink: 0;
   margin-bottom: 0;
-  padding: 10px 14px;
+  padding: 8px 12px;
 }
 
 .config-toolbar-row {
   display: flex;
   align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
+  gap: 8px;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.config-toolbar-row .select-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 1 auto;
+  min-width: 160px;
+  max-width: 330px;
+}
+
+.config-toolbar-row .select-group label {
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.config-toolbar-row .select-group select {
+  width: 100%;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.config-toolbar-row #btnPickCustomConfig {
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .config-action-group {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   margin-left: auto;
+  flex-shrink: 0;
+  flex-wrap: nowrap;
+}
+
+.config-action-group .btn {
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .backup-select-group {
@@ -741,6 +776,7 @@ body {
   border: 1px solid var(--border-color);
   padding: 2px 6px;
   border-radius: 6px;
+  flex-shrink: 0;
 }
 
 .backup-select-group label {
@@ -752,15 +788,23 @@ body {
 .pill-select-sm {
   font-size: calc(11px * var(--font-scale)) !important;
   padding: 2px 4px !important;
-  max-width: 170px;
+  max-width: 140px;
+}
+
+.config-wrap-label {
+  white-space: nowrap;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .config-info-bar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-top: 8px;
-  padding-top: 6px;
+  margin-top: 6px;
+  padding-top: 5px;
   border-top: 1px solid var(--border-color);
   font-size: calc(11px * var(--font-scale));
   color: var(--text-dim);
