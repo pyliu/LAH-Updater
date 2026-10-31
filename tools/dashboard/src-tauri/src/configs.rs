@@ -76,6 +76,26 @@ pub fn list_core_configs(root_dir: &Path) -> Vec<ConfigFileInfo> {
         }
     };
 
+    let fe_ecosystem = {
+        let p1 = root_dir.join("LAH-NUXTJS").join("ecosystem.config.js");
+        if p1.is_file() {
+            p1
+        } else {
+            root_dir.join("LAH-FE").join("ecosystem.config.js")
+        }
+    };
+
+    let wss_ecosystem = root_dir.join("lah-messenger-server").join("ecosystem.config.js");
+
+    let api_ecosystem = {
+        let p1 = root_dir.join("LAH-API").join("ecosystem.config.js");
+        if p1.is_file() {
+            p1
+        } else {
+            root_dir.join("LAH-API").join("API").join("ecosystem.config.js")
+        }
+    };
+
     let targets = [
         (
             "apache_httpd",
@@ -146,6 +166,24 @@ pub fn list_core_configs(root_dir: &Path) -> Vec<ConfigFileInfo> {
                 .join("service")
                 .join("lah-pm2-service.xml"),
             "pm2",
+        ),
+        (
+            "pm2_fe_ecosystem",
+            "PM2 前端與排程進程組態 (LAH-NUXTJS/ecosystem.config.js)",
+            fe_ecosystem,
+            "pm2:fe",
+        ),
+        (
+            "pm2_wss_ecosystem",
+            "PM2 即時通訊進程組態 (lah-messenger-server/ecosystem.config.js)",
+            wss_ecosystem,
+            "pm2:wss",
+        ),
+        (
+            "pm2_api_ecosystem",
+            "PM2 API FastCGI 進程組態 (LAH-API/ecosystem.config.js)",
+            api_ecosystem,
+            "pm2:api",
         ),
     ];
 
@@ -243,6 +281,31 @@ pub fn check_apache_syntax_with_output(root_dir: &Path) -> (bool, String) {
     }
 }
 
+pub fn check_node_syntax_with_output(root_dir: &Path, file_path: &Path) -> (bool, String) {
+    let node_exe = root_dir.join("node").join("node.exe");
+    let cmd_target = if node_exe.is_file() {
+        node_exe
+    } else {
+        PathBuf::from("node")
+    };
+
+    let mut cmd = Command::new(cmd_target);
+    cmd.arg("-c").arg(file_path);
+    cmd.creation_flags(CREATE_NO_WINDOW);
+
+    match cmd.output() {
+        Ok(out) => {
+            let stdout = String::from_utf8_lossy(&out.stdout).to_string();
+            let stderr = String::from_utf8_lossy(&out.stderr).to_string();
+            let full_out = format!("{}\n{}", stdout.trim(), stderr.trim())
+                .trim()
+                .to_string();
+            (out.status.success(), full_out)
+        }
+        Err(e) => (false, format!("執行 node -c 檢查失敗：{}", e)),
+    }
+}
+
 pub fn write_config_file(root_dir: &Path, path_str: &str, content: &str) -> ConfigSaveResult {
     let p = Path::new(path_str);
     if !p.is_file() {
@@ -261,7 +324,13 @@ pub fn write_config_file(root_dir: &Path, path_str: &str, content: &str) -> Conf
     let p_lower = path_str.to_lowercase();
     let related_svc = if p_lower.contains("apache") || p_lower.contains("httpd") || p_lower.contains("php7") {
         "apache"
-    } else if p_lower.contains("lah-api") || p_lower.contains("messenger") || p_lower.contains("php85") || p_lower.contains("pm2") {
+    } else if p_lower.contains("lah-fe") || p_lower.contains("lah-nuxtjs") {
+        "pm2:fe"
+    } else if p_lower.contains("messenger") || p_lower.contains("wss") {
+        "pm2:wss"
+    } else if p_lower.contains("lah-api") || p_lower.contains("php85") {
+        "pm2:api"
+    } else if p_lower.contains("pm2") {
         "pm2"
     } else {
         "none"
@@ -322,6 +391,32 @@ pub fn write_config_file(root_dir: &Path, path_str: &str, content: &str) -> Conf
             syntax_error: false,
             syntax_output: syntax_msg,
             related_service: "apache".to_string(),
+        };
+    }
+
+    // 4. 若為 JavaScript (ecosystem.config.js)，執行 Node 語法預檢 (node -c)
+    if p_lower.ends_with(".js") {
+        let (syntax_ok, syntax_msg) = check_node_syntax_with_output(root_dir, p);
+        if !syntax_ok {
+            return ConfigSaveResult {
+                success: true,
+                message: "檔案已儲存，但 Node.js 語法檢查未通過！".to_string(),
+                backup_path: backup_saved,
+                syntax_checked: true,
+                syntax_error: true,
+                syntax_output: syntax_msg,
+                related_service: related_svc.to_string(),
+            };
+        }
+
+        return ConfigSaveResult {
+            success: true,
+            message: "✓ 組態已成功儲存，且通過 Node.js 語法檢查 (Syntax OK)！".to_string(),
+            backup_path: backup_saved,
+            syntax_checked: true,
+            syntax_error: false,
+            syntax_output: syntax_msg,
+            related_service: related_svc.to_string(),
         };
     }
 

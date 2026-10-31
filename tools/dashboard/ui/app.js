@@ -1766,11 +1766,13 @@ const handleSaveConfig = async () => {
       return;
     }
 
-    // 若 Apache 語法檢驗失敗，彈窗警告並提供一鍵自動還原
+    // 若語法檢驗失敗，彈窗警告並提供一鍵自動還原 (支援 Apache httpd -t 與 Node.js node -c)
     if (res.syntax_checked && res.syntax_error) {
+      const isJs = state.currentConfigPath.toLowerCase().endsWith('.js');
+      const syntaxType = isJs ? 'Node.js (node -c)' : 'Apache (httpd -t)';
       showConfirmModal(
-        '⚠️ Apache 組態語法驗證失敗',
-        `檔案已寫入，但執行 httpd.exe -t 檢測未通過！\n\n錯誤細節：\n${res.syntax_output}\n\n為避免 Apache 服務啟動失敗，建議立即還原至儲存前自動建立的備份檔。\n是否立即自動還原？`,
+        `⚠️ ${syntaxType} 組態語法驗證失敗`,
+        `檔案已寫入，但執行 ${syntaxType} 檢測未通過！\n\n錯誤細節：\n${res.syntax_output}\n\n為避免服務重啟或運作崩潰，建議立即還原至儲存前自動建立的備份檔。\n是否立即自動還原？`,
         async () => {
           if (res.backup_path) {
             showToast('正在自動還原至備份檔...');
@@ -1799,6 +1801,40 @@ const handleSaveConfig = async () => {
         `${res.message}\n\n此組態隸屬 Apache 系統服務 (LAH_Web_Service)。\n是否立即重新啟動 Apache 服務以套用新設定？`,
         async () => {
           await window.handleServiceAction('restart', 'LAH_Web_Service');
+        }
+      );
+    } else if (res.related_service === 'pm2:fe') {
+      showConfirmModal(
+        '組態儲存成功 (JS 語法正確)',
+        `${res.message}\n\n此組態隸屬 PM2 前端與排程服務。\n是否立即重新啟動前端與排程進程 (LAH-FE / LAH-SCHEDULER) 以套用新設定？`,
+        async () => {
+          showToast('正在重啟前端與排程進程...');
+          await invoke('restart_pm2_process', { target: 'LAH-FE' });
+          await invoke('restart_pm2_process', { target: 'LAH-SCHEDULER' });
+          triggerBurstPolling(8000, 1500);
+          showToast('✓ 已送出前端與排程重啟指令');
+        }
+      );
+    } else if (res.related_service === 'pm2:wss') {
+      showConfirmModal(
+        '組態儲存成功 (JS 語法正確)',
+        `${res.message}\n\n此組態隸屬 PM2 即時通訊服務。\n是否立即重新啟動即時通進程 (LAH-WSS) 以套用新設定？`,
+        async () => {
+          showToast('正在重啟即時通進程...');
+          await invoke('restart_pm2_process', { target: 'LAH-WSS' });
+          triggerBurstPolling(8000, 1500);
+          showToast('✓ 已送出 LAH-WSS 重啟指令');
+        }
+      );
+    } else if (res.related_service === 'pm2:api') {
+      showConfirmModal(
+        '組態儲存成功 (JS 語法正確)',
+        `${res.message}\n\n此組態隸屬 PM2 API FastCGI 核心服務。\n是否立即重新啟動 FastCGI 進程 (lah-api-v85) 以套用新設定？`,
+        async () => {
+          showToast('正在重啟 FastCGI 進程...');
+          await invoke('restart_pm2_process', { target: 'lah-api-v85' });
+          triggerBurstPolling(8000, 1500);
+          showToast('✓ 已送出 lah-api-v85 重啟指令');
         }
       );
     } else if (res.related_service === 'pm2') {
