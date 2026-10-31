@@ -457,8 +457,6 @@
               <button class="btn btn-outline btn-xs btn-term-quick" data-cmd="pm2 status">⚡ pm2 status</button>
               <button class="btn btn-outline btn-xs btn-term-quick" data-cmd="pm2 restart all">⚡ pm2 restart all</button>
               <button class="btn btn-outline btn-xs btn-term-quick" data-cmd="httpd -t">⚡ httpd -t</button>
-              <button class="btn btn-outline btn-xs btn-term-quick" data-cmd="node -v & pm2 -v">⚡ 版本檢查</button>
-              <button class="btn btn-outline btn-xs btn-term-quick" data-cmd="git status">⚡ git status</button>
               <button class="btn btn-outline btn-xs btn-term-quick" data-cmd="netstat -ano | findstr 80">⚡ 檢查 Port 80</button>
             </div>
             <div class="terminal-actions">
@@ -469,14 +467,17 @@
                   <option value="cp950">CP950 (Big5 繁中)</option>
                 </select>
               </div>
-              <button class="btn btn-secondary btn-sm" id="btnResetTerminal" title="重設並重新啟動常駐沙盒 Session">
+              <button class="btn btn-outline btn-xs" id="btnToggleTerminalMaximize" title="切換沙盒終端全螢幕放大檢視 (亦可按 ESC 還原)">
+                ⛶ 放大視窗
+              </button>
+              <button class="btn btn-secondary btn-xs" id="btnResetTerminal" title="重設並重新啟動常駐沙盒 Session">
                 🔄 重設 Session
               </button>
-              <button class="btn btn-outline btn-sm" id="btnClearTerminalCanvas" title="清空當前終端機螢幕畫面">
+              <button class="btn btn-outline btn-xs" id="btnClearTerminalCanvas" title="清空當前終端機螢幕畫面">
                 🧹 清空畫面
               </button>
-              <button class="btn btn-outline btn-sm" id="btnLaunchExternalCmd" title="於 Windows 桌面獨立彈窗啟動 lah-cmd.bat">
-                ↗ 獨立視窗開啟
+              <button class="btn btn-outline btn-xs" id="btnLaunchExternalCmd" title="於 Windows 桌面獨立彈窗啟動 lah-cmd.bat">
+                ↗ 獨立視窗
               </button>
             </div>
           </div>

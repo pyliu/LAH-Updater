@@ -58,6 +58,7 @@ const state = {
   currentTerminalEncoding: 'utf-8',
   xtermInstance: null,
   fitAddonInstance: null,
+  isTerminalMaximized: false,
 };
 
 // UI 元素快取
@@ -146,7 +147,9 @@ const el = {
   // 沙盒終端機元素
   terminalScreen: document.getElementById('terminalScreen'),
   terminalContainer: document.getElementById('terminalContainer'),
+  terminalContainerBox: document.querySelector('.terminal-container'),
   selectTerminalEncoding: document.getElementById('selectTerminalEncoding'),
+  btnToggleTerminalMaximize: document.getElementById('btnToggleTerminalMaximize'),
   btnResetTerminal: document.getElementById('btnResetTerminal'),
   btnClearTerminalCanvas: document.getElementById('btnClearTerminalCanvas'),
   btnLaunchExternalCmd: document.getElementById('btnLaunchExternalCmd'),
@@ -619,6 +622,19 @@ const initApp = async () => {
       }
     });
   }
+
+  if (el.btnToggleTerminalMaximize) {
+    el.btnToggleTerminalMaximize.addEventListener('click', () => {
+      toggleTerminalMaximize();
+    });
+  }
+
+  // 按 ESC 鍵快速退出沙盒終端最大化模式
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && state.isTerminalMaximized) {
+      toggleTerminalMaximize(false);
+    }
+  });
 
   if (el.btnResetTerminal) {
     el.btnResetTerminal.addEventListener('click', () => {
@@ -1678,6 +1694,39 @@ const initXterm = () => {
     if (state.fitAddonInstance) state.fitAddonInstance.fit();
     term.focus();
   }, 100);
+};
+
+const toggleTerminalMaximize = (forceState) => {
+  const isMax = forceState !== undefined ? forceState : !state.isTerminalMaximized;
+  state.isTerminalMaximized = isMax;
+
+  const container = el.terminalContainerBox || document.querySelector('.terminal-container');
+  if (container) {
+    container.classList.toggle('maximized', isMax);
+  }
+
+  if (el.btnToggleTerminalMaximize) {
+    if (isMax) {
+      el.btnToggleTerminalMaximize.innerHTML = '🗗 還原視窗';
+      el.btnToggleTerminalMaximize.classList.add('btn-primary');
+      el.btnToggleTerminalMaximize.classList.remove('btn-outline');
+    } else {
+      el.btnToggleTerminalMaximize.innerHTML = '⛶ 放大視窗';
+      el.btnToggleTerminalMaximize.classList.remove('btn-primary');
+      el.btnToggleTerminalMaximize.classList.add('btn-outline');
+    }
+  }
+
+  setTimeout(() => {
+    if (state.fitAddonInstance) {
+      try {
+        state.fitAddonInstance.fit();
+      } catch (_) {}
+    }
+    if (state.xtermInstance) {
+      state.xtermInstance.focus();
+    }
+  }, 60);
 };
 
 const handleXtermInput = (data) => {

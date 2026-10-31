@@ -1336,32 +1336,52 @@ body {
   border: 1px solid var(--border-color);
   border-radius: 8px;
   background-color: #030712;
+  transition: all 0.2s ease;
+}
+
+/* 沙盒終端視窗最大化全螢幕模式 */
+.terminal-container.maximized {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: 9999;
+  border-radius: 0;
+  border: none;
+  background-color: #030712;
 }
 
 .terminal-toolbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
-  flex-wrap: wrap;
-  padding: 8px 14px;
+  gap: 12px;
+  flex-wrap: nowrap;
+  padding: 6px 12px;
   background-color: var(--bg-card);
   border-bottom: 1px solid var(--border-color);
   flex-shrink: 0;
+  overflow-x: auto;
 }
 
 .terminal-quick-cmds {
   display: flex;
   align-items: center;
   gap: 6px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  flex-shrink: 0;
 }
 
 .terminal-actions {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   margin-left: auto;
+  flex-wrap: nowrap;
+  flex-shrink: 0;
 }
 
 .terminal-encoding-group {
