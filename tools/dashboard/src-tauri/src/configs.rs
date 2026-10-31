@@ -18,10 +18,38 @@ pub fn find_example_file(config_path: &Path) -> Option<PathBuf> {
     }
 
     // 2. 若為 .env，檢查 env.example
-    if file_name == ".env" {
+    if file_name.eq_ignore_ascii_case(".env") {
         let candidate2 = parent.join("env.example");
         if candidate2.is_file() {
             return Some(candidate2);
+        }
+    }
+
+    // 3. 檢查同名加上 .sample
+    let candidate3 = parent.join(format!("{}.sample", file_name));
+    if candidate3.is_file() {
+        return Some(candidate3);
+    }
+
+    // 4. 深入遍歷父目錄進行大小寫無差別比對
+    if let Ok(entries) = fs::read_dir(parent) {
+        let target_example = format!("{}.example", file_name).to_lowercase();
+        let target_sample = format!("{}.sample", file_name).to_lowercase();
+        for entry in entries.flatten() {
+            let p = entry.path();
+            if p.is_file() {
+                if let Some(n) = p.file_name() {
+                    let nl = n.to_string_lossy().to_lowercase();
+                    if nl == target_example || nl == target_sample {
+                        return Some(p);
+                    }
+                    if file_name.eq_ignore_ascii_case(".env")
+                        && (nl == "env.example" || nl == ".env.example")
+                    {
+                        return Some(p);
+                    }
+                }
+            }
         }
     }
 
@@ -177,12 +205,17 @@ pub fn read_config_file(path_str: &str) -> Result<String, String> {
     file.read_to_end(&mut bytes)
         .map_err(|e| format!("讀取檔案失敗：{}", e))?;
 
-    // 處理 UTF-8 BOM
+    // 處理 UTF-8 BOM 與編碼容錯
     if bytes.starts_with(&[0xEF, 0xBB, 0xBF]) {
-        String::from_utf8(bytes[3..].to_vec())
-            .map_err(|e| format!("檔案非標準 UTF-8 編碼：{}", e))
+        match String::from_utf8(bytes[3..].to_vec()) {
+            Ok(s) => Ok(s),
+            Err(_) => Ok(String::from_utf8_lossy(&bytes[3..]).to_string()),
+        }
     } else {
-        String::from_utf8(bytes).map_err(|e| format!("檔案非標準 UTF-8 編碼：{}", e))
+        match String::from_utf8(bytes.clone()) {
+            Ok(s) => Ok(s),
+            Err(_) => Ok(String::from_utf8_lossy(&bytes).to_string()),
+        }
     }
 }
 

@@ -550,7 +550,7 @@ HTML_CONTENT = f"""<!DOCTYPE html>
       <tr>
         <td><strong>智慧控管與監控系統 - 管理儀表板.exe</strong></td>
         <td><span class="badge badge-req">專屬維運</span></td>
-        <td>專屬單一執行檔原生儀表板！更新完成自動同步至根目錄並建立桌面捷徑；整合系統服務、PM2 進程控制、Auto-Tail 動態日誌、資源指標與通訊埠探針。</td>
+        <td>專屬單一執行檔原生儀表板！更新完成自動同步至根目錄並建立桌面捷徑；整合服務監控控制、Auto-Tail 動態日誌、資源效能即時折線圖與服務記憶體排名、核心組態編輯器（含語法檢驗、自動備份與範本比對），以及 xterm.js 專業沙盒終端（含 UTF-8/CP950 編碼切換）。</td>
       </tr>
       <tr>
         <td><strong>地籍異動簡訊參數設定工具.exe</strong></td>
@@ -916,7 +916,7 @@ HTML_CONTENT = f"""<!DOCTYPE html>
 
   <h3>🖥️ 一站式維運管理儀表板與瀏覽器實機驗證</h3>
   <ol style="margin: 2px 0 4px 16px; padding: 0; line-height: 1.5; font-size: 8.5pt;">
-    <li><strong>開啟管理儀表板：</strong>點擊更新完成彈窗「📊 開啟管理儀表板」或雙擊桌面捷徑開啟，確認 Windows 服務層與 PM2 進程層全數呈現綠燈 [運行中]，並透過通訊埠探針確認 80, 8080, 8081, 8082, 8085 連線正常。</li>
+    <li><strong>開啟管理儀表板：</strong>點擊「📊 開啟管理儀表板」，確認服務與 PM2 進程綠燈、五大埠健康連線；儀表板已整合資源效能折線圖與記憶體排名、核心組態編輯器（含語法檢驗與範本比對），以及 xterm.js 專業沙盒終端（含 UTF-8/CP950 編碼切換）。</li>
     <li><strong>前端首頁載入：</strong>開啟瀏覽器輸入 <code>http://127.0.0.1:8080</code>，確認管控首頁正常載入並能查詢地政統計數據。</li>
     <li><strong>即時通訊狀態：</strong>檢視右側即時通看板，確認連線狀態圖示為<strong>綠燈（連線中）</strong>且歷史公告完整。</li>
   </ol>

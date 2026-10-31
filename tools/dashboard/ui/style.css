@@ -76,6 +76,11 @@
   user-select: none;
 }
 
+/* 全域實用輔助類別 */
+.hidden {
+  display: none !important;
+}
+
 /* 自訂捲軸樣式 - 科技深色極簡風格，徹底杜絕 Windows 預設亮白色粗捲軸 */
 ::-webkit-scrollbar {
   width: 8px;
@@ -1316,4 +1321,109 @@ body {
   display: flex;
   justify-content: flex-end;
   gap: 10px;
+}
+
+/* ==========================================================================
+   7. 沙盒終端機樣式 (xterm.js 專業虛擬終端)
+   ========================================================================== */
+.terminal-container {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background-color: #030712;
+}
+
+.terminal-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 8px 14px;
+  background-color: var(--bg-card);
+  border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
+}
+
+.terminal-quick-cmds {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.terminal-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.terminal-encoding-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: calc(11px * var(--font-scale));
+  color: var(--text-muted);
+}
+
+.btn-term-quick {
+  font-family: var(--font-mono);
+  font-size: calc(10.5px * var(--font-scale));
+  padding: 2px 7px;
+  border-radius: 4px;
+  border-color: rgba(14, 165, 233, 0.4);
+  color: var(--primary-hover);
+}
+
+.btn-term-quick:hover {
+  background-color: rgba(14, 165, 233, 0.15);
+  border-color: var(--primary);
+}
+
+.terminal-xterm-wrapper {
+  flex: 1;
+  min-height: 0;
+  padding: 8px 12px;
+  background-color: #030712;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.terminal-xterm-box {
+  flex: 1;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+
+.terminal-xterm-box .xterm {
+  height: 100%;
+  padding: 0;
+}
+
+.terminal-xterm-box .xterm-viewport {
+  background-color: #030712 !important;
+}
+
+.terminal-hint-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  background-color: #080f1e;
+  border-top: 1px solid var(--border-color);
+  font-size: calc(11px * var(--font-scale));
+  color: var(--text-dim);
+  flex-shrink: 0;
+}
+
+.hint-icon {
+  font-size: 13px;
 }

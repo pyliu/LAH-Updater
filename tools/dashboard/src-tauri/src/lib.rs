@@ -3,6 +3,7 @@ pub mod logs;
 pub mod pm2;
 pub mod services;
 pub mod sysinfo;
+pub mod terminal;
 pub mod types;
 
 use std::os::windows::process::CommandExt;
@@ -374,6 +375,43 @@ fn get_config_example_content(path: String) -> Result<String, String> {
     configs::read_config_example_file(&path)
 }
 
+#[tauri::command]
+fn terminal_send_command(command: String) -> CommandActionResult {
+    let root = resolve_root_dir();
+    terminal::send_command(&root, &command)
+}
+
+#[tauri::command]
+fn terminal_poll_output() -> String {
+    terminal::poll_output()
+}
+
+#[tauri::command]
+fn terminal_reset_session() -> CommandActionResult {
+    let root = resolve_root_dir();
+    terminal::reset_session(&root)
+}
+
+#[tauri::command]
+fn terminal_ensure_started() -> CommandActionResult {
+    let root = resolve_root_dir();
+    match terminal::ensure_terminal_started(&root) {
+        Ok(_) => CommandActionResult {
+            success: true,
+            message: "沙盒終端已就緒".to_string(),
+        },
+        Err(e) => CommandActionResult {
+            success: false,
+            message: e,
+        },
+    }
+}
+
+#[tauri::command]
+fn terminal_set_encoding(encoding: String) -> CommandActionResult {
+    terminal::set_terminal_encoding(&encoding)
+}
+
 pub fn run() {
     tauri::Builder::default()
         .setup(|app| {
@@ -410,6 +448,11 @@ pub fn run() {
             restore_config_backup,
             pick_custom_config,
             get_config_example_content,
+            terminal_send_command,
+            terminal_poll_output,
+            terminal_reset_session,
+            terminal_ensure_started,
+            terminal_set_encoding,
         ])
         .run(tauri::generate_context!())
         .expect("error while running lah-dashboard");

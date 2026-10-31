@@ -5,6 +5,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>智慧控管與監控系統 - 管理儀表板</title>
+  <link rel="stylesheet" href="vendor/xterm.css">
   <link rel="stylesheet" href="style.css">
   <link rel="icon" type="image/png" href="favicon.png">
 </head>
@@ -45,7 +46,6 @@
         <div class="control-pill polling-interval-group" title="調整背景自動探測與更新頻率">
           <span class="control-label">輪詢：</span>
           <select id="selectPollingInterval" class="pill-select">
-            <option value="3000">3 秒</option>
             <option value="5000" selected>5 秒 (預設)</option>
             <option value="10000">10 秒</option>
             <option value="15000">15 秒</option>
@@ -111,6 +111,13 @@
           <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
         </svg>
         核心組態編輯器
+      </button>
+      <button class="tab-btn" data-tab="tab-terminal">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="tab-icon">
+          <polyline points="4 17 10 11 4 5"></polyline>
+          <line x1="12" y1="19" x2="20" y2="19"></line>
+        </svg>
+        沙盒終端機
       </button>
     </nav>
 
@@ -439,6 +446,53 @@
           </div>
         </div>
       </section>
+
+      <!-- 分頁五：沙盒終端機 -->
+      <section id="tab-terminal" class="tab-pane">
+        <div class="terminal-container card">
+          <!-- 終端控制與快捷工具列 -->
+          <div class="terminal-toolbar">
+            <div class="terminal-quick-cmds">
+              <span class="toolbar-label">常用指令：</span>
+              <button class="btn btn-outline btn-xs btn-term-quick" data-cmd="pm2 status">⚡ pm2 status</button>
+              <button class="btn btn-outline btn-xs btn-term-quick" data-cmd="pm2 restart all">⚡ pm2 restart all</button>
+              <button class="btn btn-outline btn-xs btn-term-quick" data-cmd="httpd -t">⚡ httpd -t</button>
+              <button class="btn btn-outline btn-xs btn-term-quick" data-cmd="node -v & pm2 -v">⚡ 版本檢查</button>
+              <button class="btn btn-outline btn-xs btn-term-quick" data-cmd="git status">⚡ git status</button>
+              <button class="btn btn-outline btn-xs btn-term-quick" data-cmd="netstat -ano | findstr 80">⚡ 檢查 Port 80</button>
+            </div>
+            <div class="terminal-actions">
+              <div class="select-group terminal-encoding-group" title="切換沙盒終端解碼與 Windows CodePage">
+                <label for="selectTerminalEncoding">編碼：</label>
+                <select id="selectTerminalEncoding" class="form-select pill-select-sm">
+                  <option value="utf-8" selected>UTF-8 (預設)</option>
+                  <option value="cp950">CP950 (Big5 繁中)</option>
+                </select>
+              </div>
+              <button class="btn btn-secondary btn-sm" id="btnResetTerminal" title="重設並重新啟動常駐沙盒 Session">
+                🔄 重設 Session
+              </button>
+              <button class="btn btn-outline btn-sm" id="btnClearTerminalCanvas" title="清空當前終端機螢幕畫面">
+                🧹 清空畫面
+              </button>
+              <button class="btn btn-outline btn-sm" id="btnLaunchExternalCmd" title="於 Windows 桌面獨立彈窗啟動 lah-cmd.bat">
+                ↗ 獨立視窗開啟
+              </button>
+            </div>
+          </div>
+
+          <!-- xterm.js 專業虛擬終端畫布 -->
+          <div class="terminal-screen terminal-xterm-wrapper" id="terminalScreen">
+            <div id="terminalContainer" class="terminal-xterm-box"></div>
+          </div>
+
+          <!-- 底部即時鍵入提示與輔助列 -->
+          <div class="terminal-hint-bar">
+            <span class="hint-icon">💡</span>
+            <span class="hint-text">支援直接鍵盤打字、Backspace 退格、↑/↓ 歷史指令、Ctrl+C 中斷與滑鼠選取複製貼上。</span>
+          </div>
+        </div>
+      </section>
     </main>
 
     <!-- 底部資訊列 -->
@@ -469,6 +523,8 @@
     </div>
   </div>
 
+  <script src="vendor/xterm.js"></script>
+  <script src="vendor/xterm-addon-fit.js"></script>
   <script src="app.js"></script>
 </body>
 

@@ -48,6 +48,16 @@ const state = {
   memHistory: [],
   netRxHistory: [],
   netTxHistory: [],
+
+  // 沙盒終端機狀態
+  terminalTimer: null,
+  terminalHistory: [],
+  terminalHistoryIndex: -1,
+  terminalIsInitialized: false,
+  terminalInputBuffer: '',
+  currentTerminalEncoding: 'utf-8',
+  xtermInstance: null,
+  fitAddonInstance: null,
 };
 
 // UI 元素快取
@@ -133,6 +143,15 @@ const el = {
   configMetaInfo: document.getElementById('configMetaInfo'),
   txtConfigEditor: document.getElementById('txtConfigEditor'),
 
+  // 沙盒終端機元素
+  terminalScreen: document.getElementById('terminalScreen'),
+  terminalContainer: document.getElementById('terminalContainer'),
+  selectTerminalEncoding: document.getElementById('selectTerminalEncoding'),
+  btnResetTerminal: document.getElementById('btnResetTerminal'),
+  btnClearTerminalCanvas: document.getElementById('btnClearTerminalCanvas'),
+  btnLaunchExternalCmd: document.getElementById('btnLaunchExternalCmd'),
+  btnTermQuicks: document.querySelectorAll('.btn-term-quick'),
+
   // 彈跳視窗與 Toast
   toast: document.getElementById('toast'),
   confirmModal: document.getElementById('confirmModal'),
@@ -214,8 +233,12 @@ const initThemeAndFont = () => {
   const savedTheme = localStorage.getItem('lah_dashboard_theme') || 'dark';
   applyTheme(savedTheme);
 
-  // 輪詢週期：依使用者指示預設為 5000ms (5 秒)
-  const savedInterval = parseInt(localStorage.getItem('lah_dashboard_polling_interval'), 10) || 5000;
+  // 輪詢週期：依使用者指示最低與預設為 5000ms (5 秒)
+  let savedInterval = parseInt(localStorage.getItem('lah_dashboard_polling_interval'), 10) || 5000;
+  if (savedInterval < 5000) {
+    savedInterval = 5000;
+    localStorage.setItem('lah_dashboard_polling_interval', '5000');
+  }
   state.pollingInterval = savedInterval;
   if (el.selectPollingInterval) {
     el.selectPollingInterval.value = String(savedInterval);
@@ -269,7 +292,8 @@ const initApp = async () => {
   // 綁定輪詢時間切換事件
   if (el.selectPollingInterval) {
     el.selectPollingInterval.addEventListener('change', (e) => {
-      const val = parseInt(e.target.value, 10) || 5000;
+      let val = parseInt(e.target.value, 10) || 5000;
+      if (val < 5000) val = 5000;
       state.pollingInterval = val;
       localStorage.setItem('lah_dashboard_polling_interval', String(val));
       if (state.isPolling) {
@@ -575,6 +599,94 @@ const initApp = async () => {
     }
   });
 
+  // ==========================================================================
+  // 沙盒終端機事件綁定 (分頁五 - xterm.js 專業終端)
+  // ==========================================================================
+  if (el.selectTerminalEncoding) {
+    el.selectTerminalEncoding.addEventListener('change', async (e) => {
+      const enc = e.target.value;
+      try {
+        const res = await invoke('terminal_set_encoding', { encoding: enc });
+        state.currentTerminalEncoding = enc;
+        if (res && res.success) {
+          showToast(res.message);
+          if (state.xtermInstance) {
+            state.xtermInstance.writeln(`\r\n\x1b[90m>>> ${res.message}\x1b[0m\r\n`);
+          }
+        }
+      } catch (err) {
+        showToast(`❌ 切換編碼失敗: ${err}`);
+      }
+    });
+  }
+
+  if (el.btnResetTerminal) {
+    el.btnResetTerminal.addEventListener('click', () => {
+      showConfirmModal(
+        '重設沙盒終端 Session 確認',
+        '即將終止目前沙盒終端 Session 並重新建立全新進程。現有運行中之互動命令將被中斷。\n是否確定重設？',
+        async () => {
+          showToast('正在重設沙盒終端 Session...');
+          try {
+            const res = await invoke('terminal_reset_session');
+            if (res && res.success) {
+              if (state.xtermInstance) {
+                state.xtermInstance.clear();
+              }
+              showToast('✓ ' + res.message);
+              pollTerminalOutput();
+            } else {
+              showToast('⚠️ ' + (res ? res.message : '重設失敗'));
+            }
+          } catch (err) {
+            showToast(`❌ 重設失敗: ${err}`);
+          }
+        }
+      );
+    });
+  }
+
+  if (el.btnClearTerminalCanvas) {
+    el.btnClearTerminalCanvas.addEventListener('click', () => {
+      if (state.xtermInstance) {
+        state.xtermInstance.clear();
+      }
+      showToast('✓ 終端機螢幕畫面已清空');
+    });
+  }
+
+  if (el.btnLaunchExternalCmd) {
+    el.btnLaunchExternalCmd.addEventListener('click', async () => {
+      try {
+        const res = await invoke('open_lah_cmd');
+        if (res && res.success) showToast('✓ ' + res.message);
+        else showToast('⚠️ ' + (res ? res.message : '無法開啟終端'));
+      } catch (e) {
+        showToast('❌ 開啟失敗：' + e);
+      }
+    });
+  }
+
+  if (el.btnTermQuicks && el.btnTermQuicks.length > 0) {
+    el.btnTermQuicks.forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const cmd = btn.getAttribute('data-cmd');
+        if (cmd) {
+          runQuickCommand(cmd);
+        }
+      });
+    });
+  }
+
+  // 視窗大小改變時自動調校 xterm 尺寸
+  window.addEventListener('resize', () => {
+    if (state.fitAddonInstance && state.activeTab === 'tab-terminal') {
+      try {
+        state.fitAddonInstance.fit();
+      } catch (_) {}
+    }
+  });
+
   // 初始讀取各項清單與排程輪詢
   await loadAvailableLogsList();
   await refreshAllData();
@@ -594,16 +706,22 @@ const switchTab = (tabId) => {
   });
 
   if (tabId === 'tab-services') {
+    stopTerminalPolling();
     loadSystemServices();
     loadPm2Processes();
   } else if (tabId === 'tab-logs') {
+    stopTerminalPolling();
     fetchLogTail(true);
   } else if (tabId === 'tab-metrics') {
+    stopTerminalPolling();
     loadHostMetrics();
   } else if (tabId === 'tab-configs') {
+    stopTerminalPolling();
     if (state.availableConfigs.length === 0) {
       loadCoreConfigsList();
     }
+  } else if (tabId === 'tab-terminal') {
+    startTerminalSession();
   }
 };
 
@@ -1246,21 +1364,38 @@ const fetchConfigContent = async (filePath) => {
     await loadConfigBackupsList(filePath);
 
     // 檢查是否有同名範本檔 (.env.example 等)
-    const cfgInfo = state.availableConfigs.find((c) => c.path === filePath);
-    const hasExample = cfgInfo ? cfgInfo.has_example : false;
+    const normPath = filePath.toLowerCase().replace(/\//g, '\\');
+    let cfgInfo = state.availableConfigs.find(
+      (c) => c.path && c.path.toLowerCase().replace(/\//g, '\\') === normPath
+    );
+    let hasExample = cfgInfo ? cfgInfo.has_example : false;
+
+    // 若清單中無 (例如自訂挑選之檔案)，主動探測是否有範本檔
+    if (!cfgInfo) {
+      try {
+        const testExample = await invoke('get_config_example_content', { path: filePath });
+        if (testExample !== null && testExample !== undefined) {
+          hasExample = true;
+          state.availableConfigs.push({
+            path: filePath,
+            has_example: true,
+            example_path: filePath + '.example',
+          });
+        }
+      } catch (_) {
+        hasExample = false;
+      }
+    }
+
     state.currentConfigHasExample = hasExample;
 
     if (hasExample) {
       el.btnToggleExampleDiff.classList.remove('hidden');
-      if (state.isExamplePaneOpen) {
-        await loadExampleContent(filePath);
-      }
+      // 只要該組態具有範本檔，自動展開對照窗格並載入範本內容，提供即時參考
+      await toggleExamplePane(true);
     } else {
       el.btnToggleExampleDiff.classList.add('hidden');
-      el.examplePane.classList.add('hidden');
-      state.isExamplePaneOpen = false;
-      el.btnToggleExampleDiff.classList.remove('btn-primary');
-      el.btnToggleExampleDiff.classList.add('btn-secondary');
+      await toggleExamplePane(false);
     }
   } catch (err) {
     el.txtConfigEditor.value = `❌ 無法讀取檔案內容：\n${err}`;
@@ -1269,8 +1404,7 @@ const fetchConfigContent = async (filePath) => {
     state.isConfigDirty = false;
     el.configDirtyFlag.classList.add('hidden');
     el.btnToggleExampleDiff.classList.add('hidden');
-    el.examplePane.classList.add('hidden');
-    state.isExamplePaneOpen = false;
+    await toggleExamplePane(false);
     updateConfigEditorMeta();
   }
 };
@@ -1292,13 +1426,17 @@ const toggleExamplePane = async (open) => {
 };
 
 const loadExampleContent = async (filePath) => {
+  if (!filePath) return;
   try {
     el.txtExampleViewer.value = '正在讀取範本內容...';
     const content = await invoke('get_config_example_content', { path: filePath });
     state.currentExampleContent = content || '';
     el.txtExampleViewer.value = content || '(範本內容為空)';
 
-    const found = state.availableConfigs.find((c) => c.path === filePath);
+    const normTarget = filePath.toLowerCase().replace(/\//g, '\\');
+    const found = state.availableConfigs.find(
+      (c) => c.path && c.path.toLowerCase().replace(/\//g, '\\') === normTarget
+    );
     if (found && found.example_path) {
       const parts = found.example_path.split('\\');
       el.exampleFileName.textContent = parts[parts.length - 1] || '.env.example';
@@ -1306,6 +1444,7 @@ const loadExampleContent = async (filePath) => {
       el.exampleFileName.textContent = '.env.example';
     }
   } catch (err) {
+    console.warn('[範本讀取異常]', err);
     el.txtExampleViewer.value = `❌ 無法讀取範本檔案：\n${err}`;
     state.currentExampleContent = '';
   }
@@ -1474,6 +1613,232 @@ const handlePickCustomConfig = async () => {
     showToast(`✓ 已載入自訂檔案：${pickedPath}`);
   } catch (err) {
     showToast(`❌ 選擇檔案失敗: ${err}`);
+  }
+};
+
+// ==========================================================================
+// 8. 沙盒終端機控制 (分頁五 - xterm.js 專業虛擬終端)
+// ==========================================================================
+const initXterm = () => {
+  if (state.xtermInstance) return;
+  if (!window.Terminal) {
+    console.warn('xterm.js 尚未就緒');
+    return;
+  }
+
+  const term = new window.Terminal({
+    theme: {
+      background: '#030712',
+      foreground: '#f8fafc',
+      cursor: '#22c55e',
+      cursorAccent: '#030712',
+      selectionBackground: 'rgba(14, 165, 233, 0.35)',
+      black: '#1e293b',
+      red: '#ef4444',
+      green: '#22c55e',
+      yellow: '#eab308',
+      blue: '#3b82f6',
+      magenta: '#a855f7',
+      cyan: '#06b6d4',
+      white: '#f8fafc',
+      brightBlack: '#64748b',
+      brightRed: '#f87171',
+      brightGreen: '#4ade80',
+      brightYellow: '#fde047',
+      brightBlue: '#60a5fa',
+      brightMagenta: '#c084fc',
+      brightCyan: '#22d3ee',
+      brightWhite: '#ffffff',
+    },
+    fontFamily: 'Consolas, "Cascadia Code", "Courier New", monospace',
+    fontSize: 14,
+    lineHeight: 1.25,
+    cursorBlink: true,
+    cursorStyle: 'block',
+    scrollback: 5000,
+    convertEol: true,
+  });
+
+  if (window.FitAddon && window.FitAddon.FitAddon) {
+    const fitAddon = new window.FitAddon.FitAddon();
+    term.loadAddon(fitAddon);
+    state.fitAddonInstance = fitAddon;
+  }
+
+  term.open(el.terminalContainer);
+
+  // 鍵盤輸入事件處理 (行編輯模式)
+  term.onData((data) => {
+    handleXtermInput(data);
+  });
+
+  state.xtermInstance = term;
+
+  setTimeout(() => {
+    if (state.fitAddonInstance) state.fitAddonInstance.fit();
+    term.focus();
+  }, 100);
+};
+
+const handleXtermInput = (data) => {
+  const term = state.xtermInstance;
+  if (!term) return;
+
+  switch (data) {
+    case '\r': // Enter
+      term.write('\r\n');
+      const cmd = state.terminalInputBuffer;
+      state.terminalInputBuffer = '';
+      if (cmd.trim().length > 0) {
+        state.terminalHistory.push(cmd);
+        if (state.terminalHistory.length > 50) state.terminalHistory.shift();
+        state.terminalHistoryIndex = -1;
+      }
+      sendTerminalInput(cmd);
+      break;
+
+    case '\u007F': // Backspace (DEL)
+    case '\b': // Backspace
+      if (state.terminalInputBuffer.length > 0) {
+        state.terminalInputBuffer = state.terminalInputBuffer.slice(0, -1);
+        term.write('\b \b');
+      }
+      break;
+
+    case '\u0003': // Ctrl+C
+      term.write('^C\r\n');
+      state.terminalInputBuffer = '';
+      sendTerminalInput('\x03');
+      break;
+
+    case '\u001b[A': // 上箭頭 (歷史上一條)
+      if (state.terminalHistory.length > 0) {
+        if (state.terminalHistoryIndex === -1) {
+          state.terminalHistoryIndex = state.terminalHistory.length - 1;
+        } else if (state.terminalHistoryIndex > 0) {
+          state.terminalHistoryIndex--;
+        }
+        replaceCurrentInput(state.terminalHistory[state.terminalHistoryIndex] || '');
+      }
+      break;
+
+    case '\u001b[B': // 下箭頭 (歷史下一條)
+      if (state.terminalHistoryIndex >= 0) {
+        if (state.terminalHistoryIndex < state.terminalHistory.length - 1) {
+          state.terminalHistoryIndex++;
+          replaceCurrentInput(state.terminalHistory[state.terminalHistoryIndex]);
+        } else {
+          state.terminalHistoryIndex = -1;
+          replaceCurrentInput('');
+        }
+      }
+      break;
+
+    default:
+      // 一般字元鍵入或剪貼簿貼上 (包含中文字元)
+      if (data >= ' ' || data === '\t') {
+        state.terminalInputBuffer += data;
+        term.write(data);
+      }
+      break;
+  }
+};
+
+const replaceCurrentInput = (newText) => {
+  const term = state.xtermInstance;
+  if (!term) return;
+  // 退格清空畫面當前行
+  while (state.terminalInputBuffer.length > 0) {
+    term.write('\b \b');
+    state.terminalInputBuffer = state.terminalInputBuffer.slice(0, -1);
+  }
+  state.terminalInputBuffer = newText;
+  term.write(newText);
+};
+
+const runQuickCommand = (cmd) => {
+  const term = state.xtermInstance;
+  if (term) {
+    // 若畫面有正在打的字，退格清除
+    while (state.terminalInputBuffer.length > 0) {
+      term.write('\b \b');
+      state.terminalInputBuffer = state.terminalInputBuffer.slice(0, -1);
+    }
+    term.write(cmd + '\r\n');
+  }
+  sendTerminalInput(cmd);
+};
+
+const startTerminalSession = async () => {
+  initXterm();
+
+  if (!state.terminalIsInitialized) {
+    try {
+      await invoke('terminal_ensure_started');
+      state.terminalIsInitialized = true;
+    } catch (err) {
+      console.warn('啟動終端失敗：', err);
+    }
+  }
+
+  startTerminalPolling();
+
+  if (state.fitAddonInstance) {
+    setTimeout(() => {
+      try {
+        state.fitAddonInstance.fit();
+      } catch (_) {}
+    }, 80);
+  }
+
+  if (state.xtermInstance) {
+    setTimeout(() => state.xtermInstance.focus(), 120);
+  }
+};
+
+const startTerminalPolling = () => {
+  stopTerminalPolling();
+  // 首次立即獲取目前緩衝區內容
+  pollTerminalOutput();
+
+  // 高頻 100ms 輪詢終端輸出，確保打字回顯即時流暢
+  state.terminalTimer = setInterval(async () => {
+    if (state.activeTab !== 'tab-terminal') {
+      stopTerminalPolling();
+      return;
+    }
+    await pollTerminalOutput();
+  }, 100);
+};
+
+const stopTerminalPolling = () => {
+  if (state.terminalTimer) {
+    clearInterval(state.terminalTimer);
+    state.terminalTimer = null;
+  }
+};
+
+const pollTerminalOutput = async () => {
+  try {
+    const chunk = await invoke('terminal_poll_output');
+    if (chunk && chunk.length > 0) {
+      if (state.xtermInstance) {
+        state.xtermInstance.write(chunk);
+      }
+    }
+  } catch (err) {
+    console.warn('輪詢終端輸出失敗：', err);
+  }
+};
+
+const sendTerminalInput = async (cmd) => {
+  try {
+    await invoke('terminal_send_command', { command: cmd });
+    // 立即排程讀取回顯
+    setTimeout(pollTerminalOutput, 30);
+    setTimeout(pollTerminalOutput, 100);
+  } catch (err) {
+    showToast(`❌ 發送失敗：${err}`);
   }
 };
 

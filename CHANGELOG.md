@@ -6,6 +6,31 @@
 
 ## [未發布]
 
+### 🖥️ 管理儀表板全面升級「xterm.js 專業虛擬終端」與「雙向聯動編碼切換」
+
+- **修改目的**：
+  - 徹底解決原先沙盒終端機卡頓、ANSI 色彩控制碼裸露（`[1m[36m` 等）以及 Windows 原生繁中輸出（CP950）呈現亂碼之問題。
+  - 將終端架構全面升級為業界標準之純離線 `xterm.js` 虛擬終端引擎，支援直接打字鍵入、退格、歷史指令、真彩排版與滑鼠複製貼上。
+  - 支援台灣常用的 UTF-8 與 CP950 (Big5 繁體中文) 即時切換，並自動與底層 `cmd.exe` 代碼頁雙向同步。
+- **具體修改項目**：
+  - **xterm.js 純離線虛擬終端引擎整合**：
+    - 引入本機靜態 UMD 資源（`vendor/xterm.js`、`vendor/xterm.css`、`vendor/xterm-addon-fit.js`），嚴格遵從 No-CDN 離線原則。
+    - 實作完整行編輯模式：支援鍵盤直接打字、Backspace 退格、↑/↓ 瀏覽歷史指令、Ctrl+C 中斷與滑鼠反白複製貼上。
+    - 輪詢頻率提升至 100ms 高頻率，使打字回顯反應敏捷流暢，徹底告別卡頓。
+  - **UTF-8 與 CP950 (Big5) 雙向聯動編碼切換**：
+    - 後端 Rust 採用 Windows 原生 `MultiByteToWideChar` API 分流處理 CodePage 65001 與 950，零額外依賴精準解碼繁體中文。
+    - 工具列提供「編碼：UTF-8 / CP950」即時選單；切換時自動向直譯器注入 `chcp 65001` 或 `chcp 950`，使環境與畫面解碼完全同步。
+  - **核心組態編輯器修復與強化**：
+    - 全域補正 `.hidden { display: none !important; }`，徹底修復右側範本視窗未收合暴露而停留於佔位符之問題。
+    - 當選取具有範本之檔案（`www/.env`、`LAH-NUXTJS/.env`）時，自動展開雙欄對照視窗並即刻載入 `.env.example` 完整內容。
+    - 增強 `find_example_file` 大小寫不敏感比對與 `.sample` 支援；`read_config_file` 加入 UTF-8 BOM 識別與容錯處理。
+  - **SOP 文件與技術手冊全面同步**：
+    - 同步更新 `INSTALLATION.html`、`generate_install_guide_pdf.py`、`generate_readme_html.py`、`tools/dashboard/README.md`。
+    - 重新編譯生成最新版標準公務維運 SOP 指引：`dist/智慧控管系統_系統安裝與維護操作指引.html` 與 `.pdf`。
+- **相容性說明**：
+  - 100% 離線純淨運行，無任何外連 CDN，相容 Windows 7 / 10 / 11 與 Windows Server 全版本。
+
+
 ### ⚙️ 管理儀表板擴充「核心組態編輯器」與「Windows 效能風格系統指標」
 
 - **修改目的**：

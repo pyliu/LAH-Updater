@@ -1165,8 +1165,8 @@ python tools/sms-env-editor/build.py</code>
       <div id="tab-dashboard" class="tab-content">
         <h3 style="color: #38bdf8; margin-bottom: 10px;">智慧控管與監控系統 - 管理儀表板 (dashboard)</h3>
         <p style="font-size: 0.92rem; color: var(--text-light); margin-bottom: 14px;">
-          執行檔產物：<code>dist/智慧控管與監控系統 - 管理儀表板.exe</code> (約 11.20 MB)<br>
-          核心職責：整合 Windows 系統服務監控與控制、PM2 應用進程層控管、動態即時日誌串流檢視（Auto-Tail、關鍵字即時篩選、記事本開啟）、主機資源指標（CPU、RAM、磁碟容量）與五大連接埠（80, 8080, 8081, 8082, 8085）健康探針之全功能原生管理儀表板。
+          執行檔產物：<code>dist/智慧控管與監控系統 - 管理儀表板.exe</code> (約 9.05 MB)<br>
+          核心職責：整合 Windows 系統服務與 PM2 進程控管、動態即時串流日誌、主機資源趨勢圖與服務記憶體排名、五大埠 TCP 健康探針、核心組態編輯器（含安全備份與範本比對），以及 xterm.js 專業沙盒終端之全功能原生維運儀表板。
         </p>
         <div class="grid-2">
           <div>
@@ -1174,7 +1174,9 @@ python tools/sms-env-editor/build.py</code>
             <ul class="project-detail-list">
               <li><strong>雙軌服務控管：</strong>統一管控 Windows 服務層（<code>LAH_Web_Service</code>、<code>LAH_PM2_Service</code>）與 PM2 進程層（<code>LAH-FE</code>、<code>LAH-WSS</code>、<code>LAH-SCHEDULER</code>、<code>lah-api-v85</code>），支援個別啟動/停止/重啟與頂部一鍵全域重啟。</li>
               <li><strong>即時串流日誌：</strong>自動探測全系統各模組日誌，支援 Auto-Tail 動態追蹤、關鍵字即時篩選、清空畫面與以記事本直接開啟實體日誌檔案。</li>
-              <li><strong>指標與健康探針：</strong>主機 CPU 總負載、實體記憶體使用率、安裝磁碟剩餘空間，外加五大連接埠（80, 8080, 8081, 8082, 8085）即時 TCP 心跳檢查。</li>
+              <li><strong>指標與健康探針：</strong>主機 CPU 總負載與記憶體 60 秒趨勢折線圖、雙向網路流量圖、LAH 服務群組記憶體占用排名卡片，外加五大連接埠（80, 8080, 8081, 8082, 8085）即時 TCP 心跳檢查。</li>
+              <li><strong>核心組態編輯器：</strong>免翻目錄直接編輯 Apache、PHP、環境變數 <code>.env</code> 與 Winsw xml，具備自動時間戳備份、一鍵還原、Apache 語法預檢防呆，以及 <code>.env.example</code> 雙欄範本即時比對。</li>
+              <li><strong>沙盒終端機：</strong>內建純離線 xterm.js 專業虛擬終端與 Node 16 / PM2 / Apache 2.4 / OCI 私有環境。支援直接鍵盤鍵入、歷史指令、快捷工具列，以及 UTF-8 與 CP950 (Big5 繁體中文) 雙向聯動編碼切換。</li>
               <li><strong>快捷維運箱：</strong>一鍵喚醒 <code>lah-cmd.bat</code> 沙盒終端、前端入口、Apache 組態語法驗證（<code>httpd -t</code>）與日誌目錄。</li>
             </ul>
           </div>

@@ -797,7 +797,7 @@
         <tr>
           <td><strong>智慧控管與監控系統 - 管理儀表板.exe</strong></td>
           <td><span class="badge badge-req">專屬維運</span></td>
-          <td>專屬單一執行檔原生儀表板！更新完成自動同步至根目錄並建立桌面捷徑；整合系統服務、PM2 進程控制、Auto-Tail 動態日誌、資源指標與通訊埠探針。</td>
+          <td>專屬單一執行檔原生儀表板！更新完成自動同步至根目錄並建立桌面捷徑；整合服務監控控制、Auto-Tail 動態日誌、資源效能即時折線圖與服務記憶體排名、核心組態編輯器（含語法檢驗、自動備份與範本比對），以及 xterm.js 專業沙盒終端（含 UTF-8/CP950 編碼切換）。</td>
         </tr>
         <tr>
           <td><strong>地籍異動簡訊參數設定工具.exe</strong></td>
@@ -1164,9 +1164,11 @@
     <h3>🖥️ 一站式維運管理儀表板驗證 (LAH-Dashboard)</h3>
     <ol style="margin: 2px 0 6px 16px; padding: 0; line-height: 1.6;">
       <li>更新完成後，可直接於更新完成對話框點擊 <strong>「📊 開啟管理儀表板」</strong>，或雙擊桌面捷徑 <strong>「智慧控管與監控系統 - 管理儀表板」</strong>。</li>
-      <li><strong>服務監控（分頁一）：</strong>確認 Windows 系統服務層 (<code>LAH_Web_Service</code>、<code>LAH_PM2_Service</code>) 與 PM2 應用進程層 (<code>LAH-FE</code>、<code>LAH-WSS</code>、<code>LAH-SCHEDULER</code>、<code>lah-api-v85</code>) 全數呈現綠燈 <strong>[運行中]</strong>。</li>
-      <li><strong>動態日誌（分頁二）：</strong>各受管進程支援即時串流日誌 (Auto-Tail)，亦可於記事本中直接開啟實體日誌檔案。</li>
-      <li><strong>系統指標與探針（分頁三）：</strong>提供即時 CPU 負載、實體記憶體用量、磁碟空間與五大通訊埠 (80, 8080, 8081, 8082, 8085) 即時 TCP 心跳探針，秒級掌握主機健康。</li>
+      <li><strong>服務監控（分頁一）：</strong>確認 Windows 系統服務層 (<code>LAH_Web_Service</code>、<code>LAH_PM2_Service</code>) 與 PM2 應用進程層 (<code>LAH-FE</code>、<code>LAH-WSS</code>、<code>LAH-SCHEDULER</code>、<code>lah-api-v85</code>) 全數呈現綠燈 <strong>[運行中]</strong>。支援頂部「一鍵重啟全部」，並提供脈衝輪詢即時呈現重啟進度。</li>
+      <li><strong>動態日誌（分頁二）：</strong>各受管進程支援即時串流日誌 (Auto-Tail)，支援關鍵字即時篩選，亦可一鍵以 Windows 記事本開啟實體日誌檔案。</li>
+      <li><strong>系統指標與探針（分頁三）：</strong>提供 60 秒 CPU / 記憶體負載趨勢折線圖、網路雙向傳輸流量圖、LAH 服務群組記憶體占用排名卡片、磁碟空間與五大通訊埠 (80, 8080, 8081, 8082, 8085) 即時 TCP 心跳探針。</li>
+      <li><strong>核心組態編輯器（分頁四）：</strong>免進檔案總管翻找，直接檢視與編輯 Apache (<code>httpd.conf</code> / <code>httpd-vhosts.conf</code>)、PHP (<code>php.ini</code>)、後端 API (<code>www/.env</code>) 與前端 (<code>LAH-NUXTJS/.env</code>) 等設定。具備自動時間戳備份、一鍵還原、Apache 語法預檢防呆，以及 <code>.env.example</code> 雙欄範本即時比對。</li>
+      <li><strong>沙盒終端機（分頁五）：</strong>內建純離線 xterm.js 專業虛擬終端與 Node 16 / PM2 / Apache 2.4 / OCI 私有環境。支援直接打字、鍵盤退格、歷史指令、快捷常用指令，以及「UTF-8」與「CP950 (Big5 繁體中文)」雙向聯動編碼切換。</li>
     </ol>
 
     <h3>🌐 瀏覽器實機端點驗證標準</h3>
