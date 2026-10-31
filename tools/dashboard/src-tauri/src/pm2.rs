@@ -9,6 +9,10 @@ use std::os::windows::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+use std::sync::mpsc;
+use std::thread;
+use std::time::Duration;
+
 pub fn resolve_pm2_cmd(root_dir: &Path) -> Option<PathBuf> {
     let cand = root_dir.join("node").join("pm2.cmd");
     if cand.is_file() {
@@ -18,6 +22,10 @@ pub fn resolve_pm2_cmd(root_dir: &Path) -> Option<PathBuf> {
 }
 
 pub fn run_pm2_command(root_dir: &Path, args: &[&str]) -> (bool, String, String) {
+    run_pm2_command_with_timeout(root_dir, args, Duration::from_secs(8))
+}
+
+pub fn run_pm2_command_with_timeout(root_dir: &Path, args: &[&str], timeout: Duration) -> (bool, String, String) {
     let Some(pm2_cmd) = resolve_pm2_cmd(root_dir) else {
         return (
             false,
@@ -37,22 +45,41 @@ pub fn run_pm2_command(root_dir: &Path, args: &[&str]) -> (bool, String, String)
         current_path
     );
 
-    let mut cmd = Command::new("cmd.exe");
-    cmd.arg("/C").arg(&pm2_cmd);
-    for arg in args {
-        cmd.arg(arg);
-    }
-    cmd.env("PM2_HOME", &pm2_home);
-    cmd.env("PATH", &unified_path);
-    cmd.creation_flags(CREATE_NO_WINDOW);
+    let (tx, rx) = mpsc::channel();
+    let pm2_cmd_str = pm2_cmd.to_string_lossy().to_string();
+    let args_vec: Vec<String> = args.iter().map(|s| s.to_string()).collect();
 
-    match cmd.output() {
-        Ok(output) => {
+    let _handle = thread::spawn(move || {
+        let mut cmd = Command::new("cmd.exe");
+        cmd.arg("/C").arg(&pm2_cmd_str);
+        for arg in &args_vec {
+            cmd.arg(arg);
+        }
+        cmd.env("PM2_HOME", &pm2_home);
+        cmd.env("PATH", &unified_path);
+        cmd.creation_flags(CREATE_NO_WINDOW);
+
+        let res = cmd.output();
+        let _ = tx.send(res);
+    });
+
+    match rx.recv_timeout(timeout) {
+        Ok(Ok(output)) => {
             let stdout = String::from_utf8_lossy(&output.stdout).to_string();
             let stderr = String::from_utf8_lossy(&output.stderr).to_string();
             (output.status.success(), stdout, stderr)
         }
-        Err(e) => (false, String::new(), e.to_string()),
+        Ok(Err(e)) => (false, String::new(), e.to_string()),
+        Err(mpsc::RecvTimeoutError::Timeout) => {
+            (
+                false,
+                String::new(),
+                format!("PM2 指令 [pm2 {:?}] 執行逾時 (未在 {} 秒內完成回應)", args, timeout.as_secs()),
+            )
+        }
+        Err(mpsc::RecvTimeoutError::Disconnected) => {
+            (false, String::new(), "執行緒異常中斷".to_string())
+        }
     }
 }
 
@@ -131,7 +158,8 @@ pub fn query_pm2_processes(root_dir: &Path) -> Result<Vec<Pm2ProcessInfo>, Strin
 }
 
 pub fn pm2_restart(root_dir: &Path, target: &str) -> Result<String, String> {
-    let (ok, stdout, stderr) = run_pm2_command(root_dir, &["restart", target]);
+    let timeout = if target == "all" { Duration::from_secs(15) } else { Duration::from_secs(8) };
+    let (ok, stdout, stderr) = run_pm2_command_with_timeout(root_dir, &["restart", target], timeout);
     if ok {
         Ok(format!("PM2 重啟指令 [{}] 已成功送出！", target))
     } else {

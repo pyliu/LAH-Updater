@@ -1,23 +1,46 @@
 use crate::types::SystemServiceStatus;
 use std::os::windows::process::CommandExt;
 use std::process::Command;
-use std::thread::sleep;
+use std::sync::mpsc;
+use std::thread::{self, sleep};
 use std::time::Duration;
 
 pub const CREATE_NO_WINDOW: u32 = 0x08000000;
 
 pub fn run_cmd_hidden(cmd: &str, args: &[&str]) -> (bool, String, String) {
-    let mut command = Command::new(cmd);
-    command.args(args);
-    command.creation_flags(CREATE_NO_WINDOW);
+    run_cmd_hidden_with_timeout(cmd, args, Duration::from_secs(8))
+}
 
-    match command.output() {
-        Ok(output) => {
+pub fn run_cmd_hidden_with_timeout(cmd: &str, args: &[&str], timeout: Duration) -> (bool, String, String) {
+    let (tx, rx) = mpsc::channel();
+    let cmd_str = cmd.to_string();
+    let args_vec: Vec<String> = args.iter().map(|s| s.to_string()).collect();
+
+    let _handle = thread::spawn(move || {
+        let mut command = Command::new(&cmd_str);
+        command.args(&args_vec);
+        command.creation_flags(CREATE_NO_WINDOW);
+        let res = command.output();
+        let _ = tx.send(res);
+    });
+
+    match rx.recv_timeout(timeout) {
+        Ok(Ok(output)) => {
             let stdout = String::from_utf8_lossy(&output.stdout).to_string();
             let stderr = String::from_utf8_lossy(&output.stderr).to_string();
             (output.status.success(), stdout, stderr)
         }
-        Err(e) => (false, String::new(), e.to_string()),
+        Ok(Err(e)) => (false, String::new(), e.to_string()),
+        Err(mpsc::RecvTimeoutError::Timeout) => {
+            (
+                false,
+                String::new(),
+                format!("指令 [{} {:?}] 執行逾時 (未在 {} 秒內完成回應)", cmd, args, timeout.as_secs()),
+            )
+        }
+        Err(mpsc::RecvTimeoutError::Disconnected) => {
+            (false, String::new(), "執行緒異常中斷".to_string())
+        }
     }
 }
 

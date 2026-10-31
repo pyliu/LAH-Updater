@@ -183,6 +183,9 @@ where
     // 確保各子專案 .env 基礎設定檔齊備
     ensure_default_env_files(&root_path, &log_event);
 
+    // 確保 logs/api 日誌目錄存在並平移既有 www/log 歷史日誌
+    migrate_legacy_www_logs(&root_path, &log_event);
+
     // 步驟 3：備份檔還原
     if options.restore_backup {
         let b_path = PathBuf::from(&options.backup_zip_path);
@@ -370,6 +373,7 @@ where
 
     // 2. 確保環境檔存在
     ensure_default_env_files(&root_path, &log_event);
+    migrate_legacy_www_logs(&root_path, &log_event);
 
     // 3. 配置 PHP 7.4 與 Apache mod_php
     if php7_tgt.is_dir() {
@@ -482,5 +486,39 @@ where
         error_message: None,
         dashboard_deployed,
         dashboard_exe_path: dashboard_exe.map(|p| p.to_string_lossy().to_string()),
+    }
+}
+
+fn migrate_legacy_www_logs(root_path: &Path, log_event: &dyn Fn(&str, &str)) {
+    let api_logs_dir = root_path.join("logs").join("api");
+    let old_logs_dir = root_path.join("www").join("log");
+
+    if old_logs_dir.is_dir() {
+        if let Err(e) = fs::create_dir_all(&api_logs_dir) {
+            log_event(&format!("⚠️ 建立日誌目錄失敗 [{api_logs_dir:?}]: {e}"), "warning");
+            return;
+        }
+
+        if let Ok(entries) = fs::read_dir(&old_logs_dir) {
+            let mut moved_count = 0;
+            for entry in entries.flatten() {
+                let p = entry.path();
+                if p.is_file() {
+                    let fname = entry.file_name();
+                    let target = api_logs_dir.join(&fname);
+                    if !target.exists() {
+                        if fs::rename(&p, &target).is_ok() {
+                            moved_count += 1;
+                        }
+                    }
+                }
+            }
+            if moved_count > 0 {
+                log_event(&format!("  ✓ 已將 {moved_count} 個歷史業務日誌自 www/log 平移至 logs/api"), "success");
+            }
+            let _ = fs::remove_dir(&old_logs_dir);
+        }
+    } else {
+        let _ = fs::create_dir_all(&api_logs_dir);
     }
 }

@@ -70,13 +70,7 @@ pub fn list_available_logs(root_dir: &Path) -> Vec<LogFileInfo> {
     let logs_dir = root_dir.join("logs");
     let pm2_logs_dir = root_dir.join(".pm2").join("logs");
     let apache_logs_dir = root_dir.join("Apache24").join("logs");
-    let www_logs_dir = if root_dir.join("www").join("log").is_dir() {
-        root_dir.join("www").join("log")
-    } else if root_dir.join("LAH-API").join("www").join("log").is_dir() {
-        root_dir.join("LAH-API").join("www").join("log")
-    } else {
-        root_dir.join("www").join("log")
-    };
+    let api_logs_dir = logs_dir.join("api");
 
     let before_api_targets = [
         ("fe_out", "LAH-FE 前端標準輸出", &logs_dir, "fe_out", ".log"),
@@ -187,24 +181,24 @@ pub fn list_available_logs(root_dir: &Path) -> Vec<LogFileInfo> {
         result.push(build_log_info(key.to_string(), label.to_string(), path_str, exists));
     }
 
-    // 2. LAH-API 核心業務日誌 (www\log)
-    let www_log_files = find_all_matching_files(&www_logs_dir, "", ".log");
-    if www_log_files.is_empty() {
-        let fallback_path = www_logs_dir.join(format!("log-{}.log", Local::now().format("%Y-%m-%d")));
+    // 2. LAH-API 核心業務日誌 (logs\api)
+    let api_log_files = find_all_matching_files(&api_logs_dir, "", ".log");
+    if api_log_files.is_empty() {
+        let fallback_path = api_logs_dir.join(format!("log-{}.log", Local::now().format("%Y-%m-%d")));
         result.push(build_log_info(
             "api_www_log".to_string(),
-            "LAH-API 核心業務日誌 (www\\log)".to_string(),
+            "LAH-API 核心業務日誌 (logs\\api)".to_string(),
             fallback_path.to_string_lossy().to_string(),
             false,
         ));
     } else {
         // 最多納入最新 5 筆日誌檔案（通常為今天與最近數日）
-        for (idx, p) in www_log_files.into_iter().take(5).enumerate() {
+        for (idx, p) in api_log_files.into_iter().take(5).enumerate() {
             let file_name = p.file_name().and_then(|n| n.to_str()).unwrap_or("log.log");
             let label = if idx == 0 {
-                format!("LAH-API 核心業務日誌 (www\\log: 最新 {})", file_name)
+                format!("LAH-API 核心業務日誌 (logs\\api: 最新 {})", file_name)
             } else {
-                format!("LAH-API 歷史業務日誌 (www\\log: {})", file_name)
+                format!("LAH-API 歷史業務日誌 (logs\\api: {})", file_name)
             };
 
             let path_str = p.to_string_lossy().to_string();

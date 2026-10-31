@@ -3,9 +3,9 @@
  * 100% 純原生 JavaScript，零外連依賴，Tauri 2 IPC 橋接
  */
 
-// 安全調用 Tauri 2 API
-const invoke = async (cmd, args = {}) => {
-  try {
+// 安全調用 Tauri 2 API (附帶 8 秒防死當熔斷超時機制)
+const invoke = async (cmd, args = {}, timeoutMs = 8000) => {
+  const invokePromise = (async () => {
     if (window.__TAURI__ && window.__TAURI__.core && window.__TAURI__.core.invoke) {
       return await window.__TAURI__.core.invoke(cmd, args);
     }
@@ -14,7 +14,30 @@ const invoke = async (cmd, args = {}) => {
     }
     console.warn('[IPC] Tauri 環境尚未就緒：', cmd, args);
     return null;
+  })();
+
+  if (!timeoutMs || timeoutMs <= 0) {
+    try {
+      return await invokePromise;
+    } catch (err) {
+      console.error(`[IPC Error] 指令 [${cmd}] 執行失敗:`, err);
+      throw err;
+    }
+  }
+
+  let timer = null;
+  const timeoutPromise = new Promise((_, reject) => {
+    timer = setTimeout(() => {
+      reject(new Error(`指令 [${cmd}] 探測逾時 (超過 ${timeoutMs / 1000} 秒未回應)`));
+    }, timeoutMs);
+  });
+
+  try {
+    const res = await Promise.race([invokePromise, timeoutPromise]);
+    clearTimeout(timer);
+    return res;
   } catch (err) {
+    clearTimeout(timer);
     console.error(`[IPC Error] 指令 [${cmd}] 執行失敗:`, err);
     throw err;
   }
@@ -264,10 +287,35 @@ const applyTheme = (theme) => {
 };
 
 // ==========================================================================
-// 1. 初始化與安裝根目錄載入
+// 1. 初始化與安裝根目錄載入 (含初次啟動微霧載入遮罩管理)
 // ==========================================================================
+let isInitialLoadingDismissed = false;
+
+const hideInitialLoadingOverlay = () => {
+  if (isInitialLoadingDismissed) return;
+  isInitialLoadingDismissed = true;
+  const overlay = document.getElementById('initialLoadingOverlay');
+  if (overlay) {
+    overlay.classList.add('fade-out');
+    setTimeout(() => {
+      overlay.classList.add('hidden');
+    }, 380);
+  }
+};
+
 const initApp = async () => {
   initThemeAndFont();
+
+  // 安全超時防護 (8 秒)：若後端探測逾時未完成，自動淡出遮罩並提示
+  const safetyTimeout = setTimeout(() => {
+    if (!isInitialLoadingDismissed) {
+      console.warn('[Init] 初始探測超過 8 秒，觸發安全淡出遮罩');
+      hideInitialLoadingOverlay();
+      showToast('⚠️ 首次服務探測較久，已轉為背景探測模式');
+    }
+  }, 8000);
+
+  try {
 
   // 綁定字體切換事件
   if (el.selectFontScale) {
@@ -353,26 +401,17 @@ const initApp = async () => {
       '一鍵重啟全部服務確認',
       '即將重新啟動底層 Apache 系統服務 (LAH_Web_Service) 與所有 PM2 應用進程（前端、即時通、排程與 FastCGI）。是否確定執行？',
       async () => {
-        showToast('正在執行全域服務重啟...');
-        // 第 0 毫秒視覺即時回饋：所有狀態切換為重啟態
-        setAllServicesRestartingVisual();
-
-        try {
-          const res = await invoke('restart_all_services');
-          if (res && res.success) {
-            showToast('✓ 重啟指令已送出，正在密集追蹤進程狀態...');
-          } else {
-            showToast(`⚠️ 重啟警示：${res ? res.message : '未知狀態'}`);
-          }
-          // 啟動 8 秒密集衝刺探測 (每 1.5 秒更新一次)
-          triggerBurstPolling(8000, 1500);
-        } catch (e) {
-          showToast(`❌ 重啟失敗: ${e}`);
-          await refreshAllData();
-        }
+        await executeRestartAllPipeline();
       }
     );
   });
+
+  const btnRestartClose = document.getElementById('btnRestartCloseOverlay');
+  if (btnRestartClose) {
+    btnRestartClose.addEventListener('click', () => {
+      hideRestartProgressOverlay();
+    });
+  }
 
   // 快捷維運工具箱
   el.btnLaunchSandboxCmd.addEventListener('click', async () => {
@@ -703,10 +742,16 @@ const initApp = async () => {
     }
   });
 
-  // 初始讀取各項清單與排程輪詢
-  await loadAvailableLogsList();
-  await refreshAllData();
-  startPollingScheduler();
+    // 初始讀取各項清單與首次探測
+    await loadAvailableLogsList();
+    await refreshAllData();
+    startPollingScheduler();
+  } catch (err) {
+    console.error('[Init] 初始化過程發生異常：', err);
+  } finally {
+    clearTimeout(safetyTimeout);
+    hideInitialLoadingOverlay();
+  }
 };
 
 // ==========================================================================
@@ -780,7 +825,11 @@ const loadSystemServices = async () => {
     });
     el.systemServicesTableBody.innerHTML = html;
   } catch (err) {
-    el.systemServicesTableBody.innerHTML = `<tr><td colspan="4" class="text-center loading-row text-danger">讀取系統服務失敗：${err}</td></tr>`;
+    console.error('讀取系統服務失敗：', err);
+    el.systemServicesTableBody.innerHTML = `<tr><td colspan="4" class="text-center loading-row text-danger" style="padding: 1.25rem;">⚠️ 探測後端系統服務逾時或失敗 (8秒防死當機制) <button class="btn btn-primary btn-sm" style="margin-left: 0.75rem; padding: 2px 10px;" onclick="loadSystemServices()">立即重試</button></td></tr>`;
+    if (el.footerStatusText) {
+      el.footerStatusText.textContent = '⚠️ 探測系統服務逾時';
+    }
   }
 };
 
@@ -860,7 +909,11 @@ const loadPm2Processes = async () => {
     });
     el.pm2TableBody.innerHTML = html;
   } catch (err) {
-    el.pm2TableBody.innerHTML = `<tr><td colspan="8" class="text-center loading-row text-danger">讀取 PM2 進程失敗：${err}</td></tr>`;
+    console.error('讀取 PM2 進程失敗：', err);
+    el.pm2TableBody.innerHTML = `<tr><td colspan="8" class="text-center loading-row text-danger" style="padding: 1.25rem;">⚠️ 探測後端 PM2 進程逾時或失敗 (8秒防死當機制) <button class="btn btn-primary btn-sm" style="margin-left: 0.75rem; padding: 2px 10px;" onclick="loadPm2Processes()">立即重試</button></td></tr>`;
+    if (el.footerStatusText) {
+      el.footerStatusText.textContent = '⚠️ 探測 PM2 進程逾時';
+    }
   }
 };
 
@@ -1310,6 +1363,171 @@ const triggerBurstPolling = (totalMs = 8000, intervalMs = 1500) => {
       showToast('✓ 服務狀態已全面恢復上線');
     }
   }, intervalMs);
+};
+
+// ==========================================================================
+// 全系統服務重啟進度遮罩與步驟檢核管線
+// ==========================================================================
+const setRestartStepStatus = (stepIndex, status, customText = '') => {
+  const item = document.getElementById(`restartStepItem${stepIndex}`);
+  const icon = document.getElementById(`stepIcon${stepIndex}`);
+  if (!item || !icon) return;
+
+  item.className = `restart-step-item ${status}`;
+  if (status === 'pending') {
+    icon.textContent = '⏳';
+  } else if (status === 'running') {
+    icon.textContent = '🔄';
+  } else if (status === 'success') {
+    icon.textContent = '✓';
+  } else if (status === 'error') {
+    icon.textContent = '❌';
+  }
+
+  if (customText) {
+    const subtitle = document.getElementById('restartModalSubtitle');
+    if (subtitle) subtitle.textContent = customText;
+  }
+};
+
+const showRestartProgressOverlay = () => {
+  const overlay = document.getElementById('restartProgressOverlay');
+  if (!overlay) return;
+
+  setRestartStepStatus(1, 'pending');
+  setRestartStepStatus(2, 'pending');
+  setRestartStepStatus(3, 'pending');
+
+  const title = document.getElementById('restartModalTitle');
+  const subtitle = document.getElementById('restartModalSubtitle');
+  const errorActions = document.getElementById('restartErrorActions');
+
+  if (title) {
+    title.textContent = '全系統服務重啟中';
+    title.style.color = '';
+  }
+  if (subtitle) subtitle.textContent = '正在循序重啟底層服務與應用進程，請稍候...';
+  if (errorActions) errorActions.classList.add('hidden');
+
+  overlay.classList.remove('fade-out', 'hidden');
+};
+
+const hideRestartProgressOverlay = () => {
+  const overlay = document.getElementById('restartProgressOverlay');
+  if (!overlay) return;
+  overlay.classList.add('fade-out');
+  setTimeout(() => {
+    overlay.classList.add('hidden');
+  }, 380);
+};
+
+const executeRestartAllPipeline = async () => {
+  showRestartProgressOverlay();
+  setAllServicesRestartingVisual();
+
+  try {
+    // 步驟 1：重新啟動 PM2 應用進程層
+    setRestartStepStatus(1, 'running', '步驟 1/3：正在重啟 PM2 應用進程群 (FE, WSS, 排程, FastCGI)...');
+    try {
+      const pm2Res = await invoke('restart_pm2_process', { target: 'all' }, 20000);
+      if (pm2Res && !pm2Res.success) {
+        throw new Error(pm2Res.message || 'PM2 重啟失敗');
+      }
+      setRestartStepStatus(1, 'success');
+    } catch (err) {
+      setRestartStepStatus(1, 'error', `⚠️ PM2 重啟異常：${err}`);
+      handleRestartError(`PM2 進程重啟異常：${err}`);
+      return;
+    }
+
+    // 步驟 2：重新啟動 Apache 2.4 系統閘道 (LAH_Web_Service)
+    setRestartStepStatus(2, 'running', '步驟 2/3：正在重啟 Apache 2.4 系統服務 (LAH_Web_Service)...');
+    try {
+      const apacheRes = await invoke('restart_system_service', { name: 'LAH_Web_Service' }, 20000);
+      if (apacheRes && !apacheRes.success) {
+        throw new Error(apacheRes.message || 'Apache 重啟失敗');
+      }
+      setRestartStepStatus(2, 'success');
+    } catch (err) {
+      setRestartStepStatus(2, 'error', `⚠️ Apache 服務重啟異常：${err}`);
+      handleRestartError(`Apache 系統服務重啟異常：${err}`);
+      return;
+    }
+
+    // 步驟 3：追蹤探測所有服務在線就緒狀態
+    setRestartStepStatus(3, 'running', '步驟 3/3：正在密集探測各項服務與進程在線綠燈狀態...');
+
+    let allOnline = false;
+    let lastUnreadyName = '';
+
+    for (let attempt = 1; attempt <= 12; attempt++) {
+      await new Promise((r) => setTimeout(r, 1000));
+      await refreshAllData();
+
+      let svcs = [];
+      try {
+        svcs = await invoke('get_system_services');
+      } catch (_) {}
+      const apacheSvc = (svcs || []).find((s) => s.name === 'LAH_Web_Service');
+      const isApacheOk = apacheSvc ? apacheSvc.is_running : true;
+
+      let procs = [];
+      try {
+        procs = await invoke('get_pm2_processes');
+      } catch (_) {}
+
+      let isPm2Ok = true;
+      if (!procs || procs.length === 0) {
+        isPm2Ok = false;
+        lastUnreadyName = 'PM2 尚未回傳進程列表';
+      } else {
+        for (const p of procs) {
+          if (p.status !== 'online') {
+            isPm2Ok = false;
+            lastUnreadyName = `${p.name} (${p.status})`;
+            break;
+          }
+        }
+      }
+
+      if (isApacheOk && isPm2Ok) {
+        allOnline = true;
+        break;
+      }
+    }
+
+    if (allOnline) {
+      setRestartStepStatus(3, 'success', '✓ 全系統服務已順利重啟並全數在線！');
+      const title = document.getElementById('restartModalTitle');
+      if (title) {
+        title.textContent = '✓ 全域服務已全數成功上線';
+        title.style.color = '#10b981';
+      }
+      // 依使用者指示：自動停留 0.8 秒確認後淡出
+      await new Promise((r) => setTimeout(r, 800));
+      hideRestartProgressOverlay();
+      showToast('✓ 全系統服務已全面恢復在線運作！');
+    } else {
+      setRestartStepStatus(3, 'error', `⚠️ 部分服務尚未就緒：${lastUnreadyName}`);
+      handleRestartError(`部分服務尚未就緒 (${lastUnreadyName})，請檢視日誌確認。`);
+    }
+  } catch (globalErr) {
+    handleRestartError(`重啟程序發生未預期異常：${globalErr}`);
+  }
+};
+
+const handleRestartError = (errMsg) => {
+  const subtitle = document.getElementById('restartModalSubtitle');
+  const errorActions = document.getElementById('restartErrorActions');
+  const title = document.getElementById('restartModalTitle');
+  if (title) {
+    title.textContent = '⚠️ 服務重啟未完全就緒';
+    title.style.color = '#ef4444';
+  }
+  if (subtitle) subtitle.textContent = errMsg;
+  if (errorActions) errorActions.classList.remove('hidden');
+  showToast(`⚠️ ${errMsg}`);
+  refreshAllData();
 };
 
 const setAllServicesRestartingVisual = () => {

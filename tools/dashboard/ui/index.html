@@ -511,6 +511,21 @@
     </footer>
   </div>
 
+  <!-- 初次啟動全螢幕載入遮罩 (待後端探測完成後平滑淡出) -->
+  <div id="initialLoadingOverlay" class="loading-overlay">
+    <div class="loading-card">
+      <div class="loading-spinner-box">
+        <div class="loading-spinner-ring"></div>
+        <span class="loading-logo-icon">⚡</span>
+      </div>
+      <h3 class="loading-title">智慧控管與監控系統</h3>
+      <p class="loading-subtitle" id="loadingStatusText">正在探測 Windows 服務與 PM2 進程狀態，請稍候...</p>
+      <div class="loading-bar-track">
+        <div class="loading-bar-indeterminate"></div>
+      </div>
+    </div>
+  </div>
+
   <!-- 全域訊息提示 Toast -->
   <div id="toast" class="toast"></div>
 
@@ -522,6 +537,54 @@
       <div class="modal-actions">
         <button class="btn btn-secondary" id="btnModalCancel">取消</button>
         <button class="btn btn-primary" id="btnModalConfirm">確定執行</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 全系統服務重啟進度遮罩 (三步驟即時檢核) -->
+  <div id="restartProgressOverlay" class="loading-overlay restart-overlay hidden">
+    <div class="loading-card restart-card">
+      <div class="loading-spinner-box" id="restartSpinnerBox">
+        <div class="loading-spinner-ring" id="restartSpinnerRing"></div>
+        <span class="loading-logo-icon" id="restartHeaderIcon">🔄</span>
+      </div>
+      <h3 class="loading-title" id="restartModalTitle">全系統服務重啟中</h3>
+      <p class="loading-subtitle" id="restartModalSubtitle">正在循序重啟底層服務與應用進程，請稍候...</p>
+
+      <!-- 三步驟檢核清單 -->
+      <div class="restart-steps-box">
+        <div class="restart-step-item pending" id="restartStepItem1">
+          <div class="step-icon-wrap" id="stepIcon1">⏳</div>
+          <div class="step-text-wrap">
+            <span class="step-name">重啟 PM2 應用進程層</span>
+            <span class="step-desc">前端網站、即時通、排程與 FastCGI 核心</span>
+          </div>
+        </div>
+
+        <div class="restart-step-item pending" id="restartStepItem2">
+          <div class="step-icon-wrap" id="stepIcon2">⏳</div>
+          <div class="step-text-wrap">
+            <span class="step-name">重啟 Apache 2.4 系統閘道</span>
+            <span class="step-desc">WinSW 系統服務 (LAH_Web_Service)</span>
+          </div>
+        </div>
+
+        <div class="restart-step-item pending" id="restartStepItem3">
+          <div class="step-icon-wrap" id="stepIcon3">⏳</div>
+          <div class="step-text-wrap">
+            <span class="step-name">追蹤探測所有服務在線</span>
+            <span class="step-desc">驗證連接埠與全進程綠燈就緒</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="loading-bar-track mt-3" id="restartProgressTrack">
+        <div class="loading-bar-indeterminate" id="restartProgressBar"></div>
+      </div>
+
+      <!-- 錯誤時顯示的關閉按鈕 -->
+      <div class="restart-error-actions hidden" id="restartErrorActions">
+        <button class="btn btn-warning btn-sm" id="btnRestartCloseOverlay">關閉並檢視日誌</button>
       </div>
     </div>
   </div>

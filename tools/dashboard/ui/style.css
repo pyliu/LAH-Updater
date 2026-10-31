@@ -1508,6 +1508,253 @@ body {
 }
 
 /* ==========================================================================
+   初次啟動全螢幕載入遮罩
+   ========================================================================== */
+.loading-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background-color: rgba(15, 23, 42, 0.88);
+  backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  opacity: 1;
+  visibility: visible;
+  transition: opacity 0.35s ease, visibility 0.35s ease;
+}
+
+[data-theme='light'] .loading-overlay {
+  background-color: rgba(248, 250, 252, 0.88);
+}
+
+.loading-overlay.fade-out {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.loading-overlay.hidden {
+  display: none !important;
+}
+
+.loading-card {
+  width: 360px;
+  max-width: 90vw;
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-light);
+  border-radius: 14px;
+  padding: 28px 24px;
+  box-shadow: 0 20px 48px rgba(0, 0, 0, 0.4);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.loading-spinner-box {
+  position: relative;
+  width: 64px;
+  height: 64px;
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.loading-spinner-ring {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  border: 3px solid rgba(14, 165, 233, 0.15);
+  border-top-color: var(--primary);
+  border-right-color: var(--primary);
+  border-radius: 50%;
+  animation: loadingSpin 0.9s cubic-bezier(0.55, 0.15, 0.45, 0.85) infinite;
+}
+
+@keyframes loadingSpin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.loading-logo-icon {
+  font-size: 26px;
+  animation: pulseLogo 1.8s ease-in-out infinite;
+}
+
+@keyframes pulseLogo {
+  0%, 100% { transform: scale(1); opacity: 0.9; }
+  50% { transform: scale(1.15); opacity: 1; }
+}
+
+.loading-title {
+  font-size: calc(16px * var(--font-scale));
+  font-weight: 700;
+  color: var(--text-main);
+  margin-bottom: 8px;
+  letter-spacing: 0.5px;
+}
+
+.loading-subtitle {
+  font-size: calc(12.5px * var(--font-scale));
+  color: var(--text-muted);
+  line-height: 1.5;
+  margin-bottom: 18px;
+}
+
+.loading-bar-track {
+  width: 100%;
+  height: 4px;
+  background-color: rgba(128, 128, 128, 0.18);
+  border-radius: 2px;
+  overflow: hidden;
+  position: relative;
+}
+
+.loading-bar-indeterminate {
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  background: linear-gradient(90deg, transparent, var(--primary), var(--primary-hover), transparent);
+  animation: loadingIndeterminate 1.5s cubic-bezier(0.65, 0.815, 0.735, 0.395) infinite;
+  width: 50%;
+  border-radius: 2px;
+}
+
+@keyframes loadingIndeterminate {
+  0% { left: -50%; }
+  100% { left: 100%; }
+}
+
+/* ==========================================================================
+   全系統服務重啟進度遮罩與步驟檢核樣式
+   ========================================================================== */
+.restart-card {
+  width: 440px;
+  max-width: 92vw;
+  padding: 24px 22px;
+}
+
+.restart-steps-box {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 14px 0 16px;
+  text-align: left;
+}
+
+.restart-step-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  background-color: var(--bg-viewport);
+  border: 1px solid var(--border-color);
+  transition: all 0.25s ease;
+}
+
+.restart-step-item.pending {
+  opacity: 0.55;
+}
+
+.restart-step-item.running {
+  opacity: 1;
+  border-color: var(--primary);
+  background-color: rgba(14, 165, 233, 0.08);
+  box-shadow: 0 0 10px rgba(14, 165, 233, 0.2);
+}
+
+.restart-step-item.success {
+  opacity: 1;
+  border-color: rgba(16, 185, 129, 0.5);
+  background-color: rgba(16, 185, 129, 0.08);
+}
+
+.restart-step-item.error {
+  opacity: 1;
+  border-color: rgba(239, 68, 68, 0.5);
+  background-color: rgba(239, 68, 68, 0.1);
+}
+
+.step-icon-wrap {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  flex-shrink: 0;
+  background-color: rgba(128, 128, 128, 0.12);
+}
+
+.restart-step-item.running .step-icon-wrap {
+  background-color: rgba(14, 165, 233, 0.2);
+  color: var(--primary);
+  animation: stepSpin 1s linear infinite;
+}
+
+@keyframes stepSpin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.restart-step-item.success .step-icon-wrap {
+  background-color: rgba(16, 185, 129, 0.2);
+  color: #10b981;
+  font-weight: 700;
+}
+
+.restart-step-item.error .step-icon-wrap {
+  background-color: rgba(239, 68, 68, 0.2);
+  color: #ef4444;
+  font-weight: 700;
+}
+
+.step-text-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+}
+
+.step-name {
+  font-size: calc(13px * var(--font-scale));
+  font-weight: 600;
+  color: var(--text-main);
+}
+
+.restart-step-item.running .step-name {
+  color: var(--primary-hover);
+}
+
+.restart-step-item.success .step-name {
+  color: #10b981;
+}
+
+.restart-step-item.error .step-name {
+  color: #ef4444;
+}
+
+.step-desc {
+  font-size: calc(11px * var(--font-scale));
+  color: var(--text-dim);
+}
+
+.restart-error-actions {
+  margin-top: 14px;
+}
+
+/* ==========================================================================
    7. 沙盒終端機樣式 (xterm.js 專業虛擬終端)
    ========================================================================== */
 .terminal-container {
