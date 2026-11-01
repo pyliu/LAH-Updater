@@ -368,7 +368,7 @@ pub fn configure_apache_fcgi_proxy(apache_dir: &Path, root_dir: &Path, php85_dir
     content = content.replace("%{%REQUEST_FILENAME}", "%{REQUEST_FILENAME}");
 
     // 清理可能散落或舊安裝根目錄之歷史 Alias 與 Directory (如 C:/AppServ 轉移至 D:/AppServ)
-    let re_stale_alias = Regex::new(r#"(?m)^\s*Alias\s+/(?i:lah-api)(?:/api)?\s+"[a-zA-Z]:/[^"]*?"(?:\r?\n)?"#).unwrap();
+    let re_stale_alias = Regex::new(r#"(?m)^\s*Alias\s+/(?:(?i:lah-api)(?:/api)?|get_(?:user_img|carousel_img|blob_img|adm_reserve_pdf|reg_foreigner_pdf|sur_destruction_pdf)\.php)\s+"[a-zA-Z]:/[^"]*?"(?:\r?\n)?"#).unwrap();
     content = re_stale_alias.replace_all(&content, "").to_string();
 
     let re_stale_api_dir = Regex::new(r#"(?s)<Directory\s+"[a-zA-Z]:/[^"]*?/(?i:lah-api)">.*?</Directory>\s*"#).unwrap();
@@ -400,20 +400,27 @@ pub fn ensure_lah_api_ecosystem(api_dir: &Path, _php85_dir: Option<&Path>, log_f
         return;
     }
 
-    let eco_content = r#"const path = require('path');
+    let fallback_root = api_dir
+        .parent()
+        .unwrap_or(api_dir)
+        .to_string_lossy()
+        .replace('\\', "\\\\");
+
+    let eco_content = format!(
+        r#"const path = require('path');
 const fs = require('fs');
 
-function resolveRootDir() {
-  if (process.env.LAH_ROOT && fs.existsSync(process.env.LAH_ROOT)) {
+function resolveRootDir() {{
+  if (process.env.LAH_ROOT && fs.existsSync(process.env.LAH_ROOT)) {{
     return path.normalize(process.env.LAH_ROOT);
-  }
+  }}
   const candidates = [
     path.resolve(__dirname, '..'),
     path.resolve(__dirname, '..', '..'),
-    'C:\\AppServ'
+    '{fallback_root}'
   ];
-  return candidates.find(c => fs.existsSync(path.join(c, 'node')) || fs.existsSync(path.join(c, 'php85'))) || 'C:\\AppServ';
-}
+  return candidates.find(c => fs.existsSync(path.join(c, 'node')) || fs.existsSync(path.join(c, 'php85'))) || '{fallback_root}';
+}}
 
 const rootDir = resolveRootDir();
 const php85Dir = path.join(rootDir, 'php85');
@@ -421,12 +428,12 @@ const phpCgi = path.join(php85Dir, 'php-cgi.exe');
 const phpIni = path.join(php85Dir, 'php.ini');
 const ociDir = path.join(rootDir, 'instantclient_11_2');
 
-module.exports = {
+module.exports = {{
   apps: [
-    {
+    {{
       name: "lah-api-v85",
       script: phpCgi,
-      args: `-b 127.0.0.1:8085 -c "${phpIni}"`,
+      args: `-b 127.0.0.1:8085 -c "${{phpIni}}"`,
       cwd: __dirname,
       interpreter: "none",
       exec_mode: "fork",
@@ -434,16 +441,17 @@ module.exports = {
       autorestart: true,
       watch: false,
       max_memory_restart: "1G",
-      env: {
+      env: {{
         PATH: ociDir + ";" + php85Dir + ";" + (process.env.PATH || ""),
         NLS_LANG: "American_America.US7ASCII",
         PHP_FCGI_CHILDREN: "16",
         PHP_FCGI_MAX_REQUESTS: "10000"
-      }
-    }
+      }}
+    }}
   ]
-};
-"#;
+}};
+"#
+    );
     if fs::write(&eco_path, eco_content).is_ok() {
         log_fn(&format!("  ✓ 已自動建立 PM2 FastCGI 守護設定檔: {}", eco_path.display()), "success");
     }

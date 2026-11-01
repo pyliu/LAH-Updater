@@ -3,6 +3,7 @@ pub mod extractor;
 pub mod health;
 pub mod pm2;
 pub mod pipeline;
+pub mod relocator;
 pub mod services;
 pub mod system;
 pub mod types;
@@ -284,5 +285,5 @@ pub fn run() {
             exit_app
         ])
         .run(tauri::generate_context!())
-        .expect("啟動智慧控管與監控系統 - 自動更新工具失敗");
+        .expect("啟動智慧控管與監控系統 - 自動安裝與更新工具失敗");
 }

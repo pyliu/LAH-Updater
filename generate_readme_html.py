@@ -957,7 +957,7 @@ def generate_html():
       
       <li class="nav-category">維運工具與模組</li>
       <li class="nav-item"><a href="#updater-overview" class="nav-link">LAH-Updater 工具套件總覽</a></li>
-      <li class="nav-item"><a href="#updater-overview" class="nav-link" onclick="switchTab('tab-updater')">1. 自動更新工具 (updater)</a></li>
+      <li class="nav-item"><a href="#updater-overview" class="nav-link" onclick="switchTab('tab-updater')">1. 自動安裝與更新工具 (updater)</a></li>
       <li class="nav-item"><a href="#updater-overview" class="nav-link" onclick="switchTab('tab-portable')">2. 可攜 Node 安裝工具</a></li>
       <li class="nav-item"><a href="#updater-overview" class="nav-link" onclick="switchTab('tab-uninstaller')">3. 解除安裝工具 (uninstaller)</a></li>
       <li class="nav-item"><a href="#updater-overview" class="nav-link" onclick="switchTab('tab-backuper')">4. 自動備份工具 (backuper)</a></li>
@@ -1110,7 +1110,7 @@ def generate_html():
 
       <!-- 頁籤按鈕 -->
       <div class="tabs-header">
-        <button class="tab-btn active" onclick="switchTab('tab-updater')">1. 自動更新工具 (updater)</button>
+        <button class="tab-btn active" onclick="switchTab('tab-updater')">1. 自動安裝與更新工具 (updater)</button>
         <button class="tab-btn" onclick="switchTab('tab-portable')">2. 可攜 Node 工具 (node-portable)</button>
         <button class="tab-btn" onclick="switchTab('tab-uninstaller')">3. 解除安裝工具 (uninstaller)</button>
         <button class="tab-btn" onclick="switchTab('tab-backuper')">4. 自動備份工具 (backuper)</button>
@@ -1121,9 +1121,9 @@ def generate_html():
 
       <!-- Tab 1: updater -->
       <div id="tab-updater" class="tab-content active">
-        <h3 style="color: var(--accent-cyan); margin-bottom: 10px;">智慧控管與監控系統 - 自動更新工具 (updater)</h3>
+        <h3 style="color: var(--accent-cyan); margin-bottom: 10px;">智慧控管與監控系統 - 自動安裝與更新工具 (updater)</h3>
         <p style="font-size: 0.92rem; color: var(--text-light); margin-bottom: 14px;">
-          執行檔產物：<code>dist/智慧控管與監控系統 - 自動更新工具.exe</code> (約 11.86 MB)<br>
+          執行檔產物：<code>dist/智慧控管與監控系統 - 自動安裝與更新工具.exe</code> (約 11.86 MB)<br>
           核心職責：一鍵覆蓋更新應用、自動配置 Web 沙盒服務 (LAH_Web_Service)、VC++ 依賴補齊、PHP 7.4 / PHP 8.5 FCGI Proxy、套用資安加固、接管可攜 Node 16 與 PM2 零全域污染沙盒服務 (LAH_PM2_Service)。
         </p>
 

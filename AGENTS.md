@@ -21,7 +21,7 @@
 ```text
 LAH-Updater/
 ├── tools/                  # 獨立維運工具套件庫 (全數採用 Tauri 2 / Rust 實作)
-│   ├── updater/            # 智慧控管與監控系統 - 自動更新工具 (Tauri 2 / Rust)
+│   ├── updater/            # 智慧控管與監控系統 - 自動安裝與更新工具 (Tauri 2 / Rust)
 │   │   ├── src-tauri/      # Rust 核心 (5 階段更新、解壓對齊、LAH_Web_Service / LAH_PM2_Service 沙盒服務配置)
 │   │   ├── ui/             # 純靜態 HTML/JS 介面 (動態高度自適應無捲軸)
 │   │   ├── service/        # WinSW 模板 (lah-web-service.xml, lah-service.xml，編譯時透過 include_bytes! 內嵌)
@@ -64,7 +64,7 @@ LAH-Updater/
 在 Rust 中透過 `std::env::current_exe()` 解析並取其父目錄。絕不可使用 `std::env::current_dir()`，避免捷徑或提權啟動時工作目錄被置於 `C:\Windows\System32`。
 
 ### 3.2 安裝包分類優先搜尋與平滑回退
-自動更新工具探測更新包時，優先至分類專屬子目錄尋找：
+自動安裝與更新工具探測更新包時，優先至分類專屬子目錄尋找：
 - **基礎服務環境**（`Apache24.zip`、`vcredist-x64.zip`、`php7.zip`、`php85.zip`、`node.zip`）：優先至 **`base/`** 子資料夾。
 - **業務程式更新包**（`LAH-NUXTJS.zip`、`LAH-API.zip`、`www.zip`、`lah-messenger-server.zip`）：優先至 **`patch/`** 子資料夾。
 - **依賴套件包**（`LAH-NUXTJS-node_modules.zip`、`lah-messenger-server-node_modules.zip`）：優先至 **`node_modules/`** 子資料夾。
@@ -136,10 +136,10 @@ LAH-Updater/
 
 ## 4. 常用測試與打包指令
 
-- **建立自動更新工具**：
+- **建立自動安裝與更新工具**：
   ```powershell
   python tools\updater\build.py
-  # 或執行：.\建立自動更新工具.bat
+  # 或執行：.\建立自動安裝與更新工具.bat (亦相容 .\建立自動更新工具.bat)
   ```
 - **建立自動移除工具**：
   ```powershell

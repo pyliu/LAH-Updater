@@ -395,6 +395,16 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   // 主畫面瀏覽根目錄
+  const txtRootDir = document.getElementById("txt_root_dir");
+  if (txtRootDir) {
+    txtRootDir.addEventListener("change", () => scanEnvironment());
+    txtRootDir.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        scanEnvironment();
+      }
+    });
+  }
   document.getElementById("btn_browse_root").addEventListener("click", async () => {
     try {
       const selected = await dialog.open({ directory: true, multiple: false });
@@ -557,7 +567,7 @@ document.addEventListener("DOMContentLoaded", () => {
         id: p.id,
         name: p.name,
         zip_path: p.file_path,
-        target_path: p.target_path,
+        target_path: p.rel_target ? `${rootDir.replace(/[\\/]+$/, "")}\\${p.rel_target}` : p.target_path,
         is_base_env: p.is_base_env,
         is_nodejs: p.is_nodejs,
         is_sub_package: p.is_sub_package,
@@ -577,8 +587,8 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById("log_box").innerHTML = "";
     document.getElementById("bar_progress").style.width = "0%";
     document.getElementById("lbl_progress_percent").textContent = "0%";
-    document.getElementById("lbl_progress_status").textContent = "正在準備更新作業...";
-    document.getElementById("modal_progress_title").textContent = "系統自動更新進行中...";
+    document.getElementById("lbl_progress_status").textContent = "正在準備安裝與更新作業...";
+    document.getElementById("modal_progress_title").textContent = "系統自動安裝與更新進行中...";
     document.getElementById("badge_updating").textContent = "處理中";
     document.getElementById("badge_updating").style.color = "#0284c7";
     document.getElementById("btn_modal_back").style.display = "none";
@@ -595,7 +605,7 @@ document.addEventListener("DOMContentLoaded", () => {
       state.isUpdating = false;
 
       if (summary.success) {
-        document.getElementById("modal_progress_title").textContent = "🎉 系統更新完成！";
+        document.getElementById("modal_progress_title").textContent = "🎉 系統安裝與更新完成！";
         document.getElementById("badge_updating").textContent = "已完成";
         document.getElementById("badge_updating").style.color = "#16a34a";
         document.getElementById("btn_modal_back").style.display = "inline-block";
@@ -620,7 +630,7 @@ document.addEventListener("DOMContentLoaded", () => {
           document.getElementById("modal_cleanup").classList.add("active");
         }
       } else {
-        document.getElementById("modal_progress_title").textContent = "❌ 更新失敗";
+        document.getElementById("modal_progress_title").textContent = "❌ 安裝與更新失敗";
         document.getElementById("badge_updating").textContent = "異常中斷";
         document.getElementById("badge_updating").style.color = "#dc2626";
         document.getElementById("btn_modal_back").style.display = "inline-block";

@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 r"""
-智慧控管與監控系統 - 自動更新工具 (updater)
+智慧控管與監控系統 - 自動安裝與更新工具 (updater)
 Rust (Tauri 2) 單一執行檔打包輔助腳本 (build.py)
 """
 import os
@@ -17,7 +17,7 @@ if sys.stderr and hasattr(sys.stderr, "reconfigure"):
 
 def main():
     print("=" * 60)
-    print("正在編譯打包「智慧控管與監控系統 - 自動更新工具 (updater)」...")
+    print("正在編譯打包「智慧控管與監控系統 - 自動安裝與更新工具 (updater)」...")
     print("=" * 60)
 
     script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -71,7 +71,7 @@ def main():
             dist_dir = os.path.join(root_dir, "dist")
             os.makedirs(dist_dir, exist_ok=True)
 
-            out_exe_name = "智慧控管與監控系統 - 自動更新工具.exe"
+            out_exe_name = "智慧控管與監控系統 - 自動安裝與更新工具.exe"
             out_exe_path = os.path.join(dist_dir, out_exe_name)
 
             try:

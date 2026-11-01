@@ -407,6 +407,7 @@ fn find_dashboard_exe_direct(dir: &Path) -> Option<PathBuf> {
                         && (lower.contains("儀表板") || lower.contains("dashboard"))
                         && !lower.contains("updater")
                         && !lower.contains("更新")
+                        && !lower.contains("安裝")
                         && !lower.contains("uninstall")
                         && !lower.contains("移除")
                         && !lower.contains("backup")
@@ -592,6 +593,60 @@ pub fn deploy_dashboard_if_found(
     (true, Some(dest_exe))
 }
 
+/// 初始化安裝過程日誌檔案 (install.log)，若超過 5MB 自動進行 .bak 輪替
+pub fn create_install_logger(
+    root_path: &Path,
+) -> (
+    PathBuf,
+    std::sync::Arc<std::sync::Mutex<Option<std::fs::File>>>,
+) {
+    let _ = fs::create_dir_all(root_path);
+    let log_path = root_path.join("install.log");
+
+    // 日誌檔案大小輪替 (超過 5MB 備份為 .bak)
+    if let Ok(meta) = fs::metadata(&log_path) {
+        if meta.len() > 5 * 1024 * 1024 {
+            let bak_path = root_path.join("install.log.bak");
+            let _ = fs::remove_file(&bak_path);
+            let _ = fs::rename(&log_path, &bak_path);
+        }
+    }
+
+    let file_opt = fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&log_path)
+        .ok();
+
+    (log_path, std::sync::Arc::new(std::sync::Mutex::new(file_opt)))
+}
+
+/// 寫入一行日誌至 install.log (附加時間戳記與日誌等級)
+pub fn append_install_log_line(
+    log_file_mutex: &std::sync::Arc<std::sync::Mutex<Option<std::fs::File>>>,
+    level: &str,
+    msg: &str,
+) {
+    if let Ok(mut guard) = log_file_mutex.lock() {
+        if let Some(ref mut file) = *guard {
+            use std::io::Write;
+            let now = chrono::Local::now().format("%Y-%m-%d %H:%M:%S");
+            let line = format!("[{now}] [{}] {msg}\r\n", level.to_uppercase());
+            let _ = file.write_all(line.as_bytes());
+            let _ = file.flush();
+        }
+    }
+}
+
+// 相容別名
+pub fn create_update_logger(root_path: &Path) -> (PathBuf, std::sync::Arc<std::sync::Mutex<Option<std::fs::File>>>) {
+    create_install_logger(root_path)
+}
+
+pub fn append_update_log_line(log_file_mutex: &std::sync::Arc<std::sync::Mutex<Option<std::fs::File>>>, level: &str, msg: &str) {
+    append_install_log_line(log_file_mutex, level, msg);
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -635,6 +690,25 @@ mod tests {
             let _ = fs::remove_file(u.join("OneDrive").join("Desktop").join(shortcut_name));
         }
         let _ = fs::remove_file(PathBuf::from(r"C:\Users\Public\Desktop").join(shortcut_name));
+    }
+
+    #[test]
+    fn test_install_logger_creates_and_appends() {
+        let temp_dir = env::temp_dir().join("test_lah_install_logger");
+        let _ = fs::create_dir_all(&temp_dir);
+
+        let (log_path, logger) = create_install_logger(&temp_dir);
+        assert_eq!(log_path, temp_dir.join("install.log"));
+
+        append_install_log_line(&logger, "info", "測試開始");
+        append_install_log_line(&logger, "success", "測試成功");
+
+        let content = fs::read_to_string(&log_path).unwrap();
+        assert!(content.contains("[INFO] 測試開始"));
+        assert!(content.contains("[SUCCESS] 測試成功"));
+
+        let _ = fs::remove_file(&log_path);
+        let _ = fs::remove_dir_all(&temp_dir);
     }
 
     #[test]

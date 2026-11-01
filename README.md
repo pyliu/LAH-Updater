@@ -15,7 +15,7 @@
 
 | 子目錄 | 工具名稱 | 核心技術 | 主要職責與特色 |
 |---|---|---|---|
-| **`tools/updater/`** | **自動更新工具**<br/>`智慧控管與監控系統 - 自動更新工具.exe` | Tauri 2 (Rust) | 支援 11 大模組更新包智慧對齊解壓、`base/`、`patch/`、`node_modules/` 分流優先探測與平滑回退、5 階段自動化系統配置引擎（Web 沙盒服務 `LAH_Web_Service` 守護與 Apache mod_php7、VC++ 依賴自動補齊、PHP 8.5 FastCGI Proxy、CVE-2024-4577 資安強化、綠色 Node/PM2 零全域污染沙盒隔離与 `LAH_PM2_Service` 守護、內建 `pm2-logrotate` 離線掛載、服務名稱資安脫敏、服務重啟與五大連接埠健康巡檢）。 |
+| **`tools/updater/`** | **自動安裝與更新工具**<br/>`智慧控管與監控系統 - 自動安裝與更新工具.exe` | Tauri 2 (Rust) | 支援 11 大模組更新包智慧對齊解壓、`base/`、`patch/`、`node_modules/` 分流優先探測與平滑回退、5 階段自動化系統配置引擎（Web 沙盒服務 `LAH_Web_Service` 守護與 Apache mod_php7、VC++ 依賴自動補齊、PHP 8.5 FastCGI Proxy、CVE-2024-4577 資安強化、綠色 Node/PM2 零全域污染沙盒隔離与 `LAH_PM2_Service` 守護、內建 `pm2-logrotate` 離線掛載、服務名稱資安脫敏、服務重啟與五大連接埠健康巡檢、install.log 安裝過程日誌留存）。 |
 | **`tools/uninstaller/`** | **自動移除工具**<br/>`智慧控管與監控系統 - 自動移除工具.exe` | Tauri 2 (Rust) | 完整停止並刪除 Windows 系統服務（`LAH_Web_Service`、`LAH_PM2_Service` 與向下相容 `Apache2.4`）、精確終止殘留進程（含 `php-cgi.exe`）、清理開機自啟動與工作排程、清理舊有登錄檔殘留 `PATH`、註銷 Apache FastCGI 轉發、內置擬真二次確認對話框、解除唯讀安全刪除檔案並深度清理安裝根目錄（嚴格保護備份檔）。 |
 | **`tools/backuper/`** | **備份與還原工具**<br/>`智慧控管與監控系統 - 備份與還原工具.exe` | Tauri 2 (Rust) | 支援系統重要資料與設定（即時通 `db/`、`uploads/`、各專案 `.env`、`AD.php`、`www/assets/`、`php.ini`、`httpd.conf`、`.pm2`、`lah-cmd.bat`）打包備份；擴充涵蓋 Oracle `instantclient_11_2` 與 PHP 自訂資料庫擴充 DLL（OCI8 / SQLSRV）；還原前自動建立 `restore_undo_*.zip` 復原點，支援動態視窗高度自適應與彈現式進度對話框。 |
 | **`tools/node-portable/`** | **可攜 Node 安裝工具**<br/>`智慧控管與監控系統 - 可攜 Node 安裝工具.exe` | Tauri 2 (Rust) | 因應資安要求提供純綠色版 Node.js 16.20.2 與 PM2 離線安裝，採**零全域污染沙盒隔離模式**（不修改系統或使用者 `PATH`，主動清理登錄檔舊殘留並產出專屬維運終端 `lah-cmd.bat`），直接掛載內建 `pm2-logrotate`（v3.0.0）、清理 `dump.pm2` 舊路徑、註冊開機背景自啟服務 `PM2_Portable_Service`（WinSW）並具備每 60 秒 Daemon 自癒機制。 |
@@ -93,7 +93,7 @@
 ```
 
 ### 產出執行檔集中於 `dist/`：
-- `dist/智慧控管與監控系統 - 自動更新工具.exe`（翡翠綠升級齒輪圖示，約 11.86 MB）
+- `dist/智慧控管與監控系統 - 自動安裝與更新工具.exe`（翡翠綠升級齒輪圖示，約 11.86 MB）
 - `dist/智慧控管與監控系統 - 自動移除工具.exe`（警戒深紅解構叉號圖示，約 10.71 MB）
 - `dist/智慧控管與監控系統 - 備份與還原工具.exe`（科技深藍資料庫循環圖示，約 11.09 MB）
 - `dist/智慧控管與監控系統 - 可攜 Node 安裝工具.exe`（亮綠六角形加 PM2 循環箭頭圖示，約 11.50 MB）

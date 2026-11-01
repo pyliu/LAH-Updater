@@ -1736,7 +1736,9 @@ const loadConfigBackupsList = async (filePath) => {
 
     let html = '';
     backups.forEach((b) => {
-      html += `<option value="${b.full_path}">${b.created} (${formatBytes(b.size_bytes)})</option>`;
+      const backupPath = b.path || b.full_path;
+      const backupTime = b.modified || b.created;
+      html += `<option value="${backupPath}">${backupTime} (${formatBytes(b.size_bytes)})</option>`;
     });
     el.configBackupSelect.innerHTML = html;
     el.btnRestoreConfigBackup.disabled = false;
@@ -1777,8 +1779,8 @@ const handleSaveConfig = async () => {
           if (res.backup_path) {
             showToast('正在自動還原至備份檔...');
             await invoke('restore_config_backup', {
-              target_path: state.currentConfigPath,
-              backup_path: res.backup_path,
+              targetPath: state.currentConfigPath,
+              backupPath: res.backup_path,
             });
             await fetchConfigContent(state.currentConfigPath);
             showToast('✓ 已成功復原至儲存前狀態');
@@ -1857,7 +1859,7 @@ const handleSaveConfig = async () => {
 
 const handleRestoreConfigBackup = async () => {
   const selectedBackup = el.configBackupSelect.value;
-  if (!selectedBackup) {
+  if (!selectedBackup || selectedBackup === 'undefined') {
     showToast('⚠️ 請先選擇欲還原的歷史備份檔');
     return;
   }
@@ -1871,8 +1873,8 @@ const handleRestoreConfigBackup = async () => {
       showToast('正在執行組態還原...');
       try {
         const res = await invoke('restore_config_backup', {
-          target_path: state.currentConfigPath,
-          backup_path: selectedBackup,
+          targetPath: state.currentConfigPath,
+          backupPath: selectedBackup,
         });
 
         if (res && res.success) {

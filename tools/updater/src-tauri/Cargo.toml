@@ -1,7 +1,7 @@
 [package]
 name = "lah-updater"
-version = "0.1.1"
-description = "智慧控管與監控系統 - 自動更新工具"
+version = "0.1.2"
+description = "智慧控管與監控系統 - 自動安裝與更新工具"
 edition = "2021"
 
 [lib]

@@ -6,6 +6,7 @@ use crate::extractor::{
 };
 use crate::health::verify_all_services_health;
 use crate::pm2::*;
+use crate::relocator::{execute_path_relocation_and_verify, verify_no_stale_root_paths};
 use crate::services::*;
 use crate::system::*;
 use crate::types::{ProgressEvent, SystemConfigOptions, UpdateOptions, UpdateSummary};
@@ -20,7 +21,11 @@ where
     let start_time = Instant::now();
     let root_path = PathBuf::from(&options.root_dir);
 
+    // 初始化安裝過程日誌檔案 (install.log)
+    let (install_log_path, install_logger) = create_install_logger(&root_path);
+
     let log_event = |msg: &str, level: &str| {
+        append_install_log_line(&install_logger, level, msg);
         emit_fn(ProgressEvent {
             stage: "log".to_string(),
             percent: 0,
@@ -39,8 +44,8 @@ where
     };
 
     log_event("============================================================", "info");
-    log_event("🚀 開始執行自動更新作業...", "info");
-    set_prog(0, "正在準備更新作業...");
+    log_event("🚀 開始執行「智慧控管與監控系統 - 自動安裝與更新工具」作業...", "info");
+    set_prog(0, "正在準備安裝與更新作業...");
 
     let mut selected_pkgs = options.packages.clone();
     // 基礎環境優先處理
@@ -204,11 +209,16 @@ where
         }
     }
 
+    // 步驟 3.5：跨目錄路徑重定位（Path Relocation）與快照處置
+    set_prog(87, "正在執行跨目錄路徑重定位與設定檔正規化...");
+    let reloc_report = execute_path_relocation_and_verify(&root_path, &log_event);
+
     let apache_tgt = root_path.join("Apache24");
     let php7_tgt = root_path.join("php7");
     let php85_tgt = root_path.join("php85");
     let node_tgt = root_path.join("node");
     let has_apache_binary = apache_tgt.join("bin").join("httpd.exe").is_file();
+    let has_apache_conf = has_apache_binary || apache_tgt.join("conf").join("httpd.conf").is_file();
 
     // =========================================================================
     // 【階段 1/5】配置 PHP 7.4 與 Apache mod_php
@@ -217,25 +227,27 @@ where
         set_prog(88, "[階段 1/5] 正在配置 PHP 7.4 設定檔 (php.ini)...");
         ensure_php_ini_configured(&php7_tgt, false, &log_event);
     }
-    if has_apache_binary {
-        set_prog(89, "[階段 1/5] 正在配置 Apache 2.4 + PHP 7.4 與註冊服務...");
+    if has_apache_conf {
+        set_prog(89, "[階段 1/5] 正在配置 Apache 2.4 + PHP 7.4 設定檔...");
         configure_apache_mod_php7(&apache_tgt, &root_path, if php7_tgt.is_dir() { Some(&php7_tgt) } else { None }, &log_event);
+    }
+    if has_apache_binary {
         if options.auto_register_apache || has_base_env_update || query_apache_service().as_deref() != Some(LAH_WEB_SERVICE_NAME) {
             install_apache_service(&apache_tgt, LAH_WEB_SERVICE_NAME, &log_event);
         }
     } else if apache_tgt.is_dir() {
-        log_event("ℹ️ 目錄包含 Apache24 資料夾但未偵測到 bin/httpd.exe 核心執行檔，跳過 Apache 模組配置與服務註冊", "info");
+        log_event("ℹ️ 目錄包含 Apache24 資料夾但未偵測到 bin/httpd.exe 核心執行檔，僅重定位設定檔並跳過服務註冊", "info");
     }
 
     // =========================================================================
     // 【階段 2/5】配置 PHP 8.5 與 FCGI Proxy
     // =========================================================================
-    if php85_tgt.is_dir() || root_path.join("LAH-API").is_dir() {
+    if php85_tgt.is_dir() || root_path.join("LAH-API").is_dir() || has_apache_conf {
         set_prog(91, "[階段 2/5] 正在配置 PHP 8.5 與 FCGI API Proxy (lah-api-v85)...");
         if php85_tgt.is_dir() {
             ensure_php_ini_configured(&php85_tgt, true, &log_event);
         }
-        if has_apache_binary {
+        if has_apache_conf {
             configure_apache_fcgi_proxy(&apache_tgt, &root_path, if php85_tgt.is_dir() { Some(&php85_tgt) } else { None }, &log_event);
         }
     }
@@ -245,7 +257,7 @@ where
     // =========================================================================
     if options.auto_security_hardening {
         set_prog(93, "[階段 3/5] 正在套用資安防護與 PHP2Shell 緩解設定...");
-        if has_apache_binary {
+        if has_apache_conf {
             let conf_f = apache_tgt.join("conf").join("httpd.conf");
             if conf_f.is_file() {
                 apply_apache_security_hardening(&conf_f, &root_path, &log_event);
@@ -267,6 +279,9 @@ where
     if has_apache_binary {
         check_apache_syntax(&apache_tgt, &log_event);
     }
+
+    // 服務啟動前最終確認無任何殘留舊路徑
+    let _ = verify_no_stale_root_paths(&root_path, &reloc_report.detected_legacy_roots, &log_event);
 
     // =========================================================================
     // 【階段 4/5】綠色版 Node.js 設定與啟動 PM2
@@ -330,6 +345,7 @@ where
     set_prog(100, &format!("✅ 全部安裝與服務啟動確認完成！(耗時 {:.1} 秒)", elapsed));
     log_event("============================================================", "success");
     log_event(&format!("🎉 全部選取的安裝包與 5 階段系統自動化配置已順利完成！(總耗時: {:.1} 秒)", elapsed), "success");
+    log_event(&format!("📝 完整安裝與更新過程日誌已留存至安裝根目錄：{}", install_log_path.display()), "info");
 
     UpdateSummary {
         success: true,
@@ -351,7 +367,11 @@ where
     let start_time = Instant::now();
     let root_path = PathBuf::from(&options.root_dir);
 
+    // 初始化安裝過程日誌檔案 (install.log)
+    let (install_log_path, install_logger) = create_install_logger(&root_path);
+
     let log_event = |msg: &str, level: &str| {
+        append_install_log_line(&install_logger, level, msg);
         emit_fn(ProgressEvent {
             stage: "log".to_string(),
             percent: 0,
@@ -378,39 +398,43 @@ where
     let php85_tgt = root_path.join("php85");
     let node_tgt = root_path.join("node");
     let has_apache_binary = apache_tgt.join("bin").join("httpd.exe").is_file();
+    let has_apache_conf = has_apache_binary || apache_tgt.join("conf").join("httpd.conf").is_file();
 
     // 1. 雙層巢狀目錄自癒攤平
     set_prog(10, "正在檢查目錄結構...");
     auto_flatten_nested_dirs(&root_path, &log_event);
     sync_vcredist_dlls_to_php(&root_path, &log_event);
 
-    // 2. 確保環境檔存在
+    // 2. 確保環境檔存在並執行跨目錄路徑重定位
     ensure_default_env_files(&root_path, &log_event);
     migrate_legacy_www_logs(&root_path, &log_event);
+    let reloc_report = execute_path_relocation_and_verify(&root_path, &log_event);
 
     // 3. 配置 PHP 7.4 與 Apache mod_php
     if php7_tgt.is_dir() {
         set_prog(25, "正在配置 PHP 7.4 (php.ini)...");
         ensure_php_ini_configured(&php7_tgt, false, &log_event);
     }
-    if has_apache_binary {
+    if has_apache_conf {
         set_prog(35, "正在配置 Apache 2.4 (httpd.conf) 與 mod_php7 模組...");
         configure_apache_mod_php7(&apache_tgt, &root_path, if php7_tgt.is_dir() { Some(&php7_tgt) } else { None }, &log_event);
+    }
+    if has_apache_binary {
         if options.auto_register_apache || query_apache_service().as_deref() != Some(LAH_WEB_SERVICE_NAME) {
             set_prog(45, &format!("正在註冊 Web 沙盒服務 [{LAH_WEB_SERVICE_NAME}]..."));
             install_apache_service(&apache_tgt, LAH_WEB_SERVICE_NAME, &log_event);
         }
     } else if apache_tgt.is_dir() {
-        log_event("ℹ️ 目錄包含 Apache24 資料夾但未偵測到 bin/httpd.exe 核心執行檔，跳過 Apache 模組配置與服務註冊", "info");
+        log_event("ℹ️ 目錄包含 Apache24 資料夾但未偵測到 bin/httpd.exe 核心執行檔，僅重定位設定檔並跳過服務註冊", "info");
     }
 
     // 4. 配置 PHP 8.5 與 FCGI Proxy
-    if php85_tgt.is_dir() || root_path.join("LAH-API").is_dir() {
+    if php85_tgt.is_dir() || root_path.join("LAH-API").is_dir() || has_apache_conf {
         set_prog(55, "正在配置 PHP 8.5 與 FCGI Proxy...");
         if php85_tgt.is_dir() {
             ensure_php_ini_configured(&php85_tgt, true, &log_event);
         }
-        if has_apache_binary {
+        if has_apache_conf {
             configure_apache_fcgi_proxy(&apache_tgt, &root_path, if php85_tgt.is_dir() { Some(&php85_tgt) } else { None }, &log_event);
         }
     }
@@ -418,7 +442,7 @@ where
     // 5. 套用資安強化
     if options.auto_security_hardening {
         set_prog(65, "正在套用資安強化 (隱藏版本標頭、CVE-2024-4577 緩解防護)...");
-        if has_apache_binary {
+        if has_apache_conf {
             let conf_f = apache_tgt.join("conf").join("httpd.conf");
             if conf_f.is_file() {
                 apply_apache_security_hardening(&conf_f, &root_path, &log_event);
@@ -442,6 +466,8 @@ where
         check_apache_syntax(&apache_tgt, &log_event);
     }
 
+    let _ = verify_no_stale_root_paths(&root_path, &reloc_report.detected_legacy_roots, &log_event);
+
     // 6. Node.js 與 PM2 核心巡檢
     if node_tgt.is_dir() {
         set_prog(75, "正在巡檢與配置 PM2 核心服務...");
@@ -463,9 +489,9 @@ where
         }
     }
 
-    // 7. 重啟 Apache 服務 (若勾選)
+    // 7. 重啟 Apache 服務 (若勾選且存在 httpd.exe)
     let target_svc = query_apache_service().unwrap_or_else(|| LAH_WEB_SERVICE_NAME.to_string());
-    if options.restart_apache {
+    if options.restart_apache && has_apache_binary {
         set_prog(88, &format!("正在重啟 Apache 服務 [{target_svc}]..."));
         if is_service_running(&target_svc) {
             stop_service(&target_svc, &log_event);
@@ -477,7 +503,7 @@ where
     set_prog(98, "正在進行系統服務健康確認...");
     let (_, health_report) = verify_all_services_health(
         &root_path,
-        if apache_tgt.is_dir() { Some(&apache_tgt) } else { None },
+        if has_apache_binary { Some(&apache_tgt) } else { None },
         &log_event,
     );
 
@@ -490,6 +516,7 @@ where
     set_prog(100, &format!("✅ 系統服務與資安配置套用完成！(耗時 {:.1} 秒)", elapsed));
     log_event("============================================================", "success");
     log_event(&format!("🎉 系統服務與資安強化配置已即時生效！(耗時 {:.1} 秒)", elapsed), "success");
+    log_event(&format!("📝 完整系統配置與註冊日誌已留存至安裝根目錄：{}", install_log_path.display()), "info");
 
     UpdateSummary {
         success: true,

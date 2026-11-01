@@ -30,8 +30,9 @@ pub fn verify_all_services_health(root_dir: &Path, apache_dir: Option<&Path>, lo
     let mut reports = Vec::new();
     let mut all_ok = true;
 
-    // 1. Apache Port 80
-    let has_apache = apache_dir.map_or(false, |p| p.is_dir()) || root_dir.join("Apache24").is_dir();
+    // 1. Apache Port 80 (僅於實際存在 bin/httpd.exe 時才檢測 Port 80，避免僅還原設定檔時誤報失敗)
+    let has_apache = apache_dir.map_or(false, |p| p.join("bin").join("httpd.exe").is_file())
+        || root_dir.join("Apache24").join("bin").join("httpd.exe").is_file();
     if has_apache {
         if wait_for_port(80, 5.0, "127.0.0.1") {
             reports.push("  • Apache 網頁伺服器 (Port 80): 🟢 正常監聽 (Online)".to_string());

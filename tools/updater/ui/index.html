@@ -2,7 +2,7 @@
 <html lang="zh-Hant">
 <head>
 <meta charset="utf-8">
-<title>智慧控管與監控系統 - 自動更新工具</title>
+<title>智慧控管與監控系統 - 自動安裝與更新工具</title>
 <style>
   * { box-sizing: border-box; }
   body {
@@ -485,7 +485,7 @@
 
   <!-- 頂部標題列 -->
   <div class="header">
-    <h1>🔄 智慧控管與監控系統 - 自動更新工具</h1>
+    <h1>🔄 智慧控管與監控系統 - 自動安裝與更新工具</h1>
     <div class="header-actions">
       <span id="admin_badge" class="admin-badge">👑 權限檢查中</span>
       <button id="btn_release_notes" class="secondary" title="檢視更新說明文件">📖 更新說明</button>
@@ -604,6 +604,14 @@
             <span class="endpoint-name">🖥️ 智慧管控網頁 (Nuxt)</span>
             <span class="endpoint-port">:8080</span>
           </div>
+          <div class="endpoint-item" title="PHP 8.5 業務核心 RESTful API 服務">
+            <span class="endpoint-name">⚡ 業務核心 API (PHP 8.5)</span>
+            <span class="endpoint-port">:8085</span>
+          </div>
+          <div class="endpoint-item" title="PM2 背景健康檢查與自動排程常駐守護服務">
+            <span class="endpoint-name">🛡️ 背景健康排程 (PM2)</span>
+            <span class="endpoint-port">常駐守護</span>
+          </div>
           <div class="endpoint-item" title="Node.js WebSocket 即時通訊廣播服務">
             <span class="endpoint-name">💬 即時通訊長連線 (WS)</span>
             <span class="endpoint-port">:8081</span>
@@ -621,6 +629,10 @@
           <div class="maint-tip-item">
             <span>🛡️</span>
             <span><b>專屬隔離沙盒</b>：安裝根目錄附帶 <code>lah-cmd.bat</code>，雙擊可開啟專屬終端且絕不干擾主機全域環境。</span>
+          </div>
+          <div class="maint-tip-item">
+            <span>📝</span>
+            <span><b>安裝除錯日誌</b>：每次執行歷程均自動寫入安裝根目錄 <code>install.log</code>（含 5MB 自動輪替保護），便於現場排查。</span>
           </div>
         </div>
       </div>
@@ -669,7 +681,7 @@
   <div id="modal_progress" class="modal-overlay">
     <div class="modal-content">
       <div class="modal-header">
-        <h2 id="modal_progress_title">系統自動更新進行中...</h2>
+        <h2 id="modal_progress_title">系統自動安裝與更新進行中...</h2>
         <span id="badge_updating" style="font-size:12px; color:#0284c7; font-weight:600;">處理中</span>
       </div>
       <div class="progress-wrap">
