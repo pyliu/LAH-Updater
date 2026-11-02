@@ -48,3 +48,24 @@ pub struct ScanSummary {
     pub service_installed: bool,
     pub service_running: bool,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PortAuditResult {
+    pub port: u16,
+    pub service_name: String,
+    pub is_listening: bool,
+    pub leaked_headers: Vec<String>,
+    pub is_secure: bool,
+    pub message: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SecurityAuditReport {
+    pub timestamp: String,
+    pub root_dir: String,
+    pub sandbox_path_clean: bool,
+    pub port_results: Vec<PortAuditResult>,
+    pub overall_secure: bool,
+    pub report_file_path: Option<String>,
+    pub summary: String,
+}

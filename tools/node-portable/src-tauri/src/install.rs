@@ -197,6 +197,9 @@ pub fn execute_install(
         return fail("開機自啟服務註冊失敗，請檢視上方日誌".to_string());
     }
 
+    progress_fn(98.0, "🛡️ 執行資安邊界自檢與沙盒隔離檢測...");
+    let _ = crate::audit::execute_security_audit(&root, Some(log_fn));
+
     progress_fn(100.0, "安裝完成");
     log_fn("🎉 可攜 Node.js 與 PM2 安裝完成！已就緒專屬維運終端 (lah-cmd.bat)，全域環境完全不受影響。", "success");
     InstallReport {

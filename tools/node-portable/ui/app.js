@@ -79,6 +79,55 @@ $("browse_btn").onclick = async () => {
 $("root_dir").onchange = rescan;
 $("btn_rescan").onclick = rescan;
 
+$("btn_audit").onclick = async () => {
+  if (isBusy) return;
+  const rootDir = $("root_dir").value.trim();
+  $("btn_audit").disabled = true;
+  $("btn_audit").textContent = "檢測中...";
+
+  try {
+    const report = await invoke("run_security_audit", { rootDir });
+    const badge = $("audit_badge_box");
+    if (report.overall_secure) {
+      badge.style.background = "#dcfce7";
+      badge.style.color = "#15803d";
+      badge.style.border = "1px solid #bbf7d0";
+      badge.textContent = "🛡️ 資安自檢評定：【合格安全】（已達成零全域污染沙盒隔離，受管服務無執行期標頭洩漏）";
+    } else {
+      badge.style.background = "#fee2e2";
+      badge.style.color = "#b91c1c";
+      badge.style.border = "1px solid #fecaca";
+      badge.textContent = "⚠️ 資安自檢評定：【發現潛在風險】（請檢視下方標頭外洩項目或清理 PATH 登錄檔）";
+    }
+
+    let detail = `檢測時間：${report.timestamp}\n安裝目錄：${report.root_dir}\n`;
+    detail += `全域 PATH 零污染沙盒：${report.sandbox_path_clean ? "✅ 合規 (HKLM/HKCU 無殘留)" : "⚠️ 未合規 (登錄檔存在可攜路徑)"}\n\n`;
+    detail += "受管服務網路通訊邊界檢測：\n";
+    for (const p of report.port_results) {
+      detail += `• Port ${p.port} (${p.service_name})：\n`;
+      detail += `  - 監聽狀態：${p.is_listening ? "監聽中" : "未啟動/未監聽"}\n`;
+      detail += `  - 判定結果：${p.is_secure ? "✅ 合格 (無敏感技術棧指紋)" : "⚠️ 需改善"}\n`;
+      if (p.leaked_headers && p.leaked_headers.length > 0) {
+        detail += `  - 洩漏標頭：${p.leaked_headers.join(", ")}\n`;
+      }
+    }
+    if (report.report_file_path) {
+      detail += `\n📄 完整佐證報告已匯出：\n${report.report_file_path}\n`;
+    }
+    $("audit_detail_box").textContent = detail;
+    $("modal_audit").classList.add("active");
+  } catch (err) {
+    alert(`執行資安自檢失敗: ${err}`);
+  } finally {
+    $("btn_audit").disabled = false;
+    $("btn_audit").textContent = "🛡️ 資安自檢";
+  }
+};
+
+$("btn_close_audit").onclick = () => {
+  $("modal_audit").classList.remove("active");
+};
+
 async function exitApp() {
   if (isBusy) return;
   await invoke("exit_app");

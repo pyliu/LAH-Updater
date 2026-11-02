@@ -1,3 +1,4 @@
+pub mod audit;
 pub mod install;
 pub mod pm2;
 pub mod system;
@@ -6,7 +7,7 @@ pub mod types;
 use std::fs;
 use std::path::PathBuf;
 use tauri::{AppHandle, Emitter};
-use types::{InstallOptions, InstallReport, LogPayload, ProgressPayload, ScanSummary};
+use types::{InstallOptions, InstallReport, LogPayload, ProgressPayload, ScanSummary, SecurityAuditReport};
 
 #[tauri::command]
 fn check_admin() -> bool {
@@ -28,6 +29,16 @@ fn check_root_dir(path: String) -> bool {
     let p = PathBuf::from(path.trim());
     let probe = p.join(".lah_write_test");
     p.is_dir() && fs::write(&probe, b"t").is_ok() && fs::remove_file(&probe).is_ok()
+}
+
+#[tauri::command]
+fn run_security_audit(root_dir: String) -> SecurityAuditReport {
+    let root = if root_dir.trim().is_empty() {
+        system::detect_default_root_dir()
+    } else {
+        PathBuf::from(root_dir.trim())
+    };
+    audit::execute_security_audit(&root, None)
 }
 
 #[tauri::command]
@@ -54,6 +65,7 @@ pub fn run() {
             check_admin,
             scan_environment,
             check_root_dir,
+            run_security_audit,
             run_install,
             exit_app
         ])
