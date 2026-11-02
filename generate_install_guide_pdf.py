@@ -466,7 +466,7 @@ HTML_CONTENT = f"""<!DOCTYPE html>
       <h1 class="cover-title">桃園市各地政事務所<br>智慧控管與監控系統 (LAH)</h1>
       <div class="cover-subtitle">伺服器端安裝與版本升級標準操作手冊 (SOP)</div>
       <div class="cover-desc">
-        本手冊專為各地政事務所資訊系統管理師編寫，詳述智慧控管伺服器端於「原機版本升級 (In-place Upgrade)」與「全新伺服器安裝 (Clean Install)」兩種實務情境之標準作業程序。內容完整涵蓋事前 VM 快照防禦、關鍵 SQLite 資料庫封裝備份、Node/PM2 零全域污染沙盒隔離架構（自動附帶專屬維運終端 lah-cmd.bat）、Apache 與 PHP 組態自癒清理、五大服務連接埠自動巡檢及異常雙重還原防線。
+        本手冊專為各地政事務所資訊系統管理師編寫，詳述智慧控管伺服器端於「原機版本升級 (In-place Upgrade)」與「全新伺服器安裝 (Clean Install)」兩種實務情境之標準作業程序。內容完整涵蓋事前 VM 快照防禦、關鍵 SQLite 資料庫封裝備份、Node/PM2 零全域污染沙盒隔離架構（自動附帶專屬維運終端 lah-cmd.bat）、Apache 與 PHP 組態自癒清理、安裝歷程自動留存（install.log 5MB 輪替）、五大服務連接埠自動巡檢及異常雙重還原防線。
       </div>
     </div>
 
@@ -491,10 +491,10 @@ HTML_CONTENT = f"""<!DOCTYPE html>
 
     <div>
       <div class="cover-meta">
-        <div class="meta-item"><strong>文件編號：</strong><span>LAH-OPS-SOP-202610</span></div>
-        <div class="meta-item"><strong>發布日期：</strong><span>2026 年 10 月 31 日 (管理儀表板增補修訂版)</span></div>
+        <div class="meta-item"><strong>文件編號：</strong><span>LAH-OPS-SOP-202611</span></div>
+        <div class="meta-item"><strong>發布日期：</strong><span>2026 年 11 月 2 日 (自動安裝更新正名與除錯日誌增補修訂版)</span></div>
         <div class="meta-item"><strong>適用系統：</strong><span>智慧控管與監控系統 (LAH)</span></div>
-        <div class="meta-item"><strong>維運工具：</strong><span>LAH-Updater v1.7.0+ (Rust 核心，含全功能管理儀表板)</span></div>
+        <div class="meta-item"><strong>維運工具：</strong><span>LAH-Updater v1.7.0+ (Rust 核心，含自動安裝更新引擎與全功能管理儀表板)</span></div>
         <div class="meta-item"><strong>適用單位：</strong><span>桃園市各地政事務所 資訊小組</span></div>
         <div class="meta-item"><strong>保密等級：</strong><span>內部維運限閱 (內部專用)</span></div>
       </div>
@@ -528,9 +528,9 @@ HTML_CONTENT = f"""<!DOCTYPE html>
     </thead>
     <tbody>
       <tr>
-        <td><strong>智慧控管與監控系統 - 自動更新工具.exe</strong></td>
+        <td><strong>智慧控管與監控系統 - 自動安裝與更新工具.exe</strong></td>
         <td><span class="badge badge-req">主安裝引擎</span></td>
-        <td>負責執行更新解壓、環境設定、開機服務註冊、資安注入防護及服務啟動。</td>
+        <td>負責執行全新安裝與版本升級解壓、環境設定、開機服務註冊、資安注入防護及服務啟動，完整歷程即時留存至 install.log。</td>
       </tr>
       <tr>
         <td><strong>智慧控管與監控系統 - 備份與還原工具.exe</strong></td>
@@ -707,16 +707,16 @@ HTML_CONTENT = f"""<!DOCTYPE html>
   <div class="screenshot-card avoid-break">
     <img src="{img_upgrade}" alt="升級更新工作選項勾選圖解">
     <div class="screenshot-caption">
-      📷 圖 2：原機升級更新 - 自動更新工具工作選項勾選圖解
+      📷 圖 2：原機升級更新 - 自動安裝與更新工具工作選項勾選圖解
     </div>
   </div>
 
   <div class="step-box avoid-break">
     <div class="step-header">
       <span class="step-number green">1</span>
-      <span class="step-title">步驟一：啟動自動更新工具</span>
+      <span class="step-title">步驟一：啟動自動安裝與更新工具</span>
     </div>
-    <p>以系統管理員身分執行 <strong><code>智慧控管與監控系統 - 自動更新工具.exe</code></strong>。工具將自動偵測安裝路徑（支援 C 槽與非 C 槽動態探測）與各項服務即時狀態。</p>
+    <p>以系統管理員身分執行 <strong><code>智慧控管與監控系統 - 自動安裝與更新工具.exe</code></strong>。工具將自動偵測安裝路徑（支援 C 槽與非 C 槽動態探測）與各項服務即時狀態。</p>
   </div>
 
   <div class="step-box avoid-break">
@@ -740,7 +740,7 @@ HTML_CONTENT = f"""<!DOCTYPE html>
       <span class="step-number green">3</span>
       <span class="step-title">步驟三：點擊「開始執行更新作業」等待結束</span>
     </div>
-    <p>點擊右下角 <strong>「🚀 開始執行更新作業」</strong>。安裝管線將依序解壓程式碼、注入 PHP2Shell 防護規則、啟動 PHP 8.5 FastCGI 並重啟服務，最後彈現健康巡檢報告即完成升級！</p>
+    <p>點擊右下角 <strong>「🚀 開始執行更新作業」</strong>。安裝管線將依序解壓程式碼、注入防護規則、啟動 PHP 8.5 FastCGI 並重啟服務，完整過程即時寫入根目錄 <code>install.log</code>（5MB 自動輪替保護），最後彈現健康巡檢報告即完成升級！</p>
     <p style="margin-top:2px; font-size:8pt; color:#0369a1;">💡 <strong>管理儀表板熱部署與捷徑：</strong>更新完成自動將管理儀表板 EXE 同步至安裝根目錄並建立桌面捷徑，彈窗提供「📊 開啟管理儀表板」按鈕供即刻喚醒確認。</p>
   </div>
 
@@ -819,16 +819,16 @@ HTML_CONTENT = f"""<!DOCTYPE html>
   <div class="screenshot-card avoid-break">
     <img src="{img_clean_install}" alt="全新安裝更新工作選項勾選圖解">
     <div class="screenshot-caption">
-      📷 圖 4：全新安裝 - 自動更新工具全選並選取備份還原檔操作圖解
+      📷 圖 4：全新安裝 - 自動安裝與更新工具全選並選取備份還原檔操作圖解
     </div>
   </div>
 
   <div class="step-box avoid-break">
     <div class="step-header">
       <span class="step-number red">3</span>
-      <span class="step-title">步驟三：開啟更新工具，執行「全選 + 掛載備份還原」</span>
+      <span class="step-title">步驟三：開啟安裝與更新工具，執行「全選 + 掛載備份還原」</span>
     </div>
-    <p>以系統管理員身分執行 <strong><code>智慧控管與監控系統 - 自動更新工具.exe</code></strong>：</p>
+    <p>以系統管理員身分執行 <strong><code>智慧控管與監控系統 - 自動安裝與更新工具.exe</code></strong>：</p>
     <ul>
       <li>點擊 <strong>「全選」</strong> 按鈕，確保基礎環境包（Apache、PHP7、PHP85、Node）、核心套件包（node_modules）與程式更新補丁包<strong>全數打勾</strong>。</li>
       <li><strong style="color: #0369a1;">【全新安裝核心關鍵】</strong> 勾選 <strong>「從備份檔案還原資料庫與系統設定」</strong>。</li>
@@ -842,7 +842,7 @@ HTML_CONTENT = f"""<!DOCTYPE html>
       <span class="step-number green">4</span>
       <span class="step-title">步驟四：等待管線全自動佈署完成</span>
     </div>
-    <p>更新引擎將自動完成：① 解壓 Apache 與 PHP 7/8.5 ➔ ② 解壓前端與即時通依賴庫 ➔ ③ 釋放最新業務程式碼 ➔ ④ 掛載還原備份之 SQLite 資料庫與 Oracle 驅動 ➔ ⑤ 註冊 Windows 原生服務、配置開機自啟並產出 lah-cmd.bat 終端 ➔ ⑥ 自動同步部署管理儀表板至安裝根目錄並建立桌面捷徑 ➔ ⑦ 全系統服務啟動與健康巡檢。</p>
+    <p>更新引擎將自動完成：① 解壓 Apache 與 PHP 7/8.5 ➔ ② 解壓前端與即時通依賴庫 ➔ ③ 釋放最新業務程式碼 ➔ ④ 掛載還原備份之 SQLite 資料庫與 Oracle 驅動 ➔ ⑤ 註冊 Windows 原生服務、配置開機自啟並產出 lah-cmd.bat 終端 ➔ ⑥ 自動同步部署管理儀表板至安裝根目錄並建立桌面捷徑 ➔ ⑦ 完整歷程即時寫入 <code>install.log</code> ➔ ⑧ 全系統服務啟動與健康巡檢。</p>
   </div>
 
   <div class="page-footer-note">
@@ -911,6 +911,7 @@ HTML_CONTENT = f"""<!DOCTYPE html>
     <li><strong>開啟管理儀表板：</strong>點擊「📊 開啟管理儀表板」，確認服務與 PM2 進程綠燈、五大埠健康連線；儀表板已整合資源效能折線圖與記憶體排名、核心組態編輯器（含語法檢驗與範本比對），以及 xterm.js 專業沙盒終端（含 UTF-8/CP950 編碼切換）。</li>
     <li><strong>前端首頁載入：</strong>開啟瀏覽器輸入 <code>http://127.0.0.1:8080</code>，確認管控首頁正常載入並能查詢地政統計數據。</li>
     <li><strong>即時通訊狀態：</strong>檢視右側即時通看板，確認連線狀態圖示為<strong>綠燈（連線中）</strong>且歷史公告完整。</li>
+    <li><strong>安裝日誌核對：</strong>若遇異常可檢視安裝根目錄 <code>install.log</code>（如 <code>C:\\AppServ\\install.log</code>），確認所有解壓、組態注入與服務啟動紀錄（超過 5MB 自動輪替為 <code>.bak</code>）。</li>
   </ol>
 
   <div class="alert alert-success avoid-break" style="margin: 6px 0 8px 0;">
@@ -995,7 +996,7 @@ HTML_CONTENT = f"""<!DOCTYPE html>
       </tr>
       <tr>
         <td rowspan="2" style="font-weight:700; background:#ecfdf5; text-align:center;">執行更新</td>
-        <td><span class="chk-box"></span> <strong>情境一 (原機升級)：</strong>已<strong>取消勾選</strong> Apache、PHP7 及 node_modules（可善用集中快選工具列）。</td>
+        <td><span class="chk-box"></span> <strong>情境一 (原機升級)：</strong>以「自動安裝與更新工具」執行，已<strong>取消勾選</strong> Apache、PHP7 及 node_modules（可善用集中快選工具列）。</td>
         <td>□ 符合 □ 走情境二</td>
         <td></td>
       </tr>
@@ -1005,7 +1006,7 @@ HTML_CONTENT = f"""<!DOCTYPE html>
         <td></td>
       </tr>
       <tr>
-        <td rowspan="4" style="font-weight:700; background:#fdf2f8; text-align:center;">驗證上線</td>
+        <td rowspan="5" style="font-weight:700; background:#fdf2f8; text-align:center;">驗證上線</td>
         <td><span class="chk-box"></span> <strong>連接埠巡檢：</strong>Port 80, 8085, 8080, 8081, 8082 經檢測全數為 [OK]。</td>
         <td>□ 全數合格</td>
         <td></td>
@@ -1025,10 +1026,15 @@ HTML_CONTENT = f"""<!DOCTYPE html>
         <td>□ 測試正常</td>
         <td></td>
       </tr>
+      <tr>
+        <td><span class="chk-box"></span> <strong>安裝日誌確認：</strong>確認根目錄 <code>install.log</code> 記錄完整無 ERROR，記錄檔就緒留存存查。</td>
+        <td>□ 確認無誤</td>
+        <td></td>
+      </tr>
     </tbody>
   </table>
 
-  <div style="margin-top: 14px; background: #ffffff; border: 1px solid #cbd5e1; border-radius: 6px; padding: 12px 16px;">
+  <div style="margin-top: 8px; background: #ffffff; border: 1px solid #cbd5e1; border-radius: 6px; padding: 10px 14px;">
     <div style="font-weight: 700; color: #0f172a; margin-bottom: 8px;">維運簽核確認欄</div>
     <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; font-size: 8.5pt;">
       <div>執行事務所：____________________</div>
