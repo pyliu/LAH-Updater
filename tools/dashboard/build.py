@@ -113,6 +113,27 @@ def main():
 
                 if deployed:
                     print(f"[OK] 已同步部署至安裝根目錄：\n  -> {target_appserv_exe}")
+
+            # 若本機存在發布資料夾 (d:\DEV\@各所分享區\@智慧管控系統\@更新程式\<version>)，同步複製至發布目錄
+            release_base = r"d:\DEV\@各所分享區\@智慧管控系統\@更新程式"
+            if os.path.isdir(release_base):
+                try:
+                    fe_pkg = os.path.join(updater_root, "..", "LAH-FE", "package.json")
+                    version_str = None
+                    if os.path.isfile(fe_pkg):
+                        import json
+                        with open(fe_pkg, "r", encoding="utf-8") as f_pkg:
+                            v = json.load(f_pkg).get("version", "").strip()
+                            if v:
+                                version_str = f"v{v}" if not v.startswith("v") else v
+                    if version_str:
+                        target_release_dir = os.path.join(release_base, version_str)
+                        if os.path.isdir(target_release_dir):
+                            release_exe = os.path.join(target_release_dir, out_exe_name)
+                            shutil.copy2(out_exe_path, release_exe)
+                            print(f"[OK] 已同步部署至開發機發布資料夾：\n  -> {release_exe}")
+                except Exception as e_rel:
+                    print(f"[WARN] 同步至發布資料夾略過或異常: {e_rel}")
         else:
             print("[WARN] 編譯指令成功，但在預期目標路徑未找到 lah-dashboard.exe！")
     else:

@@ -296,25 +296,8 @@ where
         register_pm2_home_and_clean_legacy_env(&root_path.join(".pm2"), &log_event);
         ensure_portable_pm2_patched(&root_path, &log_event);
 
-        // 喚醒或重啟 PM2
-        if options.restart_pm2 {
-            restart_pm2_services(&root_path, &log_event);
-        } else {
-            let (res_ok, _) = resurrect_pm2_services(&root_path, &log_event);
-            if !res_ok {
-                restart_pm2_services(&root_path, &log_event);
-            }
-        }
-
-        // 自動確認並配置 WinSW 服務 (LAH_PM2_Service)
-        if options.auto_register_pm2 {
-            setup_pm2_autostart(&root_path, &log_event);
-        } else {
-            log_event("  ℹ️ 未勾選註冊 PM2 系統服務，跳過 LAH_PM2_Service 註冊與自啟配置", "info");
-        }
-
-        // 全方位巡檢與補齊 PM2 核心服務 (LAH-WSS, LAH-FE, LAH-SCHEDULER, lah-api-v85, pm2-logrotate)
-        audit_and_ensure_pm2_services(&root_path, &log_event);
+        // 遵循「一律以安裝後的啟動為準」原則，執行確定性冪等清空重置與標準掛載啟動
+        idempotent_reconstruct_pm2_services(&root_path, options.auto_register_pm2, &log_event);
     }
 
     // =========================================================================
@@ -478,15 +461,8 @@ where
         register_path_to_user_environment(&node_tgt, &log_event);
         register_pm2_home_and_clean_legacy_env(&root_path.join(".pm2"), &log_event);
         ensure_portable_pm2_patched(&root_path, &log_event);
-        if options.auto_register_pm2 {
-            setup_pm2_autostart(&root_path, &log_event);
-        } else {
-            log_event("  ℹ️ 未勾選註冊 PM2 系統服務，跳過 LAH_PM2_Service 註冊與自啟配置", "info");
-        }
-        audit_and_ensure_pm2_services(&root_path, &log_event);
-        if options.restart_pm2 {
-            restart_pm2_services(&root_path, &log_event);
-        }
+        // 遵循「一律以安裝後的啟動為準」原則，執行確定性冪等清空重置與標準掛載啟動
+        idempotent_reconstruct_pm2_services(&root_path, options.auto_register_pm2, &log_event);
     }
 
     // 7. 重啟 Apache 服務 (若勾選且存在 httpd.exe)

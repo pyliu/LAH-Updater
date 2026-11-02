@@ -269,6 +269,18 @@
     margin-top: 1px;
     padding-left: 23px;
   }
+  .pkg-hint-warn {
+    font-size: 11px;
+    color: #b45309;
+    background: #fef3c7;
+    border: 1px solid #fde68a;
+    border-radius: 4px;
+    padding: 2px 7px;
+    margin-top: 3px;
+    margin-left: 23px;
+    display: none;
+    line-height: 1.4;
+  }
 
   /* 系統端點與維運提示卡片 */
   .endpoint-grid {
@@ -509,16 +521,16 @@
   <div class="card" style="padding: 6px 12px; margin-bottom: 7px;">
     <div class="quick-toolbar">
       <div class="quick-group">
-        <span class="quick-label">⚡ 快速選取：</span>
-        <button id="btn_select_all" class="quick-btn" title="一鍵選取所有可用更新包">✅ 全部選取</button>
-        <button id="btn_deselect_all" class="quick-btn" title="一鍵取消所有更新包勾選">⬜ 全部取消</button>
+        <span class="quick-label">⚡ 情境快選：</span>
+        <button id="btn_preset_clean_install" class="quick-btn" title="全新伺服器全量安裝：全選所有已就緒更新包，並自動配置 Web/PM2 服務與資安強化">🌟 全新安裝</button>
+        <button id="btn_preset_inplace_upgrade" class="quick-btn" title="原機原地升級：選取 PHP8.5、VC++、Node 與 LAH-API，保留既有 Apache/PHP7 核心環境">🔄 原地升級</button>
+        <button id="btn_deselect_all" class="quick-btn" title="一鍵取消所有更新包選取">⬜ 全部取消</button>
       </div>
       <div class="quick-divider"></div>
       <div class="quick-group">
         <span class="quick-label">📂 分類快選：</span>
-        <button id="btn_select_base" class="quick-btn category" title="僅選取基礎環境 (base)，並取消其他分類勾選（再次點擊取消全選）">🏛️ 基礎環境 (base)</button>
         <button id="btn_select_patch" class="quick-btn category" title="僅選取程式修補 (patch)，並取消其他分類勾選（再次點擊取消全選）">📦 程式修補 (patch)</button>
-        <button id="btn_select_modules" class="quick-btn category" title="僅選取核心套件 (node_modules)，並取消其他分類勾選（再次點擊取消全選）">🧩 核心套件 (node_modules)</button>
+        <button id="btn_select_modules" class="quick-btn category" title="僅選取核心套件 (node_modules)，並取消其他分類勾選（再次點擊取消全選）">📚 核心套件 (node_modules)</button>
       </div>
     </div>
   </div>

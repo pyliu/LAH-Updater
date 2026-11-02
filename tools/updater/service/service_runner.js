@@ -236,28 +236,64 @@ function resurrectAndEnsureServices() {
   } catch (e) {}
 
   const ecosystems = [
-    { title: 'LAH-WSS', apps: ['LAH-WSS'], path: path.join(TARGET_ROOT, 'lah-messenger-server', 'ecosystem.config.js') },
-    { title: 'LAH-FE / LAH-SCHEDULER', apps: ['LAH-FE', 'LAH-SCHEDULER'], path: path.join(TARGET_ROOT, 'LAH-NUXTJS', 'ecosystem.config.js') },
-    { title: 'lah-api-v85', apps: ['lah-api-v85'], path: path.join(TARGET_ROOT, 'LAH-API', 'ecosystem.config.js') }
+    {
+      title: 'LAH-WSS',
+      apps: ['LAH-WSS'],
+      paths: [path.join(TARGET_ROOT, 'lah-messenger-server', 'ecosystem.config.js')]
+    },
+    {
+      title: 'LAH-FE / LAH-SCHEDULER',
+      apps: ['LAH-FE', 'LAH-SCHEDULER'],
+      paths: [
+        path.join(TARGET_ROOT, 'LAH-NUXTJS', 'ecosystem.config.js'),
+        path.join(TARGET_ROOT, 'LAH-FE', 'ecosystem.config.js')
+      ]
+    },
+    {
+      title: 'lah-api-v85',
+      apps: ['lah-api-v85'],
+      paths: [
+        path.join(TARGET_ROOT, 'LAH-API', 'ecosystem.config.js'),
+        path.join(TARGET_ROOT, 'LAH-API', 'API', 'ecosystem.config.js')
+      ]
+    }
   ];
 
   let needSave = false;
 
   for (const eco of ecosystems) {
-    if (!fs.existsSync(eco.path)) continue;
+    const validPath = eco.paths.find(p => fs.existsSync(p));
+    if (!validPath) continue;
     const missing = eco.apps.filter(a => !onlineApps[a]);
     if (missing.length > 0) {
-      log(`⚡ 偵測到 [${eco.title}] 之服務 ${JSON.stringify(missing)} 未在線，正在啟動 [${eco.path}]...`, 'WARN');
-      try {
-        const startRes = spawnSync(PM2_BIN, ['start', eco.path, '--no-color'], { encoding: 'utf8', windowsHide: true, timeout: 30000 });
-        if (startRes.status === 0) {
-          log(`  ✅ 成功啟動 [${eco.title}]！`, 'SUCCESS');
-          needSave = true;
-        } else {
-          log(`  ⚠️ 啟動 [${eco.path}] 警示: ${startRes.stderr || startRes.stdout}`, 'WARN');
+      if (missing.length === eco.apps.length) {
+        log(`⚡ 偵測到 [${eco.title}] 之服務 ${JSON.stringify(missing)} 全數未在線，正在啟動 [${validPath}]...`, 'WARN');
+        try {
+          const startRes = spawnSync(PM2_BIN, ['start', validPath, '--no-color'], { encoding: 'utf8', windowsHide: true, timeout: 30000 });
+          if (startRes.status === 0) {
+            log(`  ✅ 成功啟動 [${eco.title}]！`, 'SUCCESS');
+            needSave = true;
+          } else {
+            log(`  ⚠️ 啟動 [${validPath}] 警示: ${startRes.stderr || startRes.stdout}`, 'WARN');
+          }
+        } catch (err) {
+          log(`  ❌ 啟動失敗: ${err.message}`, 'ERROR');
         }
-      } catch (err) {
-        log(`  ❌ 啟動失敗: ${err.message}`, 'ERROR');
+      } else {
+        for (const appName of missing) {
+          log(`⚡ 偵測到 [${eco.title}] 之服務 [${appName}] 未在線，正在精準啟動 (--only ${appName})...`, 'WARN');
+          try {
+            const startRes = spawnSync(PM2_BIN, ['start', validPath, '--only', appName, '--no-color'], { encoding: 'utf8', windowsHide: true, timeout: 30000 });
+            if (startRes.status === 0) {
+              log(`  ✅ 成功精準啟動 [${appName}]！`, 'SUCCESS');
+              needSave = true;
+            } else {
+              log(`  ⚠️ 精準啟動 [${appName}] 警示: ${startRes.stderr || startRes.stdout}`, 'WARN');
+            }
+          } catch (err) {
+            log(`  ❌ 精準啟動 [${appName}] 失敗: ${err.message}`, 'ERROR');
+          }
+        }
       }
     }
   }

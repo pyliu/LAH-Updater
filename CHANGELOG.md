@@ -6,6 +6,53 @@
 
 ## [未發布]
 
+### ⚡ 新增「全新安裝」與「原地升級」維運情境快選並修復核心套件圖示跨平台相容性
+
+- **修改目的**：
+  - 依據維運同仁實際現場升級與重灌需求，於快選工具列新增「全新安裝」（全選更新包與標準系統服務配置）與「原地升級」（精準勾選 PHP 8.5、VC++、Node.js 與 LAH-API，並套用原機升級標準服務配置）兩大維運情境預設，免除人工逐一勾選之不便與遺漏風險。
+  - 移除低頻且易生誤導之「基礎環境 (base)」快選按鈕，使工具列排版更加緊湊平衡。
+  - 修復「核心套件 (node_modules)」前綴圖示因採用 Unicode 11.0 字元（`🧩`）而在部分 Windows Server 2016 / 舊版 Windows 顯示為豆腐塊框框（`□`）之相容性問題，改採高相容性圖示 `📚`。
+- **具體修改項目**：
+  - `tools/updater/ui/index.html`：
+    - 快選工具列全面改版為雙分組結構：
+      - 左側「情境快選」：新增 `🌟 全新安裝`（一鍵全選所有更新包與服務配置）、`🔄 原地升級`（精準連動 4 大升級套件與原機服務配置）、`⬜ 全部取消`。
+      - 右側「分類快選」：保留 `📦 程式修補 (patch)`，並將 `🧩 核心套件 (node_modules)` 圖示修正為 Windows Server 全相容之 `📚 核心套件 (node_modules)`。
+      - 移除 `🏛️ 基礎環境 (base)` 快選按鈕。
+  - `tools/updater/ui/app.js`：
+    - 實作 `btn_preset_clean_install` 事件處理：一鍵全選所有已就緒（`exists === true`）更新包，並自動配置 Web/PM2 服務與資安強化全開（含重啟 PM2 服務）。
+    - 實作 `btn_preset_inplace_upgrade` 事件處理：精準勾選 `php85`、`vcredist`、`node` 與 `lah_api` 4 大原地升級套件（其餘套件自動取消選取），並套用原機升級標準服務配置（註冊 Web/PM2、資安強化、重啟 Web；重啟 PM2 與還原備份維持 false）。
+    - 移除 `btn_select_base` 綁定，連動相依性檢驗與自適應高度計算。
+- **相容性與驗證**：
+  - 前端語法檢驗與動態版面調整完成，支援 `autoFitWindow()` 自適應高度。
+  - 重新執行 `cargo build --release` 正式編譯產出至 `dist/智慧控管與監控系統 - 自動安裝與更新工具.exe`，並同步發布至 `v1.9.9`。
+
+
+### 🔄 PM2 確定性冪等清空重建、PHP 8.5 關聯防呆與管理儀表板發布同步強化
+
+- **修改目的**：
+  - 徹底解決原機升級情境下 PM2 程序因舊受管清單疊加與二次啟動導致程序數量翻倍（如 LAH-FE 4 個、LAH-SCHEDULER 2 個、LAH-WSS 2 個）的問題，貫徹「一律以本次安裝後之最新啟動為準」之原則。
+  - 解決維運同仁於舊版伺服器僅勾選「PHP 8.5 執行環境 (php85.zip)」卻未勾選「後端 PHP8 更新包 (LAH-API.zip)」時，因目標目錄不存在而未啟動 lah-api-v85 之困惑，建立前端 UI 自動連動與提示防呆。
+  - 強化管理儀表板打包發布流程，確保編譯產出時同步部署至開發機發布版號資料夾（d:\DEV\@各所分享區\@智慧管控系統\@更新程式\<version>），杜絕手動複製時漏拷。
+- **具體修改項目**：
+  - 	ools/updater/src-tauri/src/pm2.rs：
+    - 新增 idempotent_reconstruct_pm2_services 函式：於階段 4 重新配置受管程序前，一律先強制停止舊 WinSW 服務並執行 pm2 delete all --no-color 清空記憶體中所有舊程序。接著依據安裝目錄下最新就緒之各生態系設定檔標準掛載啟動，最後執行 pm2 save --force --no-color 固化新狀態。
+    - 重構 udit_and_ensure_pm2_services：當巡檢發現生態系中僅有部分服務離線時，強制使用 --only <app_name> 進行精準補啟動，嚴格避免整份生態系重新啟動導致 cluster 模式 Worker 翻倍。
+  - 	ools/updater/service/service_runner.js：
+    - 巡檢與喚醒邏輯同步加入 --only <app_name> 精準啟動防護，杜絕背景服務重複觸發翻倍。
+  - 	ools/updater/src-tauri/src/pipeline.rs：
+    - xecute_update_pipeline 與 pply_system_configurations 的 PM2 配置統一收斂至 idempotent_reconstruct_pm2_services。
+  - 	ools/updater/ui/app.js 與 index.html：
+    - 新增 checkPhp85AndApiDependency 智慧關聯防呆：當使用者選取 php85 且目標目錄尚未安裝 LAH-API 時，若更新包就緒自動連動勾選 LAH-API.zip。
+    - 若使用者手動取消 LAH-API.zip，卡片即時顯示醒目警示「⚠️ 僅選取 PHP 8.5 執行環境，目標主機未安裝 LAH-API 程式碼，更新後將不會啟動 lah-api-v85 服務」。
+    - 點擊「開始執行更新作業」時若條件符合，同步於安裝除錯日誌視窗中輸出警告提示。
+  - 	ools/dashboard/build.py：
+    - 編譯發布邏輯擴充：編譯完成後，自動探測前端版本號並同步複製一份 智慧控管與監控系統 - 管理儀表板.exe 至 d:\DEV\@各所分享區\@智慧管控系統\@更新程式\<version> 發布目錄。
+- **相容性與驗證**：
+  - Rust 18 項單元測試全數通過（cargo test --lib）。
+  - 已完成 Release 正式編譯並發布最新 dist/智慧控管與監控系統 - 自動安裝與更新工具.exe。
+  - 發布版號目錄 1.9.9 已確認包含最新管理儀表板與自動安裝更新工具。
+
+
 ### 🎨 自動安裝與更新工具 UI 端點與維運指引擴充以平衡雙欄高度
 
 - **修改目的**：

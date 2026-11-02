@@ -179,12 +179,15 @@ function renderInitialCatalog() {
           ○ 正在檢查目標目錄...
         </span>
       </div>
+      <div class="pkg-hint-warn" id="hint_pkg_${pkg.id}"></div>
     `;
 
     const chk = itemEl.querySelector(`#chk_pkg_${pkg.id}`);
     chk.addEventListener("change", (e) => {
       pkg.checked = e.target.checked;
+      checkPhp85AndApiDependency(pkg.id);
       updateSummaryText();
+      autoFitWindow();
     });
 
     if (pkg.is_base_env) {
@@ -238,8 +241,50 @@ function updatePackageCards(scannedPkgs) {
     }
   });
 
+  checkPhp85AndApiDependency();
   updateSummaryText();
   autoFitWindow();
+}
+
+// 智慧型相依性防呆：檢測 PHP 8.5 執行環境與 LAH-API 應用模組關聯
+function checkPhp85AndApiDependency(userToggledPkgId = null) {
+  const php85Pkg = state.packages.find((p) => p.id === "php85");
+  const apiPkg = state.packages.find((p) => p.id === "lah_api");
+  if (!php85Pkg || !apiPkg) return;
+
+  const hintPhp85 = document.getElementById("hint_pkg_php85");
+  const hintApi = document.getElementById("hint_pkg_lah_api");
+  const chkApi = document.getElementById("chk_pkg_lah_api");
+
+  // 當勾選了 PHP 8.5 執行環境
+  if (php85Pkg.checked) {
+    // 若目標目錄不存在 LAH-API
+    if (!apiPkg.target_exists) {
+      // 若同仁剛剛親自勾選了 php85，且 apiPkg 存在更新包但未被勾選，自動連動勾選以提供完整服務
+      if (userToggledPkgId === "php85" && apiPkg.exists && !apiPkg.checked) {
+        apiPkg.checked = true;
+        if (chkApi) chkApi.checked = true;
+      }
+
+      // 若目前 apiPkg 仍未勾選 (例如手動取消)，呈現醒目警示徽章
+      if (!apiPkg.checked) {
+        const warnText = "⚠️ 僅選取 PHP 8.5 執行環境，目標主機未安裝 LAH-API 程式碼，更新後將不會啟動 lah-api-v85 服務";
+        if (hintPhp85) {
+          hintPhp85.textContent = warnText;
+          hintPhp85.style.display = "block";
+        }
+        if (hintApi) {
+          hintApi.textContent = "💡 建議同步勾選本更新包，以於 PHP 8.5 建立並啟動 lah-api-v85 核心業務 API";
+          hintApi.style.display = "block";
+        }
+        return;
+      }
+    }
+  }
+
+  // 若不符合警示條件，隱藏提示
+  if (hintPhp85) hintPhp85.style.display = "none";
+  if (hintApi) hintApi.style.display = "none";
 }
 
 function updateSummaryText() {
@@ -440,26 +485,86 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById("modal_release_notes").classList.remove("active");
   });
 
-  // 集中式快選：全部選取 (全站所有可用更新包)
-  document.getElementById("btn_select_all")?.addEventListener("click", () => {
+  // 情境快選：全新安裝 (全選所有可用更新包 + 標準系統服務配置全開)
+  document.getElementById("btn_preset_clean_install")?.addEventListener("click", () => {
+    // 1. 全選所有已就緒更新包
     state.packages.forEach((pkg) => {
-      if (pkg.exists) {
-        pkg.checked = true;
-        const el = document.getElementById(`chk_pkg_${pkg.id}`);
-        if (el) el.checked = true;
+      pkg.checked = pkg.exists;
+      const el = document.getElementById(`chk_pkg_${pkg.id}`);
+      if (el) {
+        el.checked = pkg.exists;
+        el.disabled = !pkg.exists;
       }
     });
+
+    // 2. 套用全新安裝標準服務配置
+    const autoApache = document.getElementById("chk_auto_apache");
+    const autoPm2 = document.getElementById("chk_auto_pm2");
+    const security = document.getElementById("chk_security_hardening");
+    const restartApache = document.getElementById("chk_restart_apache");
+    const restartPm2 = document.getElementById("chk_restart_pm2");
+    const restoreBackup = document.getElementById("chk_restore_backup");
+    const backupRow = document.getElementById("backup_zip_row");
+
+    if (autoApache) autoApache.checked = true;
+    if (autoPm2) autoPm2.checked = true;
+    if (security) security.checked = true;
+    if (restartApache) restartApache.checked = true;
+    if (restartPm2) restartPm2.checked = true;
+    if (restoreBackup) restoreBackup.checked = false;
+    if (backupRow) backupRow.style.display = "none";
+
+    checkPhp85AndApiDependency();
     updateSummaryText();
+    autoFitWindow();
   });
 
-  // 集中式快選：全部取消 (全站所有更新包)
+  // 情境快選：原地升級 (精準勾選 PHP8.5 + VC++ + Node + LAH-API，並套用原機升級標準服務配置)
+  document.getElementById("btn_preset_inplace_upgrade")?.addEventListener("click", () => {
+    // 1. 精準勾選原地升級 4 大套件：php85, vcredist, node, lah_api
+    const inplaceIds = ["php85", "vcredist", "node", "lah_api"];
+    state.packages.forEach((pkg) => {
+      const shouldCheck = inplaceIds.includes(pkg.id) && pkg.exists;
+      pkg.checked = shouldCheck;
+      const el = document.getElementById(`chk_pkg_${pkg.id}`);
+      if (el) {
+        el.checked = shouldCheck;
+        el.disabled = !pkg.exists;
+      }
+    });
+
+    // 2. 套用原機原地升級標準服務配置 (重啟 Apache、註冊 Web/PM2、套用資安防護)
+    const autoApache = document.getElementById("chk_auto_apache");
+    const autoPm2 = document.getElementById("chk_auto_pm2");
+    const security = document.getElementById("chk_security_hardening");
+    const restartApache = document.getElementById("chk_restart_apache");
+    const restartPm2 = document.getElementById("chk_restart_pm2");
+    const restoreBackup = document.getElementById("chk_restore_backup");
+    const backupRow = document.getElementById("backup_zip_row");
+
+    if (autoApache) autoApache.checked = true;
+    if (autoPm2) autoPm2.checked = true;
+    if (security) security.checked = true;
+    if (restartApache) restartApache.checked = true;
+    if (restartPm2) restartPm2.checked = false;
+    if (restoreBackup) restoreBackup.checked = false;
+    if (backupRow) backupRow.style.display = "none";
+
+    checkPhp85AndApiDependency();
+    updateSummaryText();
+    autoFitWindow();
+  });
+
+  // 集中式快選：全部取消 (清空所有更新包選取)
   document.getElementById("btn_deselect_all")?.addEventListener("click", () => {
     state.packages.forEach((pkg) => {
       pkg.checked = false;
       const el = document.getElementById(`chk_pkg_${pkg.id}`);
       if (el) el.checked = false;
     });
+    checkPhp85AndApiDependency();
     updateSummaryText();
+    autoFitWindow();
   });
 
   // 分類快選 (獨占選取：僅選取該分類且取消其他分類；若已全選該分類則再次點擊取消)
@@ -493,11 +598,13 @@ document.addEventListener("DOMContentLoaded", () => {
         });
       }
 
+      checkPhp85AndApiDependency();
       updateSummaryText();
+      autoFitWindow();
     });
   }
 
-  setupCategoryToggle("btn_select_base", "base");
+  // 依維運需求：拿掉基礎環境 (base) 快選，保留常用之程式修補 (patch) 與核心套件 (node_modules)
   setupCategoryToggle("btn_select_patch", "patch");
   setupCategoryToggle("btn_select_modules", "node_modules");
 
@@ -550,6 +657,15 @@ document.addEventListener("DOMContentLoaded", () => {
     if (selectedPkgs.length === 0) {
       alert("請至少勾選一項已就緒的安裝更新包！");
       return;
+    }
+
+    const php85Pkg = state.packages.find((p) => p.id === "php85");
+    const apiPkg = state.packages.find((p) => p.id === "lah_api");
+    if (php85Pkg && php85Pkg.checked && apiPkg && !apiPkg.checked && !apiPkg.target_exists) {
+      appendLog(
+        "warning",
+        "⚠️ 提示：您已選取 PHP 8.5 執行環境，但未勾選「後端 PHP8 更新包 (LAH-API.zip)」且目標主機查無程式碼，更新後系統將跳過 lah-api-v85 服務啟動。"
+      );
     }
 
     const rootDir = document.getElementById("txt_root_dir").value.trim() || "C:\\AppServ";
@@ -646,6 +762,15 @@ document.addEventListener("DOMContentLoaded", () => {
   // 立即套用配置與註冊服務
   document.getElementById("btn_apply_config_now").addEventListener("click", async () => {
     if (state.isUpdating) return;
+
+    const php85Pkg = state.packages.find((p) => p.id === "php85");
+    const apiPkg = state.packages.find((p) => p.id === "lah_api");
+    if (php85Pkg && php85Pkg.checked && apiPkg && !apiPkg.checked && !apiPkg.target_exists) {
+      appendLog(
+        "warning",
+        "⚠️ 提示：您已選取 PHP 8.5 執行環境，但未勾選「後端 PHP8 更新包 (LAH-API.zip)」且目標主機查無程式碼，更新後系統將跳過 lah-api-v85 服務啟動。"
+      );
+    }
 
     const rootDir = document.getElementById("txt_root_dir").value.trim() || "C:\\AppServ";
     const autoRegisterApache = document.getElementById("chk_auto_apache").checked;

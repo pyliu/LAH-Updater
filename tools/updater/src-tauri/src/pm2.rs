@@ -971,37 +971,62 @@ pub fn audit_and_ensure_pm2_services(
             .collect();
 
         if !missing_apps.is_empty() {
-            let names = missing_apps
-                .iter()
-                .map(|s| **s)
-                .collect::<Vec<&str>>()
-                .join(", ");
-            log_fn(
-                &format!(
-                    "⚡ 偵測到 [{}] 之服務 [{}] 尚未在線，正在啟動 [{}]...",
-                    eco.title,
-                    names,
-                    eco_path.display()
-                ),
-                "warning",
-            );
-
             let eco_str = eco_path.to_string_lossy().to_string();
-            let (start_ok, stdout, stderr) =
-                run_cmd_hidden(&pm2_str, &["start", &eco_str, "--no-color"]);
-            if start_ok || stdout.contains("✓") {
-                log_fn(&format!("  ✅ 成功啟動 [{}]！", eco.title), "success");
-                need_save = true;
-            } else {
+            if missing_apps.len() == eco.apps.len() {
+                let names = missing_apps.iter().map(|s| **s).collect::<Vec<&str>>().join(", ");
                 log_fn(
                     &format!(
-                        "  ⚠️ 啟動 [{}] 回傳警示: {} {}",
-                        eco_path.display(),
-                        stdout,
-                        stderr
+                        "⚡ 偵測到 [{}] 之服務 [{}] 全數未在線，正在啟動 [{}]...",
+                        eco.title,
+                        names,
+                        eco_path.display()
                     ),
                     "warning",
                 );
+                let (start_ok, stdout, stderr) =
+                    run_cmd_hidden(&pm2_str, &["start", &eco_str, "--no-color"]);
+                if start_ok || stdout.contains("✓") {
+                    log_fn(&format!("  ✅ 成功啟動 [{}]！", eco.title), "success");
+                    need_save = true;
+                } else {
+                    log_fn(
+                        &format!(
+                            "  ⚠️ 啟動 [{}] 回傳警示: {} {}",
+                            eco_path.display(),
+                            stdout,
+                            stderr
+                        ),
+                        "warning",
+                    );
+                }
+            } else {
+                for app_to_start in &missing_apps {
+                    log_fn(
+                        &format!(
+                            "⚡ 偵測到 [{}] 之服務 [{}] 尚未在線，正在精準啟動 (--only {})...",
+                            eco.title,
+                            app_to_start,
+                            app_to_start
+                        ),
+                        "warning",
+                    );
+                    let (start_ok, stdout, stderr) =
+                        run_cmd_hidden(&pm2_str, &["start", &eco_str, "--only", app_to_start, "--no-color"]);
+                    if start_ok || stdout.contains("✓") {
+                        log_fn(&format!("  ✅ 成功精準啟動 [{}]！", app_to_start), "success");
+                        need_save = true;
+                    } else {
+                        log_fn(
+                            &format!(
+                                "  ⚠️ 精準啟動 [{}] 回傳警示: {} {}",
+                                app_to_start,
+                                stdout,
+                                stderr
+                            ),
+                            "warning",
+                        );
+                    }
+                }
             }
         }
     }
@@ -1081,6 +1106,144 @@ pub fn audit_and_ensure_pm2_services(
     (all_healthy, "PM2 服務巡檢完成".to_string())
 }
 
+
+
+/// 確定性冪等清空重置並啟動所有受管服務 (遵循「一律以安裝後的啟動為準」原則)
+pub fn idempotent_reconstruct_pm2_services(
+    root_dir: &Path,
+    auto_register_pm2: bool,
+    log_fn: &dyn Fn(&str, &str),
+) -> (bool, String) {
+    let logs_dir = root_dir.join("logs");
+    let _ = fs::create_dir_all(&logs_dir);
+
+    let Some(pm2) = resolve_pm2_command(root_dir) else {
+        log_fn("⚠️ 系統未偵測到有效的 pm2.cmd，跳過 PM2 重置與啟動作業。", "warning");
+        return (false, "未偵測到 pm2.cmd".to_string());
+    };
+    let pm2_str = pm2.to_string_lossy().to_string();
+
+    log_fn("--------------------------------------------------", "info");
+    log_fn("🔄 正在以本次安裝配置為唯一準則，執行 PM2 確定性清空重置與重啟...", "info");
+
+    // 1. 若 LAH_PM2_Service 系統服務正在運行，先停止它，避免背景 Watchdog 產生競態干擾
+    if is_pm2_service_installed() {
+        let _ = stop_service("LAH_PM2_Service", log_fn);
+    }
+
+    // 2. 清除既有 PM2 受控程序註冊表 (徹底消除舊進程殘留與重複 Worker 實例)
+    let (del_ok, out_del, err_del) = run_cmd_hidden(&pm2_str, &["delete", "all", "--no-color"]);
+    if del_ok || out_del.contains("deleted") {
+        log_fn("  ✓ 已清空舊有 PM2 程序清單 (pm2 delete all)", "success");
+    } else {
+        log_fn(&format!("  ℹ️ PM2 重置清空輸出: {} {}", out_del.trim(), err_del.trim()), "info");
+    }
+
+    // 3. 定義三大核心生態系
+    struct EcosystemDef {
+        title: &'static str,
+        candidates: Vec<PathBuf>,
+    }
+
+    let core_ecosystems = [
+        EcosystemDef {
+            title: "即時通訊伺服器 (LAH-WSS)",
+            candidates: vec![root_dir.join("lah-messenger-server").join("ecosystem.config.js")],
+        },
+        EcosystemDef {
+            title: "智慧管控前端網站 (LAH-FE / LAH-SCHEDULER)",
+            candidates: vec![
+                root_dir.join("LAH-NUXTJS").join("ecosystem.config.js"),
+                root_dir.join("LAH-FE").join("ecosystem.config.js"),
+            ],
+        },
+        EcosystemDef {
+            title: "現代化後端 API (lah-api-v85)",
+            candidates: vec![
+                root_dir.join("LAH-API").join("ecosystem.config.js"),
+                root_dir.join("LAH-API").join("API").join("ecosystem.config.js"),
+            ],
+        },
+    ];
+
+    // 4. 依序啟動已就緒的各模組生態系
+    for eco in &core_ecosystems {
+        let Some(eco_path) = eco.candidates.iter().find(|p| p.is_file()) else {
+            if eco.title.contains("lah-api-v85") {
+                log_fn("  ℹ️ 目標主機未安裝後端 PHP8 應用模組 (LAH-API)，跳過 lah-api-v85 啟動", "info");
+            }
+            continue;
+        };
+
+        log_fn(&format!("🚀 正在以標準配置啟動 [{}]：{}...", eco.title, eco_path.display()), "info");
+        let eco_str = eco_path.to_string_lossy().to_string();
+        let (start_ok, stdout, stderr) = run_cmd_hidden(&pm2_str, &["start", &eco_str, "--no-color"]);
+        if start_ok || stdout.contains("✓") {
+            log_fn(&format!("  ✅ 成功掛載並啟動 [{}]！", eco.title), "success");
+        } else {
+            log_fn(&format!("  ⚠️ 啟動 [{}] 回傳警示: {} {}", eco_path.display(), stdout, stderr), "warning");
+        }
+    }
+
+    // 5. 確保內建日誌輪替模組 (pm2-logrotate)
+    ensure_pm2_logrotate(root_dir, log_fn);
+
+    // 6. 固化保存最新且唯一之 dump 存檔
+    log_fn("💾 正在固化保存最新 PM2 受管程序存檔 (pm2 save)...", "info");
+    let _ = run_cmd_hidden(&pm2_str, &["save", "--force", "--no-color"]);
+
+    // 7. 若有勾選自動註冊 PM2 系統服務，執行註冊與自啟動配置
+    if auto_register_pm2 {
+        setup_pm2_autostart(root_dir, log_fn);
+    } else {
+        log_fn("  ℹ️ 未勾選註冊 PM2 系統服務，跳過 LAH_PM2_Service 註冊與自啟配置", "info");
+    }
+
+    // 8. 重新查詢一次最新狀態印出摘要報告
+    let mut final_apps: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+    let (ok_final, out_final, _) = run_cmd_hidden(&pm2_str, &["jlist"]);
+    if ok_final {
+        if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&out_final) {
+            if let Some(arr) = parsed.as_array() {
+                for item in arr {
+                    if let Some(name) = item.get("name").and_then(|v| v.as_str()) {
+                        let status = item
+                            .get("pm2_env")
+                            .and_then(|e| e.get("status"))
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("unknown");
+                        if !final_apps.contains_key(name) || status == "online" {
+                            final_apps.insert(name.to_string(), status.to_string());
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    log_fn("📋 安裝後 PM2 受管核心服務狀態：", "info");
+    let mut all_healthy = true;
+    for app_name in &[
+        "LAH-WSS",
+        "LAH-FE",
+        "LAH-SCHEDULER",
+        "lah-api-v85",
+        "pm2-logrotate",
+    ] {
+        let st = final_apps.get(*app_name).map(|s| s.as_str()).unwrap_or("未註冊 / 離線");
+        if st == "online" {
+            log_fn(&format!("  • {:<16} : ✅ {st}", app_name), "success");
+        } else if *app_name == "lah-api-v85" && !root_dir.join("LAH-API").is_dir() {
+            log_fn(&format!("  • {:<16} : ℹ️ 未部署 (跳過)", app_name), "info");
+        } else {
+            all_healthy = false;
+            log_fn(&format!("  • {:<16} : ⚠️ {st}", app_name), "warning");
+        }
+    }
+
+    log_fn("🎉 PM2 受管服務已全面對齊本次安裝配置，無任何重複實例！", "success");
+    (all_healthy, "PM2 冪等重建啟動完成".to_string())
+}
 
 #[cfg(test)]
 mod tests {
