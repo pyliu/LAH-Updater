@@ -6,6 +6,18 @@
 
 ## [未發布]
 
+### 🧹 pack.py 移除前端核心套件別名包產出邏輯 (LAH-FE-node_modules.zip)
+
+- **修改目的**：
+  - 簡化前端依賴套件打包與發布流程。因更新工具（`extractor.rs`）本身已具備 `alt_names` 容錯搜尋能力，生產端（`pack.py`）無需重複產出內容相同的別名檔案（`LAH-FE-node_modules.zip`）。
+  - 避免發布同步時重複複製近 80 MB 相同內容至發布分享區，大幅節省儲存空間與網路頻寬，並消除維運同仁面對雙壓縮包時的認知負擔。
+- **具體修改項目**：
+  - `pack/pack.py`：移除打包前端 `node_modules` 後建立 `LAH-FE-node_modules.zip` 的硬連結／複製邏輯，並移除完成摘要中的別名輸出。
+  - `pack/README.md`：更新目錄分流規範說明表格，移除「(及別名)」之陳述。
+- **相容性與驗證**：
+  - 更新工具（`extractor.rs`）標準名稱即為 `LAH-NUXTJS-node_modules.zip`，對既有更新與解壓流程 100% 向下相容。
+  - 執行 `python -m py_compile LAH-Updater\pack\pack.py` 與 `python pack.py --help` 驗證皆順利通過。
+
 ### ⚡ 新增「全新安裝」與「原地升級」維運情境快選並修復核心套件圖示跨平台相容性
 
 - **修改目的**：

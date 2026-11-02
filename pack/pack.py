@@ -843,7 +843,7 @@ def main():
         if not build_zip_package("即時通訊伺服器 (patch/lah-messenger-server.zip)", messenger_dir, ms_zip_path, MESSENGER_INCLUDES, MESSENGER_EXCLUDES):
             sys.exit(1)
 
-    # 6. 打包 前端核心套件 -> node_modules/LAH-NUXTJS-node_modules.zip (與別名 LAH-FE-node_modules.zip)
+    # 6. 打包 前端核心套件 -> node_modules/LAH-NUXTJS-node_modules.zip
     if do_fe_modules:
         fe_mod_dir = os.path.join(fe_dir, "node_modules")
         if not os.path.isdir(fe_mod_dir):
@@ -852,18 +852,6 @@ def main():
             fe_mod_zip = os.path.join(node_modules_dir, "LAH-NUXTJS-node_modules.zip")
             if not build_zip_package("前端核心套件 (node_modules/LAH-NUXTJS-node_modules.zip)", fe_dir, fe_mod_zip, ["node_modules"], FE_NODE_MODULES_EXCLUDES):
                 sys.exit(1)
-            # 同步建立別名 LAH-FE-node_modules.zip，相容直接以 LAH-FE 命名的使用場景
-            fe_alias_zip = os.path.join(node_modules_dir, "LAH-FE-node_modules.zip")
-            try:
-                if os.path.exists(fe_alias_zip):
-                    os.remove(fe_alias_zip)
-                try:
-                    os.link(fe_mod_zip, fe_alias_zip)
-                except OSError:
-                    shutil.copy2(fe_mod_zip, fe_alias_zip)
-                print(f"       已同步建立別名檔案：{os.path.basename(fe_alias_zip)}")
-            except Exception as e:
-                print(f"[WARN] 建立別名檔案失敗：{e}")
 
     # 7. 打包 即時通伺服器核心套件 -> node_modules/lah-messenger-server-node_modules.zip
     if do_server_modules:
@@ -926,7 +914,6 @@ def main():
         print(f"  - [patch]        {ms_zip_path}")
     if do_fe_modules:
         print(f"  - [node_modules] {fe_mod_zip}")
-        print(f"  - [node_modules] {fe_alias_zip} (別名)")
     if do_server_modules:
         print(f"  - [node_modules] {server_mod_zip}")
     if do_node:
