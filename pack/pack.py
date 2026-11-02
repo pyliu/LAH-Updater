@@ -18,6 +18,7 @@ r"""
 import argparse
 import fnmatch
 import glob
+import json
 import os
 import shutil
 import subprocess
@@ -61,6 +62,8 @@ API_EXCLUDES = [
     r"include\config\AD.INVALID.php",
     r"include\config\AD.ALL.php",
     r"include\config\AD.LOCKED.php",
+    r"project\novel",
+    r"project\bookmark",
     ".env",
     ".git*",
     ".vscode",
@@ -89,6 +92,8 @@ API8_EXCLUDES = [
     r"include\config\AD.INVALID.php",
     r"include\config\AD.ALL.php",
     r"include\config\AD.LOCKED.php",
+    r"project\novel",
+    r"project\bookmark",
     ".phpunit.cache",
     "phpunit.xml",
     "tests",
@@ -446,6 +451,90 @@ def build_vcredist_package(base_dir):
     return True
 
 
+
+def get_fe_version(fe_dir):
+    """自 LAH-FE 的 package.json 取得版本號，回傳標準格式版號字串（例如 'v1.9.9'）"""
+    pkg_path = os.path.join(fe_dir, "package.json")
+    if os.path.isfile(pkg_path):
+        try:
+            with open(pkg_path, "r", encoding="utf-8") as f:
+                pkg_data = json.load(f)
+                raw_ver = pkg_data.get("version", "").strip()
+                if raw_ver:
+                    return raw_ver if raw_ver.startswith("v") else f"v{raw_ver}"
+        except Exception as e:
+            print(f"[WARN] 讀取 LAH-FE package.json 版本失敗：{e}")
+    return None
+
+
+def sync_artifacts_to_release_dir(dist_dir, fe_dir):
+    """
+    將打包成品（白名單：*.txt, *.pdf, *.exe, *.zip）增量複製至開發機發布資料夾。
+    目的端版號子目錄依據 LAH-FE package.json 之版本動態建立（例如 v1.9.9）。
+    若本機不存在發布資料夾則優雅略過，不影響打包流程。
+    """
+    release_base = r"d:\DEV\@各所分享區\@智慧管控系統\@更新程式"
+    if not os.path.isdir(release_base):
+        print("\n[提示] 本機未偵測到發布基底資料夾 (d:\\DEV\\@各所分享區\\@智慧管控系統\\@更新程式)，已略過發布資料夾複製作業。")
+        return None
+
+    version_str = get_fe_version(fe_dir)
+    if not version_str:
+        print("\n[WARN] 無法自 LAH-FE/package.json 取得有效版號，略過複製至發布資料夾。")
+        return None
+
+    target_dir = os.path.join(release_base, version_str)
+    os.makedirs(target_dir, exist_ok=True)
+
+    allowed_exts = {".txt", ".pdf", ".exe", ".zip"}
+
+    copied_count = 0
+    skipped_count = 0
+    copied_files = []
+
+    print("-" * 60)
+    print(f"[發布] 正在同步成品至開發機發布資料夾 ({version_str})...")
+    print(f"       來源目錄：{dist_dir}")
+    print(f"       目的目錄：{target_dir}")
+    print(f"       副檔名白名單：{', '.join(sorted(allowed_exts))}")
+
+    for root, dirs, files in os.walk(dist_dir):
+        rel_dir = os.path.relpath(root, dist_dir)
+        dest_subdir = target_dir if rel_dir == "." else os.path.join(target_dir, rel_dir)
+
+        for filename in files:
+            ext = os.path.splitext(filename)[1].lower()
+            if ext not in allowed_exts:
+                continue
+
+            src_file = os.path.join(root, filename)
+            dst_file = os.path.join(dest_subdir, filename)
+
+            need_copy = True
+            if os.path.exists(dst_file):
+                src_stat = os.stat(src_file)
+                dst_stat = os.stat(dst_file)
+                if src_stat.st_size == dst_stat.st_size and abs(src_stat.st_mtime - dst_stat.st_mtime) <= 1.0:
+                    need_copy = False
+
+            if need_copy:
+                os.makedirs(dest_subdir, exist_ok=True)
+                shutil.copy2(src_file, dst_file)
+                copied_count += 1
+                rel_name = os.path.join(rel_dir, filename) if rel_dir != "." else filename
+                copied_files.append(rel_name)
+            else:
+                skipped_count += 1
+
+    print(f"[OK] 發布資料夾同步完成！新複製/覆蓋 {copied_count} 個檔案，略過未變更 {skipped_count} 個檔案。")
+    if copied_files:
+        for f in copied_files[:8]:
+            print(f"     + 已更新：{f}")
+        if len(copied_files) > 8:
+            print(f"     ... 共 {len(copied_files)} 個更新檔案")
+    return target_dir
+
+
 def prompt_interactive_targets():
     """當未傳入任何參數時，顯示互動選單供使用者選擇欲打包的項目"""
     print("=" * 68)
@@ -573,6 +662,7 @@ def prompt_interactive_targets():
 def main():
     parser = argparse.ArgumentParser(description="智慧控管與監控系統 - 原始碼自動編譯與打包工具")
     parser.add_argument("--skip-build", action="store_true", help="略過 LAH-FE 的 yarn build 步驟，直接打包現有檔案")
+    parser.add_argument("--skip-copy", action="store_true", help="略過將成品複製至開發機發布資料夾的步驟")
     parser.add_argument("--api-only", action="store_true", help="僅打包 LAH-API PHP7 (www.zip)")
     parser.add_argument("--api8-only", action="store_true", help="僅打包 LAH-API PHP8 (LAH-API.zip)")
     parser.add_argument("--fe-only", action="store_true", help="僅編譯並打包 LAH-FE (LAH-NUXTJS.zip)")
@@ -772,10 +862,19 @@ def main():
         except Exception as e:
             print(f"[WARN] 複製更新說明文件失敗：{e}")
 
+    # 10. 將成品同步複製至開發機發布資料夾（依據 LAH-FE 版號）
+    published_dir = None
+    if not args.skip_copy:
+        published_dir = sync_artifacts_to_release_dir(output_base_dir, fe_dir)
+    else:
+        print("\n[提示] 已指定 --skip-copy，略過發布資料夾複製作業。")
+
     total_elapsed = time.time() - overall_start
     print("=" * 60)
     print(f"[SUCCESS] 全部打包作業順利完成！（總耗時 {total_elapsed:.1f} 秒）")
     print(f"輸出基底目錄：{output_base_dir}")
+    if published_dir:
+        print(f"發布資料夾  ：{published_dir}")
     if do_api:
         print(f"  - [patch]        {www_zip_path}")
     if do_api8:

@@ -16,6 +16,16 @@
 
 ---
 
+## 🚀 開發機發布資料夾自動增量同步
+
+打包作業順利完成後，工具預設自動將 `dist/` 內之成品增量同步至開發機發布資料夾：
+- **發布基底路徑**：`d:\DEV\@各所分享區\@智慧管控系統\@更新程式\`（定時自動同步至公用 NAS）。
+- **版號子目錄**：依據 `LAH-FE/package.json` 中的 `version` 欄位建立（例如 `v1.9.9`）。
+- **副檔名白名單**：僅限 `*.txt`、`*.pdf`、`*.exe`、`*.zip`（排除 `*.jpg` 等輔助圖解）。
+- **防呆與略過**：若本機未偵測到發布基底資料夾，或傳入 `--skip-copy` 參數，則自動略過複製步驟，不影響打包流程。
+
+---
+
 ## 🛠️ 使用方式
 
 ```powershell
@@ -32,5 +42,6 @@ python pack.py --messenger-only     # 僅打包即時通伺服器 (patch/lah-mes
 python pack.py --modules-only       # 僅打包前端與即時通依賴套件至 node_modules/
 python pack.py --node-only          # 僅打包 Node.js 綠色環境至 base/
 python pack.py --vcredist-only      # 僅收集本機 VC++ 執行期封裝為 base/vcredist-x64.zip
+python pack.py --skip-copy          # 略過將成品複製至開發機發布資料夾的步驟
 python pack.py --output-dir <路徑>  # 自訂輸出基底目錄（亦會自動分流至 patch/、node_modules/、base/）
 ```
