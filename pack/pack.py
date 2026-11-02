@@ -214,8 +214,8 @@ def resolve_project_dirs(script_dir):
         r"d:\DEV\lah-messenger-server",
     ]
     node_candidates = [
-        r"C:\AppServ\node",
-        r"d:\AppServ\node",
+        "C:/AppServ/node",
+        "D:/AppServ/node",
         os.path.join(workspace_dir, "node"),
     ]
 
@@ -299,6 +299,26 @@ def collect_package_files(base_dir, include_patterns, exclude_patterns):
     return matched_files
 
 
+def resolve_node16_path():
+    """尋找相容之 Node 16 目錄（優先自 NVM 或 AppServ），避免高版本 Node ABI 不相容問題"""
+    candidates = []
+    local_app_data = os.environ.get("LOCALAPPDATA", "")
+    if local_app_data:
+        nvm_dir = os.path.join(local_app_data, "nvm")
+        if os.path.isdir(nvm_dir):
+            for entry in sorted(os.listdir(nvm_dir), reverse=True):
+                if entry.startswith("v16.") and os.path.isdir(os.path.join(nvm_dir, entry)):
+                    candidates.append(os.path.join(nvm_dir, entry))
+    candidates.extend([
+        "C:/AppServ/node",
+        "D:/AppServ/node",
+    ])
+    for c in candidates:
+        if os.path.isfile(os.path.join(c, "node.exe")):
+            return c
+    return None
+
+
 def run_fe_build(fe_dir):
     """進入 LAH-FE 執行 yarn build 並等待完成"""
     print("-" * 60)
@@ -312,6 +332,11 @@ def run_fe_build(fe_dir):
 
     build_env = os.environ.copy()
     build_env["NODE_ENV"] = "production"
+
+    node16_dir = resolve_node16_path()
+    if node16_dir:
+        print(f"         [環境隔離] 自動切換至相容 Node 16 執行期：{node16_dir}")
+        build_env["PATH"] = node16_dir + os.pathsep + build_env.get("PATH", "")
 
     start_time = time.time()
     ret = subprocess.run("yarn build", cwd=fe_dir, env=build_env, shell=True)
