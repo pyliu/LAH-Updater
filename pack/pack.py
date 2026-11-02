@@ -162,6 +162,22 @@ NODE_MODULES_EXCLUDES = [
     "*.bak",
 ]
 
+# LAH-FE 前端核心套件專屬排除規則（排除歷史殘留之 SQLite 原生模組與編譯工具鏈）
+FE_NODE_MODULES_EXCLUDES = NODE_MODULES_EXCLUDES + [
+    r"node_modules\better-sqlite3*",
+    r"*\better-sqlite3\*",
+    r"node_modules\sqlite3*",
+    r"*\sqlite3\*",
+    r"node_modules\prebuild-install*",
+    r"*\prebuild-install\*",
+    r"node_modules\node-pre-gyp*",
+    r"*\node-pre-gyp\*",
+    r"node_modules\node-abi*",
+    r"*\node-abi\*",
+    r"node_modules\napi-build-utils*",
+    r"*\napi-build-utils\*",
+]
+
 # Node.js 綠色環境打包排除規則
 NODE_EXCLUDES = [
     r"node\node_modules\.cache",
@@ -834,7 +850,7 @@ def main():
             print(f"[WARN] 找不到前端 node_modules 目錄：{fe_mod_dir}，跳過打包。")
         else:
             fe_mod_zip = os.path.join(node_modules_dir, "LAH-NUXTJS-node_modules.zip")
-            if not build_zip_package("前端核心套件 (node_modules/LAH-NUXTJS-node_modules.zip)", fe_dir, fe_mod_zip, ["node_modules"], NODE_MODULES_EXCLUDES):
+            if not build_zip_package("前端核心套件 (node_modules/LAH-NUXTJS-node_modules.zip)", fe_dir, fe_mod_zip, ["node_modules"], FE_NODE_MODULES_EXCLUDES):
                 sys.exit(1)
             # 同步建立別名 LAH-FE-node_modules.zip，相容直接以 LAH-FE 命名的使用場景
             fe_alias_zip = os.path.join(node_modules_dir, "LAH-FE-node_modules.zip")
