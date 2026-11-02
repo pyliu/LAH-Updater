@@ -54,6 +54,7 @@ const state = {
   autoTail: true,
   currentLogPath: '',
   availableLogs: [],
+  apiLogFiles: [],
   rawLogLines: [],
   lastLogFingerprint: '',
 
@@ -111,6 +112,8 @@ const el = {
 
   // 日誌檢視器
   logSourceSelect: document.getElementById('logSourceSelect'),
+  apiDateSelectGroup: document.getElementById('apiDateSelectGroup'),
+  apiDateSelect: document.getElementById('apiDateSelect'),
   chkAutoTail: document.getElementById('chkAutoTail'),
   txtLogFilter: document.getElementById('txtLogFilter'),
   btnClearLogCanvas: document.getElementById('btnClearLogCanvas'),
@@ -483,11 +486,22 @@ const initApp = async () => {
   });
 
   // 日誌檢視器事件
-  el.logSourceSelect.addEventListener('change', (e) => {
-    state.currentLogPath = e.target.value;
-    updateLogMetaDisplay();
-    fetchLogTail(true);
+  el.logSourceSelect.addEventListener('change', async (e) => {
+    const selectedPath = e.target.value;
+    const selectedItem = state.availableLogs.find((i) => i.path === selectedPath);
+    await handleLogSourceSelection(selectedItem);
   });
+
+  if (el.apiDateSelect) {
+    el.apiDateSelect.addEventListener('change', (e) => {
+      const path = e.target.value;
+      if (path) {
+        state.currentLogPath = path;
+        updateLogMetaDisplay();
+        fetchLogTail(true);
+      }
+    });
+  }
 
   el.chkAutoTail.addEventListener('change', (e) => {
     state.autoTail = e.target.checked;
@@ -988,16 +1002,63 @@ const loadAvailableLogsList = async () => {
     const firstExist = list.find((i) => i.exists);
     if (firstExist) {
       el.logSourceSelect.value = firstExist.path;
-      state.currentLogPath = firstExist.path;
-      updateLogMetaDisplay();
+      await handleLogSourceSelection(firstExist);
     }
   } catch (err) {
     console.error('讀取可用日誌清單失敗：', err);
   }
 };
 
+const handleLogSourceSelection = async (item) => {
+  if (!item) return;
+
+  if (item.key === 'api_www_log') {
+    // 顯示歷史日期下拉選單
+    if (el.apiDateSelectGroup) el.apiDateSelectGroup.style.display = 'flex';
+    await loadApiLogDates();
+  } else {
+    // 隱藏歷史日期下拉選單
+    if (el.apiDateSelectGroup) el.apiDateSelectGroup.style.display = 'none';
+    state.currentLogPath = item.path;
+    updateLogMetaDisplay();
+    fetchLogTail(true);
+  }
+};
+
+const loadApiLogDates = async () => {
+  try {
+    const files = await invoke('get_api_log_files');
+    state.apiLogFiles = files || [];
+    if (files && files.length > 0) {
+      let html = '';
+      files.forEach((f) => {
+        const sizeStr = formatBytes(f.size_bytes);
+        html += `<option value="${f.path}">${f.label} (${sizeStr})</option>`;
+      });
+      if (el.apiDateSelect) {
+        el.apiDateSelect.innerHTML = html;
+        el.apiDateSelect.value = files[0].path;
+      }
+      state.currentLogPath = files[0].path;
+    } else {
+      if (el.apiDateSelect) {
+        el.apiDateSelect.innerHTML = '<option value="">無歷史日誌</option>';
+      }
+      const mainItem = state.availableLogs.find((i) => i.key === 'api_www_log');
+      state.currentLogPath = mainItem ? mainItem.path : '';
+    }
+    updateLogMetaDisplay();
+    fetchLogTail(true);
+  } catch (err) {
+    console.error('讀取 API 歷史日誌檔案清單失敗：', err);
+  }
+};
+
 const updateLogMetaDisplay = () => {
-  const item = state.availableLogs.find((i) => i.path === state.currentLogPath);
+  let item = state.availableLogs.find((i) => i.path === state.currentLogPath);
+  if (!item && state.apiLogFiles) {
+    item = state.apiLogFiles.find((i) => i.path === state.currentLogPath);
+  }
   if (item) {
     el.logPathInfo.textContent = `路徑：${item.path}`;
     el.logMetaInfo.textContent = `大小：${formatBytes(item.size_bytes)} ｜ 最後修改：${item.modified}`;

@@ -192,23 +192,16 @@ pub fn list_available_logs(root_dir: &Path) -> Vec<LogFileInfo> {
             false,
         ));
     } else {
-        // 最多納入最新 5 筆日誌檔案（通常為今天與最近數日）
-        for (idx, p) in api_log_files.into_iter().take(5).enumerate() {
-            let file_name = p.file_name().and_then(|n| n.to_str()).unwrap_or("log.log");
-            let label = if idx == 0 {
-                format!("LAH-API 核心業務日誌 (logs\\api: 最新 {})", file_name)
-            } else {
-                format!("LAH-API 歷史業務日誌 (logs\\api: {})", file_name)
-            };
-
-            let path_str = p.to_string_lossy().to_string();
-            result.push(build_log_info(
-                format!("api_www_log_{}", idx),
-                label,
-                path_str,
-                true,
-            ));
-        }
+        // 主下拉選單回歸單一對稱項目，預設指向最新一筆日誌檔案
+        let latest_file = &api_log_files[0];
+        let file_name = latest_file.file_name().and_then(|n| n.to_str()).unwrap_or("log.log");
+        let path_str = latest_file.to_string_lossy().to_string();
+        result.push(build_log_info(
+            "api_www_log".to_string(),
+            format!("LAH-API 核心業務日誌 (logs\\api: 最新 {})", file_name),
+            path_str,
+            true,
+        ));
     }
 
     // 3. Apache 2.4、Windows 系統服務與 PM2 日誌輪替
@@ -329,4 +322,31 @@ pub fn open_folder(path_str: &str) -> Result<(), String> {
         .map_err(|e| format!("無法開啟目錄：{}", e))?;
 
     Ok(())
+}
+
+pub fn list_api_log_files(root_dir: &Path) -> Vec<LogFileInfo> {
+    let api_logs_dir = root_dir.join("logs").join("api");
+    let files = find_all_matching_files(&api_logs_dir, "", ".log");
+    let mut result = Vec::new();
+
+    for (idx, p) in files.into_iter().enumerate() {
+        let file_name = p.file_name().and_then(|n| n.to_str()).unwrap_or("log.log");
+        let date_str = file_name
+            .trim_start_matches("log-")
+            .trim_end_matches(".log");
+        let label = if idx == 0 {
+            format!("{} (最新)", date_str)
+        } else {
+            date_str.to_string()
+        };
+        let path_str = p.to_string_lossy().to_string();
+        result.push(build_log_info(
+            format!("api_log_{}", date_str),
+            label,
+            path_str,
+            true,
+        ));
+    }
+
+    result
 }
