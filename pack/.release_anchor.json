@@ -1,0 +1,11 @@
+{
+  "version": "1.9.9",
+  "released_at": "2026-11-03T00:22:55.085958+08:00",
+  "anchors": {
+    "LAH-Updater": "16e0d448683035da4b2c9cc82824ee5d7823533a",
+    "LAH-API": "1863a74cf4dcc385e77c32a2f8b089cd6174c58b",
+    "LAH-FE": "461ad9bbe28ea390e660049e8891e6589476cf91",
+    "lah-messenger-server": "5f9c9c44a56ede24ad8949e79e61bd5ad58168f2",
+    "lah-messenger": "8b4392328127b35f31e1125cb811c1d137a21fe8"
+  }
+}

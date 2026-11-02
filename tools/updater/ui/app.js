@@ -363,20 +363,44 @@ async function scanEnvironment(isInitial = false) {
       rootBadge.style.color = "#dc2626";
     }
 
-    // 服務狀態連動
+    // 服務狀態與自動化配置連動 (環境感知智能動態預設)
+    const chkAutoApache = document.getElementById("chk_auto_apache");
     if (res.apache_service) {
       document.getElementById("lbl_auto_apache").textContent = `自動註冊 Web 為 Windows 系統服務 [${res.apache_service}] (${res.apache_running ? "運行中" : "已註冊"})`;
+      chkAutoApache.checked = false;
+      chkAutoApache.parentElement.title = `本機已註冊系統服務 [${res.apache_service}]，日常更新無需重複註冊`;
       document.getElementById("chk_restart_apache").checked = res.apache_running;
       document.getElementById("lbl_restart_apache").textContent = `更新後重新啟動 Web 服務 [${res.apache_service}] (${res.apache_running ? "運行中" : "已停止"})`;
     } else {
       document.getElementById("lbl_auto_apache").textContent = "自動註冊 Web 為 Windows 系統服務 (LAH_Web_Service 待註冊)";
+      chkAutoApache.checked = true;
+      chkAutoApache.parentElement.title = "";
+      document.getElementById("chk_restart_apache").checked = false;
       document.getElementById("lbl_restart_apache").textContent = "更新後重新啟動 Web 服務 (LAH_Web_Service 未註冊)";
     }
 
+    const chkAutoPm2 = document.getElementById("chk_auto_pm2");
     if (res.pm2_service_installed) {
       document.getElementById("lbl_auto_pm2").textContent = `自動註冊 PM2 為 Windows 系統服務 (LAH_PM2_Service ${res.pm2_service_running ? "運行中" : "已註冊"})`;
+      chkAutoPm2.checked = false;
+      chkAutoPm2.parentElement.title = "本機已註冊 LAH_PM2_Service 系統服務，日常更新無需重複註冊";
     } else {
       document.getElementById("lbl_auto_pm2").textContent = "自動註冊 PM2 為 Windows 系統服務 (LAH_PM2_Service 未安裝)";
+      chkAutoPm2.checked = true;
+      chkAutoPm2.parentElement.title = "";
+    }
+
+    // 資安強化狀態連動 (環境感知：已套用則取消勾選並顯示已套用標記)
+    const chkSecurity = document.getElementById("chk_security_hardening");
+    const lblSecurity = document.getElementById("lbl_security_hardening");
+    if (res.security_hardened) {
+      if (lblSecurity) lblSecurity.textContent = "套用資安強化 (隱藏版本標頭、CVE-2024-4577 緩解防護) (已套用)";
+      chkSecurity.checked = false;
+      chkSecurity.parentElement.title = "本機已套用資安防護與 CVE-2024-4577 緩解設定，無需重複套用";
+    } else {
+      if (lblSecurity) lblSecurity.textContent = "套用資安強化 (隱藏版本標頭、CVE-2024-4577 緩解防護)";
+      chkSecurity.checked = true;
+      chkSecurity.parentElement.title = "";
     }
 
     if (res.pm2_installed) {

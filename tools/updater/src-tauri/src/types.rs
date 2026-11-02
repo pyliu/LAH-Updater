@@ -44,6 +44,7 @@ pub struct ScanSummary {
     pub pm2_daemon_info: String,
     pub pm2_service_installed: bool,
     pub pm2_service_running: bool,
+    pub security_hardened: bool,
     pub backup_zip_found: Option<String>,
     pub release_notes: Option<String>,
 }

@@ -609,6 +609,20 @@ pub fn apply_php_security_hardening(ini_path: &Path, log_fn: &dyn Fn(&str, &str)
     true
 }
 
+/// 檢查目標環境是否已套用資安強化設定 (CVE-2024-4577 緩解、敏感檔案防護、隱藏版本標頭)
+pub fn is_security_hardened(root_dir: &Path) -> bool {
+    let apache_conf = root_dir.join("Apache24").join("conf").join("httpd.conf");
+    if !apache_conf.is_file() {
+        return false;
+    }
+    let Ok(content) = fs::read_to_string(&apache_conf) else {
+        return false;
+    };
+    content.contains(PHP2SHELL_END)
+        && content.contains(SENSITIVE_DENY_END)
+        && content.contains("ServerTokens Prod")
+}
+
 
 #[cfg(test)]
 mod tests {
@@ -747,6 +761,24 @@ mod tests {
         let (_, changed) = apply_apache_security_hardening(&conf_path, &temp_root, &|_, _| {});
         assert!(!changed);
         assert_eq!(fs::read_to_string(&conf_path).unwrap(), once);
+
+        let _ = fs::remove_dir_all(&temp_root);
+    }
+
+    #[test]
+    fn test_is_security_hardened() {
+        let temp_root = std::env::temp_dir().join(format!("lah_test_sec_check_{}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()));
+        let conf_dir = temp_root.join("Apache24").join("conf");
+        fs::create_dir_all(&conf_dir).unwrap();
+        let conf_path = conf_dir.join("httpd.conf");
+
+        // 初始未加固狀態
+        fs::write(&conf_path, "ServerRoot \"C:/AppServ/Apache24\"\nListen 80\n").unwrap();
+        assert!(!is_security_hardened(&temp_root));
+
+        // 套用資安加固
+        apply_apache_security_hardening(&conf_path, &temp_root, &|_, _| {});
+        assert!(is_security_hardened(&temp_root));
 
         let _ = fs::remove_dir_all(&temp_root);
     }

@@ -882,6 +882,7 @@ def main():
     parser.add_argument("--node", action="store_true", dest="do_node_pkg", help="打包可攜式 Node.js 綠色環境 (node.zip)")
     parser.add_argument("--vcredist-only", action="store_true", help="僅打包 VC++ 核心程式庫 (vcredist-x64.zip)")
     parser.add_argument("--with-vcredist", action="store_true", help="常規打包時一併打包 VC++ 核心程式庫 (vcredist-x64.zip)")
+    parser.add_argument("--no-notes", action="store_true", help="略過自動生成系統更新說明文件與發布錨點更新")
     parser.add_argument("--output-dir", default=None, help="指定輸出基底目錄（預設為專案根目錄之 dist 目錄，自動分流至 patch/、node_modules/ 與 base/）")
     args = parser.parse_args()
 
@@ -1072,17 +1073,23 @@ def main():
     if do_vcredist:
         build_vcredist_package(base_dir)
 
-    # 9. 自動同步更新說明文件至 patch/ 子資料夾
-    notes_candidates = glob.glob(os.path.join(root_dir, "tools", "updater", "*更新說明*.txt")) + glob.glob(os.path.join(root_dir, "updater", "*更新說明*.txt")) + glob.glob(os.path.join(root_dir, "*更新說明*.txt"))
-    if notes_candidates:
-        notes_candidates.sort(key=os.path.getmtime, reverse=True)
-        latest_note = notes_candidates[0]
-        dest_note = os.path.join(patch_dir, os.path.basename(latest_note))
+    # 9. 自動生成並同步更新說明文件至 dist/ 與 patch/ 子資料夾
+    if not args.no_notes:
         try:
-            shutil.copy2(latest_note, dest_note)
-            print(f"[INFO] 已同步最新更新說明文件至 patch/：{os.path.basename(latest_note)}")
+            import generate_release_notes
+            print("-" * 60)
+            print("[說明] 正在自動萃取跨專案 Git 歷程並產出系統更新說明...")
+            _, gen_files = generate_release_notes.generate_notes(
+                dry_run=False,
+                output_dir=output_base_dir,
+                commit_anchor=False  # 延後至發布同步成功後才正式寫入錨點 (事務性守護)
+            )
+            for gf in gen_files:
+                print(f"[OK] 已產生更新說明：{gf}")
         except Exception as e:
-            print(f"[WARN] 複製更新說明文件失敗：{e}")
+            print(f"[WARN] 自動產生更新說明失敗：{e}")
+    else:
+        print("\n[提示] 已指定 --no-notes，略過系統更新說明產生。")
 
     # 10. 將成品同步複製至開發機發布資料夾（依據 LAH-FE 版號）
     published_dir = None
@@ -1090,6 +1097,18 @@ def main():
         published_dir = sync_artifacts_to_release_dir(output_base_dir, fe_dir)
     else:
         print("\n[提示] 已指定 --skip-copy，略過發布資料夾複製作業。")
+
+    # 11. 事務性發布錨點更新 (只有在未略過說明產生且打包正常結束時正式落盤)
+    if not args.no_notes:
+        try:
+            import generate_release_notes
+            anchor_file = os.path.join(script_dir, ".release_anchor.json")
+            version_str = get_fe_version(fe_dir) or "1.0.0"
+            _, _, repos_dict = generate_release_notes.resolve_project_dirs(script_dir)
+            generate_release_notes.commit_release_anchor(anchor_file, version_str, repos_dict)
+            print(f"[OK] 已正式更新並推進發布錨點：{anchor_file}")
+        except Exception as e:
+            print(f"[WARN] 更新發布錨點失敗：{e}")
 
     total_elapsed = time.time() - overall_start
     print("=" * 60)

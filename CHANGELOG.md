@@ -6,6 +6,25 @@
 
 ## [未發布]
 
+### 📋 全系統更新說明自動化生成管線與發布錨點機制 (generate_release_notes.py)
+
+- **修改目的**：
+  - 徹底解決跨 5 個 Git 子專案手動翻閱日誌彙整更新說明之繁瑣作業與漏列風險。
+  - 引入狀態化發布錨點（Release Anchor），精確擷取自上次發布以來的累積改動，並具備回退安全機制。
+  - 依據實際異動之子專案動態注入差異化維運警示標籤（Alerts），並維持現場標準 4 步驟 SOP 與 5 大通訊埠巡檢防護網。
+  - 實作雙軌版本化命名與模板版控，確保 NAS 留存與 Updater UI 讀取之完整相容。
+  - 於 `pack.py` 打包流程實作事務性落盤守護，唯有全套打包成功且完成 NAS 同步後才更新推進錨點。
+- **具體修改項目**：
+  - `pack/templates/release_notes.tpl`：建立標準排版模板，預留警示區塊與 4 大模組清單佔位符。
+  - `pack/.release_anchor.json`：建立初始發布錨點基準檔，記錄各子專案 HEAD Commit Hash。
+  - `pack/generate_release_notes.py`：實作核心萃取與渲染引擎，支援 `--dry-run` 終端彩色預覽、`--days` 與 `--since` 彈性覆寫。
+  - `pack/pack.py`：掛載自動生成呼叫與事務性發布錨點更新，支援 `--no-notes` 參數。
+  - `tests/test_generate_release_notes.py`：新增 7 項涵蓋 Commit 解析、白名單過濾、目的擷取、差異化警示與 dry-run 唯讀測試。
+- **相容性與驗證**：
+  - 執行 `python -m unittest discover -s tests -p "test_*.py"` 12 項測試全數通過（含既有打包守門員測試）。
+  - 實機執行 `pack.py --api-only` 驗證更新說明成功雙軌產出至 `dist/` 與 `dist/patch/`，發布錨點成功更新推進。
+
+
 ### 🧹 pack.py 移除前端核心套件別名包產出邏輯 (LAH-FE-node_modules.zip)
 
 - **修改目的**：
