@@ -707,7 +707,7 @@ HTML_CONTENT = f"""<!DOCTYPE html>
   <div class="screenshot-card avoid-break">
     <img src="{img_upgrade}" alt="升級更新工作選項勾選圖解">
     <div class="screenshot-caption">
-      📷 圖 2：原機升級更新 - 自動安裝與更新工具工作選項勾選圖解
+      📷 圖 2：原機升級更新 - 自動安裝與更新工具「原地升級」快選與執行進度圖解
     </div>
   </div>
 
@@ -722,25 +722,22 @@ HTML_CONTENT = f"""<!DOCTYPE html>
   <div class="step-box avoid-break">
     <div class="step-header">
       <span class="step-number green">2</span>
-      <span class="step-title">步驟二：精準調整工作選項勾選（關鍵操作對齊圖 2）</span>
+      <span class="step-title">步驟二：點選「原地升級」情境快選（關鍵操作對齊圖 2 紅框）</span>
     </div>
-    <p>為避免覆蓋現有正常運作之 Apache 與 PHP 7 設定，可善用中央快選工具列點選「程式修補 (patch)」或依序調整：</p>
+    <p>為避免覆蓋現有機台正常運作之 Apache 與 PHP 7 設定，於上方情境快選列直接點擊 <strong>「🔄 原地升級」</strong> 按鈕（對齊圖 2 紅框標註），系統將自動完成最佳化配置：</p>
     <ul>
-      <li><strong style="color: #dc2626;">【取消勾選】</strong> <strong>APACHE 網頁伺服器核心安裝包</strong>（保持主機原 Apache 穩定運行）。</li>
-      <li><strong style="color: #dc2626;">【取消勾選】</strong> <strong>PHP 7.4 執行環境安裝包</strong>（保留既有機台 PHP 7 設定與 OCI8 驅動）。</li>
-      <li><strong style="color: #dc2626;">【取消勾選】</strong> <strong>核心相依套件模組 (node_modules)</strong>（既有套件完整時無需重複解壓）。</li>
-      <li><strong style="color: #059669;">【保持勾選】</strong> <strong>可攜式 Node.js 執行環境</strong>（歸納於基礎包）與 <strong>PHP 8.5 FastCGI 核心環境</strong>。</li>
-      <li><strong style="color: #059669;">【保持勾選】</strong> <strong>所有程式更新補丁包</strong>（<code>LAH-API.zip</code>、<code>lah-messenger-server.zip</code>、<code>LAH-NUXTJS.zip</code>、<code>www.zip</code>）。</li>
-      <li><strong style="color: #059669;">【保持勾選】</strong> <strong>自動配置系統服務、資安強化配置、更新後自動重啟 Apache 與 PM2</strong>。</li>
+      <li><strong style="color: #059669;">【自動精準勾選】</strong> <strong>原機升級 4 大核心包</strong>：<code>PHP 8.5 FastCGI (php85.zip)</code>、<code>VC++ 執行期相依套件</code>、<code>Node.js 綠色執行環境 (node.zip)</code> 與 <code>後端 API 補丁包 (LAH-API.zip)</code>，左下角顯示「已選取 4 個系統安裝包」。</li>
+      <li><strong style="color: #dc2626;">【自動排除干擾】</strong> 取消勾選 <strong>Apache 2.4</strong>、<strong>PHP 7.4</strong> 與 <strong>node_modules</strong>，完整保留機台原有穩定 Apache 設定、PHP 7.4 環境與 OCI8 驅動。</li>
+      <li><strong style="color: #059669;">【自動服務配置】</strong> 自動保持勾選<strong>自動註冊 Web/PM2 為 Windows 服務</strong>、<strong>套用資安強化配置</strong>及<strong>更新後自動重啟</strong>。</li>
     </ul>
   </div>
 
   <div class="step-box avoid-break">
     <div class="step-header">
       <span class="step-number green">3</span>
-      <span class="step-title">步驟三：點擊「開始執行更新作業」等待結束</span>
+      <span class="step-title">步驟三：點擊「開始執行更新作業」並檢視即時進度</span>
     </div>
-    <p>點擊右下角 <strong>「🚀 開始執行更新作業」</strong>。安裝管線將依序解壓程式碼、注入防護規則、啟動 PHP 8.5 FastCGI 並重啟服務，完整過程即時寫入根目錄 <code>install.log</code>（5MB 自動輪替保護），最後彈現健康巡檢報告即完成升級！</p>
+    <p>點擊右下角 <strong>「🚀 開始執行更新作業」</strong>。系統將彈現「系統自動安裝與更新進行中...」進度視窗（對齊圖 2 彈窗），依序停止服務、解壓程式碼、注入防護規則、啟動 PHP 8.5 FastCGI 並重啟服務。完整歷程即時寫入根目錄 <code>install.log</code>（5MB 自動輪替保護），最後彈現健康巡檢報告即順利升級！</p>
     <p style="margin-top:2px; font-size:8pt; color:#0369a1;">💡 <strong>管理儀表板熱部署與捷徑：</strong>更新完成自動將管理儀表板 EXE 同步至安裝根目錄並建立桌面捷徑，彈窗提供「📊 開啟管理儀表板」按鈕供即刻喚醒確認。</p>
   </div>
 
@@ -996,7 +993,7 @@ HTML_CONTENT = f"""<!DOCTYPE html>
       </tr>
       <tr>
         <td rowspan="2" style="font-weight:700; background:#ecfdf5; text-align:center;">執行更新</td>
-        <td><span class="chk-box"></span> <strong>情境一 (原機升級)：</strong>以「自動安裝與更新工具」執行，已<strong>取消勾選</strong> Apache、PHP7 及 node_modules（可善用集中快選工具列）。</td>
+        <td><span class="chk-box"></span> <strong>情境一 (原機升級)：</strong>以「自動安裝與更新工具」執行，點選「原地升級」快選（確認精準選取 4 大升級包並保留 Apache/PHP7 既有設定）。</td>
         <td>□ 符合 □ 走情境二</td>
         <td></td>
       </tr>
