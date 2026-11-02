@@ -1,6 +1,6 @@
 use crate::health::is_port_listening;
 use crate::services::{is_pm2_service_installed, stop_service};
-use crate::system::{clean_and_prepend_path_string, run_cmd_hidden, run_powershell};
+use crate::system::{clean_and_prepend_path_string, run_cmd_hidden, run_cmd_hidden_in_dir, run_powershell};
 use regex::Regex;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -881,6 +881,27 @@ pub fn setup_pm2_autostart(root_dir: &Path, log_fn: &dyn Fn(&str, &str)) -> (boo
     (true, "LAH_PM2_Service 已註冊".to_string())
 }
 
+/// 檢查並修復生態系設定檔（若無 cwd 則自動注入 cwd: __dirname，防止 PM2 在非專案目錄執行時遺失工作目錄）
+pub fn sanitize_ecosystem_config(eco_path: &Path) {
+    let Ok(content) = fs::read_to_string(eco_path) else {
+        return;
+    };
+    if content.contains("cwd:") {
+        return;
+    }
+    if let Some(pos) = content.find("name:") {
+        if let Some(line_end) = content[pos..].find('\n') {
+            let insert_pos = pos + line_end + 1;
+            let newline = if content.contains("\r\n") { "\r\n" } else { "\n" };
+            let mut new_content = String::with_capacity(content.len() + 32);
+            new_content.push_str(&content[..insert_pos]);
+            new_content.push_str(&format!("    cwd: __dirname,{newline}"));
+            new_content.push_str(&content[insert_pos..]);
+            let _ = fs::write(eco_path, new_content);
+        }
+    }
+}
+
 pub fn audit_and_ensure_pm2_services(
     root_dir: &Path,
     log_fn: &dyn Fn(&str, &str),
@@ -983,8 +1004,10 @@ pub fn audit_and_ensure_pm2_services(
                     ),
                     "warning",
                 );
+                sanitize_ecosystem_config(eco_path);
+                let eco_dir = eco_path.parent().unwrap_or(root_dir);
                 let (start_ok, stdout, stderr) =
-                    run_cmd_hidden(&pm2_str, &["start", &eco_str, "--no-color"]);
+                    run_cmd_hidden_in_dir(&pm2_str, &["start", &eco_str, "--no-color"], eco_dir);
                 if start_ok || stdout.contains("✓") {
                     log_fn(&format!("  ✅ 成功啟動 [{}]！", eco.title), "success");
                     need_save = true;
@@ -1010,8 +1033,10 @@ pub fn audit_and_ensure_pm2_services(
                         ),
                         "warning",
                     );
+                    sanitize_ecosystem_config(eco_path);
+                    let eco_dir = eco_path.parent().unwrap_or(root_dir);
                     let (start_ok, stdout, stderr) =
-                        run_cmd_hidden(&pm2_str, &["start", &eco_str, "--only", app_to_start, "--no-color"]);
+                        run_cmd_hidden_in_dir(&pm2_str, &["start", &eco_str, "--only", app_to_start, "--no-color"], eco_dir);
                     if start_ok || stdout.contains("✓") {
                         log_fn(&format!("  ✅ 成功精準啟動 [{}]！", app_to_start), "success");
                         need_save = true;
@@ -1175,9 +1200,11 @@ pub fn idempotent_reconstruct_pm2_services(
             continue;
         };
 
+        sanitize_ecosystem_config(eco_path);
         log_fn(&format!("🚀 正在以標準配置啟動 [{}]：{}...", eco.title, eco_path.display()), "info");
         let eco_str = eco_path.to_string_lossy().to_string();
-        let (start_ok, stdout, stderr) = run_cmd_hidden(&pm2_str, &["start", &eco_str, "--no-color"]);
+        let eco_dir = eco_path.parent().unwrap_or(root_dir);
+        let (start_ok, stdout, stderr) = run_cmd_hidden_in_dir(&pm2_str, &["start", &eco_str, "--no-color"], eco_dir);
         if start_ok || stdout.contains("✓") {
             log_fn(&format!("  ✅ 成功掛載並啟動 [{}]！", eco.title), "success");
         } else {
@@ -1311,6 +1338,27 @@ mod tests {
         assert!(mod_conf["module-db-v2"]["pm2-logrotate"].is_object());
 
         let _ = fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn test_sanitize_ecosystem_config_injects_cwd_if_missing() {
+        let temp_dir = std::env::temp_dir().join("lah_test_eco_sanitize");
+        let _ = fs::create_dir_all(&temp_dir);
+        let eco_file = temp_dir.join("ecosystem.config.js");
+        let original = "module.exports = {\n  apps: [{\n    name: 'LAH-WSS',\n    script: './server.js'\n  }]\n};\n";
+        fs::write(&eco_file, original).unwrap();
+
+        sanitize_ecosystem_config(&eco_file);
+        let updated = fs::read_to_string(&eco_file).unwrap();
+        assert!(updated.contains("cwd: __dirname"));
+        assert!(updated.contains("name: 'LAH-WSS'"));
+
+        // Idempotency check: second run should not duplicate cwd
+        sanitize_ecosystem_config(&eco_file);
+        let double_run = fs::read_to_string(&eco_file).unwrap();
+        assert_eq!(updated, double_run);
+
+        let _ = fs::remove_dir_all(&temp_dir);
     }
 
     #[test]

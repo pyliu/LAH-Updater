@@ -207,6 +207,27 @@ function isLogrotateOnline() {
 }
 
 // 4. 執行 PM2 喚醒與核心服務巡檢補啟動
+function sanitizeEcosystemCwd(ecoPath) {
+  try {
+    if (!fs.existsSync(ecoPath)) return;
+    const content = fs.readFileSync(ecoPath, 'utf8');
+    if (content.includes('cwd:')) return;
+    const idx = content.indexOf('name:');
+    if (idx !== -1) {
+      const lineEnd = content.indexOf('\n', idx);
+      if (lineEnd !== -1) {
+        const insertPos = lineEnd + 1;
+        const newline = content.includes('\r\n') ? '\r\n' : '\n';
+        const updated = content.slice(0, insertPos) + '    cwd: __dirname,' + newline + content.slice(insertPos);
+        fs.writeFileSync(ecoPath, updated, 'utf8');
+        log(`  ✓ 已自動修補 [${path.basename(ecoPath)}] 之工作目錄 (cwd: __dirname)`, 'INFO');
+      }
+    }
+  } catch (e) {
+    log(`  ⚠️ 嘗試修補生態系 cwd 失敗: ${e.message}`, 'WARN');
+  }
+}
+
 function resurrectAndEnsureServices() {
   wireBundledLogrotate();
   log('⏳ 正在執行 [pm2 resurrect] 喚醒受控服務...', 'INFO');
@@ -264,12 +285,14 @@ function resurrectAndEnsureServices() {
   for (const eco of ecosystems) {
     const validPath = eco.paths.find(p => fs.existsSync(p));
     if (!validPath) continue;
+    sanitizeEcosystemCwd(validPath);
+    const appCwd = path.dirname(validPath);
     const missing = eco.apps.filter(a => !onlineApps[a]);
     if (missing.length > 0) {
       if (missing.length === eco.apps.length) {
         log(`⚡ 偵測到 [${eco.title}] 之服務 ${JSON.stringify(missing)} 全數未在線，正在啟動 [${validPath}]...`, 'WARN');
         try {
-          const startRes = spawnSync(PM2_BIN, ['start', validPath, '--no-color'], { encoding: 'utf8', windowsHide: true, timeout: 30000 });
+          const startRes = spawnSync(PM2_BIN, ['start', validPath, '--no-color'], { cwd: appCwd, encoding: 'utf8', windowsHide: true, timeout: 30000 });
           if (startRes.status === 0) {
             log(`  ✅ 成功啟動 [${eco.title}]！`, 'SUCCESS');
             needSave = true;
@@ -283,7 +306,7 @@ function resurrectAndEnsureServices() {
         for (const appName of missing) {
           log(`⚡ 偵測到 [${eco.title}] 之服務 [${appName}] 未在線，正在精準啟動 (--only ${appName})...`, 'WARN');
           try {
-            const startRes = spawnSync(PM2_BIN, ['start', validPath, '--only', appName, '--no-color'], { encoding: 'utf8', windowsHide: true, timeout: 30000 });
+            const startRes = spawnSync(PM2_BIN, ['start', validPath, '--only', appName, '--no-color'], { cwd: appCwd, encoding: 'utf8', windowsHide: true, timeout: 30000 });
             if (startRes.status === 0) {
               log(`  ✅ 成功精準啟動 [${appName}]！`, 'SUCCESS');
               needSave = true;

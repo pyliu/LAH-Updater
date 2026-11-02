@@ -121,6 +121,23 @@ pub fn run_cmd_hidden(cmd: &str, args: &[&str]) -> (bool, String, String) {
     }
 }
 
+pub fn run_cmd_hidden_in_dir(cmd: &str, args: &[&str], dir: &Path) -> (bool, String, String) {
+    let output = Command::new(cmd)
+        .current_dir(dir)
+        .args(args)
+        .creation_flags(CREATE_NO_WINDOW)
+        .output();
+
+    match output {
+        Ok(out) => {
+            let stdout = decode_console_bytes(&out.stdout);
+            let stderr = decode_console_bytes(&out.stderr);
+            (out.status.success(), stdout, stderr)
+        }
+        Err(e) => (false, String::new(), e.to_string()),
+    }
+}
+
 pub fn run_powershell(script: &str) -> (bool, String, String) {
     run_cmd_hidden("powershell", &["-NoProfile", "-Command", script])
 }
