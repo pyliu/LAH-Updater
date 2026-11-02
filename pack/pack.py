@@ -20,6 +20,7 @@ import fnmatch
 import glob
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -106,6 +107,7 @@ FE_INCLUDES = [
     "content",
     "scheduler",
     "scripts",
+    "server-middleware",
     "static",
     ".env.example",
     "ecosystem.config.js",
@@ -120,23 +122,15 @@ FE_EXCLUDES = [
     ".env",
 ]
 
-# lah-messenger-server (LAH-WSS) 打包規則（嚴格僅打包指定之 14 個檔案與 1 個資料夾）
+# lah-messenger-server (LAH-WSS) 打包規則（架構防呆：萬用字元自動納入所有根目錄 .js 與服務腳本，杜絕新模組漏包）
 MESSENGER_INCLUDES = [
+    "*.js",
     "dimension",
     ".env.example",
     "AGENTS.md",
-    "channel-db.js",
-    "ecosystem.config.js",
-    "message-db.js",
-    "message-watcher.js",
     "package.json",
-    "README.md",
-    "request-handler.js",
-    "server.js",
-    "start_pm2.bat",
-    "start_standalone.bat",
-    "upload-router.js",
-    "utils.js",
+    "README*",
+    "*.bat",
 ]
 
 MESSENGER_EXCLUDES = [
@@ -371,7 +365,170 @@ def run_fe_build(fe_dir):
     return True
 
 
-def build_zip_package(title, base_dir, zip_path, include_patterns, exclude_patterns):
+class PackIntegrityError(RuntimeError):
+    """打包完整性校驗失敗例外（用於中止不完整的更新包產出）"""
+    pass
+
+
+def extract_nuxt_runtime_dependencies(fe_dir):
+    """
+    從 nuxt.config.js 與 ecosystem.config.js 動態提取執行期必要依賴路徑（單一真相來源）
+    回傳: (required_deps, dynamic_includes)
+    """
+    config_path = os.path.join(fe_dir, "nuxt.config.js")
+    eco_path = os.path.join(fe_dir, "ecosystem.config.js")
+    required_deps = []
+    dynamic_includes = set()
+
+    # 1. 解析 nuxt.config.js 中之 serverMiddleware
+    if os.path.isfile(config_path):
+        try:
+            with open(config_path, "r", encoding="utf-8") as f:
+                content = f.read()
+            sm_match = re.search(r"serverMiddleware\s*:\s*\[([\s\S]*?)\]", content)
+            if sm_match:
+                sm_block = sm_match.group(1)
+                # 擷取含有 ~ 或 @ 或 ./ 或路徑字串
+                raw_paths = re.findall(r"['\"]([~@./][^'\"]+)['\"]", sm_block)
+                for p in raw_paths:
+                    if p.startswith(("http://", "https://")):
+                        continue
+                    cleaned = re.sub(r"^[~@./\\]+", "", p).replace("/", os.sep)
+                    full = os.path.join(fe_dir, cleaned)
+                    if os.path.exists(full) or os.path.exists(full + ".js"):
+                        required_deps.append(cleaned)
+                        top_dir = cleaned.split(os.sep)[0]
+                        dynamic_includes.add(top_dir)
+                    else:
+                        top_dir = cleaned.split(os.sep)[0]
+                        required_deps.append(cleaned)
+                        dynamic_includes.add(top_dir)
+        except Exception as e:
+            print(f"[WARN] 動態解析 nuxt.config.js 失敗：{e}")
+
+    # 2. 自動掃描 fe_dir 根目錄下所有伺服端中介軟體/腳本目錄
+    source_only_dirs = {
+        "assets", "components", "constants", "layouts", "middleware",
+        "mixins", "pages", "plugins", "store", "node_modules",
+        ".git", ".vscode", ".antigravity", ".nuxt-dev"
+    }
+    try:
+        for item in os.listdir(fe_dir):
+            item_path = os.path.join(fe_dir, item)
+            if os.path.isdir(item_path):
+                item_lower = item.lower()
+                if item_lower not in source_only_dirs and not item.startswith("."):
+                    if any(k in item_lower for k in ("server", "middleware", "scheduler", "script")):
+                        dynamic_includes.add(item)
+    except Exception as e:
+        print(f"[WARN] 掃描前端目錄失敗：{e}")
+
+    # 3. 解析 ecosystem.config.js 中的啟動腳本
+    if os.path.isfile(eco_path):
+        try:
+            with open(eco_path, "r", encoding="utf-8") as f:
+                content = f.read()
+            scripts = re.findall(r"script\s*:\s*['\"]([^'\"]+)['\"]", content)
+            for s in scripts:
+                if "node_modules" not in s:
+                    cleaned = s.lstrip("./\\").replace("/", os.sep)
+                    required_deps.append(cleaned)
+                    top_dir = cleaned.split(os.sep)[0]
+                    dynamic_includes.add(top_dir)
+        except Exception as e:
+            print(f"[WARN] 動態解析 ecosystem.config.js 失敗：{e}")
+
+    return sorted(set(required_deps)), sorted(dynamic_includes)
+
+
+def verify_fe_pack_integrity(fe_dir, files_to_pack):
+    """
+    打包前校驗：比對待打包檔案清單是否涵蓋 nuxt.config.js 與 ecosystem.config.js 宣告的所有執行期檔案
+    若有缺失，拋出 PackIntegrityError 中止打包！
+    """
+    required_deps, _ = extract_nuxt_runtime_dependencies(fe_dir)
+    packed_arcnames = {arcname.replace("\\", "/").lower() for _, arcname in files_to_pack}
+
+    missing_deps = []
+    for dep in required_deps:
+        norm_dep = dep.replace("\\", "/").lower()
+        matched = False
+        for arc in packed_arcnames:
+            if arc == norm_dep or arc == norm_dep + ".js" or arc.startswith(norm_dep + "/"):
+                matched = True
+                break
+        if not matched:
+            missing_deps.append(dep)
+
+    if missing_deps:
+        err_msg = (
+            f"\n[FATAL] 前端打包完整性守門員攔截到缺失的執行期程式碼！\n"
+            f"以下於 nuxt.config.js 或 ecosystem.config.js 宣告的執行期依賴未被納入打包清單：\n"
+            + "\n".join(f"  - {m}" for m in missing_deps)
+            + f"\n這將導致正式生產環境 Nuxt/PM2 啟動崩潰！請檢查 pack.py 打包規則。\n"
+        )
+        raise PackIntegrityError(err_msg)
+    print(f"[OK] 前端打包完整性事前校驗通過（已涵蓋 nuxt.config.js 中介軟體與生態系腳本）。")
+    return True
+
+
+def verify_zip_integrity(zip_path, package_type, base_dir=None):
+    """
+    打包後校驗：開啟產出的 ZIP 壓縮包，驗證關鍵核心檔案是否存在
+    若驗證失敗，自動銷毀破損 ZIP 並拋出 PackIntegrityError！
+    """
+    if not os.path.isfile(zip_path):
+        raise PackIntegrityError(f"產出壓縮檔不存在：{zip_path}")
+
+    with zipfile.ZipFile(zip_path, "r") as zf:
+        namelist = set(zf.namelist())
+        lower_names = {n.replace("\\", "/").lower() for n in namelist}
+
+    missing = []
+    if package_type == "fe":
+        for req in ["nuxt.config.js", "ecosystem.config.js", "package.json"]:
+            if req.lower() not in lower_names:
+                missing.append(req)
+        has_nuxt = any(n.startswith(".nuxt/") for n in lower_names)
+        if not has_nuxt:
+            missing.append(".nuxt 目錄")
+        if base_dir:
+            required_deps, _ = extract_nuxt_runtime_dependencies(base_dir)
+            for dep in required_deps:
+                norm = dep.replace("\\", "/").lower()
+                matched = any(n == norm or n == norm + ".js" or n.startswith(norm + "/") for n in lower_names)
+                if not matched:
+                    missing.append(dep)
+
+    elif package_type == "messenger":
+        for req in ["server.js", "ecosystem.config.js", "package.json", "channel-db.js", "message-db.js"]:
+            if req.lower() not in lower_names:
+                missing.append(req)
+
+    elif package_type == "api":
+        has_php = any(n.endswith(".php") for n in lower_names)
+        if not has_php:
+            missing.append("*.php 核心檔案")
+
+    if missing:
+        try:
+            os.remove(zip_path)
+            print(f"[CLEANUP] 已自動刪除破損不完整之更新包：{zip_path}")
+        except Exception:
+            pass
+        err_msg = (
+            f"\n[FATAL] 更新包成品完整性校驗失敗！\n"
+            f"壓縮檔 {os.path.basename(zip_path)} 缺少以下關鍵執行期檔案：\n"
+            + "\n".join(f"  - {m}" for m in missing)
+            + f"\n已中止發布並銷毀不完整產物以防部署事故！\n"
+        )
+        raise PackIntegrityError(err_msg)
+
+    print(f"[OK] 成品完整性校驗通過：{os.path.basename(zip_path)}（已驗證關鍵執行期檔案與中介軟體）")
+    return True
+
+
+def build_zip_package(title, base_dir, zip_path, include_patterns, exclude_patterns, pre_pack_validator=None):
     """建立 ZIP 壓縮包（若目標已存在則先刪除重建）"""
     print("-" * 60)
     print(f"[打包] 正在建立 {title}...")
@@ -399,6 +556,13 @@ def build_zip_package(title, base_dir, zip_path, include_patterns, exclude_patte
     if not files_to_pack:
         print(f"[ERROR] 未收集到任何可打包檔案，請確認來源目錄內容：{base_dir}")
         return False
+
+    if pre_pack_validator:
+        try:
+            pre_pack_validator(files_to_pack)
+        except PackIntegrityError as pie:
+            print(str(pie))
+            return False
 
     total_files = len(files_to_pack)
     bar_width = 20
@@ -824,23 +988,52 @@ def main():
         www_zip_path = os.path.join(patch_dir, "www.zip")
         if not build_zip_package("LAH-API (PHP7) 後端更新包 (patch/www.zip)", api_dir, www_zip_path, API_INCLUDES, API_EXCLUDES):
             sys.exit(1)
+        try:
+            verify_zip_integrity(www_zip_path, "api", api_dir)
+        except PackIntegrityError as pie:
+            print(str(pie))
+            sys.exit(1)
 
     # 3. 打包 LAH-API (PHP8) -> patch/LAH-API.zip
     if do_api8:
         api8_zip_path = os.path.join(patch_dir, "LAH-API.zip")
         if not build_zip_package("LAH-API (PHP8) 後端更新包 (patch/LAH-API.zip)", api8_dir, api8_zip_path, API8_INCLUDES, API8_EXCLUDES):
             sys.exit(1)
+        try:
+            verify_zip_integrity(api8_zip_path, "api", api8_dir)
+        except PackIntegrityError as pie:
+            print(str(pie))
+            sys.exit(1)
 
     # 4. 打包 LAH-FE -> patch/LAH-NUXTJS.zip
     if do_fe:
         fe_zip_path = os.path.join(patch_dir, "LAH-NUXTJS.zip")
-        if not build_zip_package("LAH-FE 前端更新包 (patch/LAH-NUXTJS.zip)", fe_dir, fe_zip_path, FE_INCLUDES, FE_EXCLUDES):
+        _, dynamic_fe_includes = extract_nuxt_runtime_dependencies(fe_dir)
+        effective_fe_includes = list(dict.fromkeys(FE_INCLUDES + dynamic_fe_includes))
+        if not build_zip_package(
+            "LAH-FE 前端更新包 (patch/LAH-NUXTJS.zip)",
+            fe_dir,
+            fe_zip_path,
+            effective_fe_includes,
+            FE_EXCLUDES,
+            pre_pack_validator=lambda files: verify_fe_pack_integrity(fe_dir, files)
+        ):
+            sys.exit(1)
+        try:
+            verify_zip_integrity(fe_zip_path, "fe", fe_dir)
+        except PackIntegrityError as pie:
+            print(str(pie))
             sys.exit(1)
 
     # 5. 打包 即時通訊伺服器 -> patch/lah-messenger-server.zip
     if do_messenger:
         ms_zip_path = os.path.join(patch_dir, "lah-messenger-server.zip")
         if not build_zip_package("即時通訊伺服器 (patch/lah-messenger-server.zip)", messenger_dir, ms_zip_path, MESSENGER_INCLUDES, MESSENGER_EXCLUDES):
+            sys.exit(1)
+        try:
+            verify_zip_integrity(ms_zip_path, "messenger", messenger_dir)
+        except PackIntegrityError as pie:
+            print(str(pie))
             sys.exit(1)
 
     # 6. 打包 前端核心套件 -> node_modules/LAH-NUXTJS-node_modules.zip

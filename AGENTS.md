@@ -132,10 +132,28 @@ LAH-Updater/
      1. 正確字串已保留：`assert!(conf.contains(r#"SCRIPT_FILENAME "$1""#));`
      2. 吞噬空字串不存在：`assert!(!conf.contains(r#"SCRIPT_FILENAME """#));`
      3. 錯誤轉義字串不存在：`assert!(!conf.contains(r#"SCRIPT_FILENAME "$$1""#));`
+### 3.11 打包完整性守門員與執行期依賴自動偵測機制（強制）
+為根除因前端或後端新增程式碼（如 Nuxt `serverMiddleware`、自訂伺服端腳本等）未被收錄進靜態打包白名單，導致線上環境部署後啟動崩潰的事故，打包系統實施三重架構防呆：
+
+1. **單一真相來源動態提取（Dynamic Dependency Extraction）**：
+   - 嚴禁仰賴人工手動維護的靜態目錄白名單。
+   - `pack.py` 於打包 `LAH-FE` 前，自動解析 `nuxt.config.js` 的 `serverMiddleware` 宣告與 `ecosystem.config.js` 的啟動腳本，動態將所有宣告的中介軟體與伺服端目錄加入打包清單。
+   - `lah-messenger-server` 採用萬用字元 `*.js`，杜絕逐檔條列導致新增模組漏包。
+2. **打包前事前完整性守門員（Pre-pack Integrity Gatekeeper）**：
+   - 在檔案寫入壓縮包前，強制校驗待打包清單是否涵蓋 `nuxt.config.js` 與 `ecosystem.config.js` 宣告的每一項實體檔案。
+   - 若有任何中介軟體或腳本缺失，立即拋出 `PackIntegrityError` 並中斷打包程序，絕不放行殘缺產物。
+3. **打包後成品銷毀校驗（Post-pack ZIP Validation & Auto-Destruction）**：
+   - 壓縮完成後自動重開 ZIP 驗證核心檔案（`.nuxt/`、`nuxt.config.js`、`ecosystem.config.js`、中介軟體檔案等）。
+   - 若成品不完整，自動刪除銷毀該 ZIP 檔案並報錯退出，杜絕殘缺包流入 `dist/patch/`。
+
 ---
 
 ## 4. 常用測試與打包指令
 
+- **執行打包完整性防禦測試**：
+  ```powershell
+  python tests\test_pack_integrity.py
+  ```
 - **建立自動安裝與更新工具**：
   ```powershell
   python tools\updater\build.py
@@ -176,3 +194,15 @@ LAH-Updater/
   .\校準現有服務資安脫敏名稱.bat
   ```
 - **輸出確認**：產出之執行檔統一集中於 `LAH-Updater/dist/` 目錄。
+
+---
+
+## 5. 規則與強制防呆機制對照表（Rule Enforcement Table）
+
+| 規則名稱 | 違規情境（歷史事故） | 最高防呆層級 | 強制執行把關機制 | 驗證與測試命令 |
+|---|---|---|---|---|
+| **執行期依賴打包完整性** | 前端新增 `serverMiddleware` 或中介腳本，未手動加入打包清單，導致目標機啟動崩潰 | **架構自動偵測 + 雙重事前/事後守門員** | `pack.py` 自動自 `nuxt.config.js` 萃取相依項目並注入清單；打包前後校驗缺失即中斷並刪除破損 ZIP | `python tests\test_pack_integrity.py` |
+| **即時通模組打包完整性** | 即時通新增 `.js` 模組，因硬編碼清單遺漏而無法上線 | **架構萬用字元消除** | `MESSENGER_INCLUDES` 採用 `*.js`，不再逐檔條列 14 檔，新模組自動收錄 | `python tests\test_pack_integrity.py` |
+| **正則字面替換防吞噬** | Rust 替換含 `$` 組態區塊時被當成反向引用靜默吞噬為空字串 | **型別強制約束** | 全面使用 `regex::NoExpand(&block)`，禁止裸字串替換 | `cargo test` |
+| **FastCGI 路徑捕獲語法** | Apache 路徑捕獲寫成 `$$1` 導致 FastCGI HTTP 404 | **行為測試把關** | 雙軌單元測試連續兩次執行注入與二次覆蓋等冪性檢查 | `cargo test` |
+| **視窗禁止出現捲軸** | 工具主視窗在展開或完成後產生捲軸 | **架構自適應約束** | 前端 `autoFitWindow()` 量測文檔流真實高度並動態調整客戶區 | UI 實機檢驗 |
