@@ -38,6 +38,33 @@
 
   --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft JhengHei", "PingFang TC", sans-serif;
   --font-mono: Consolas, "Cascadia Code", "Courier New", monospace;
+
+  /* 組態編輯器語法高亮與畫布變數 (深色主題) */
+  --editor-bg: #070d18;
+  --editor-example-bg: #0b1424;
+  --editor-gutter-bg: #0b1424;
+  --editor-gutter-border: #1b2a42;
+  --editor-gutter-text: #475569;
+  --editor-gutter-active-text: #38bdf8;
+  --editor-gutter-active-bg: rgba(14, 165, 233, 0.14);
+  --editor-active-line: rgba(14, 165, 233, 0.09);
+  --editor-selection: rgba(14, 165, 233, 0.30);
+  --editor-caret: #38bdf8;
+  --editor-text: #e2e8f0;
+
+  --hl-comment: #64748b;
+  --hl-keyword: #c084fc;
+  --hl-tag: #38bdf8;
+  --hl-key: #7dd3fc;
+  --hl-operator: #94a3b8;
+  --hl-string: #86efac;
+  --hl-number: #fbbf24;
+  --hl-boolean: #f472b6;
+  --hl-variable: #2dd4bf;
+  --hl-search-bg: rgba(250, 204, 21, 0.32);
+  --hl-search-border: rgba(250, 204, 21, 0.65);
+  --hl-search-current-bg: rgba(249, 115, 22, 0.62);
+  --hl-search-current-border: #fb923c;
 }
 
 [data-theme="light"] {
@@ -67,6 +94,33 @@
   --warning: #d97706;
   --danger: #e11d48;
   --danger-glow: rgba(225, 29, 72, 0.2);
+
+  /* 組態編輯器語法高亮與畫布變數 (明亮主題) */
+  --editor-bg: #ffffff;
+  --editor-example-bg: #f8fafc;
+  --editor-gutter-bg: #f1f5f9;
+  --editor-gutter-border: #e2e8f0;
+  --editor-gutter-text: #94a3b8;
+  --editor-gutter-active-text: #0284c7;
+  --editor-gutter-active-bg: rgba(2, 132, 199, 0.12);
+  --editor-active-line: rgba(2, 132, 199, 0.08);
+  --editor-selection: rgba(2, 132, 199, 0.22);
+  --editor-caret: #0284c7;
+  --editor-text: #0f172a;
+
+  --hl-comment: #64748b;
+  --hl-keyword: #7e22ce;
+  --hl-tag: #0369a1;
+  --hl-key: #0284c7;
+  --hl-operator: #475569;
+  --hl-string: #15803d;
+  --hl-number: #b45309;
+  --hl-boolean: #be185d;
+  --hl-variable: #0f766e;
+  --hl-search-bg: rgba(250, 204, 21, 0.45);
+  --hl-search-border: rgba(234, 179, 8, 0.85);
+  --hl-search-current-bg: rgba(249, 115, 22, 0.55);
+  --hl-search-current-border: #ea580c;
 }
 
 * {
@@ -803,6 +857,8 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
   margin-top: 6px;
   padding-top: 5px;
   border-top: 1px solid var(--border-color);
@@ -811,10 +867,128 @@ body {
   font-family: var(--font-mono);
 }
 
+.config-path-text {
+  flex: 1 1 200px;
+  min-width: 140px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 編輯器內關鍵字搜尋與跳行輔助列 */
+.config-find-bar {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.find-input-group,
+.goto-line-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  background-color: var(--bg-subcard);
+  border: 1px solid var(--border-color);
+  padding: 1px 6px;
+  border-radius: 5px;
+}
+
+.find-input-group:focus-within,
+.goto-line-group:focus-within {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 1px rgba(14, 165, 233, 0.25);
+}
+
+.find-icon {
+  font-size: calc(10px * var(--font-scale));
+  opacity: 0.8;
+}
+
+.find-input {
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--text-main);
+  font-family: var(--font-sans);
+  font-size: calc(10.5px * var(--font-scale));
+  width: 135px;
+  padding: 1px 2px;
+}
+
+.find-input::placeholder,
+.goto-input::placeholder {
+  color: var(--text-dim);
+}
+
+.find-count {
+  font-size: calc(10px * var(--font-scale));
+  color: var(--text-muted);
+  min-width: 32px;
+  text-align: center;
+  padding: 0 2px;
+  font-family: var(--font-mono);
+}
+
+.find-count.has-match {
+  color: var(--primary-hover);
+  font-weight: 700;
+}
+
+.find-count.no-match {
+  color: var(--danger);
+  font-weight: 700;
+}
+
+.btn-find-nav {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0 4px;
+  height: 18px;
+  line-height: 16px;
+  border-radius: 3px;
+  font-size: calc(9.5px * var(--font-scale));
+  font-family: var(--font-sans);
+  transition: all 0.12s ease;
+}
+
+.btn-find-nav:hover {
+  background-color: var(--bg-card-hover);
+  color: var(--text-main);
+  border-color: var(--border-color);
+}
+
+.goto-line-group label {
+  font-family: var(--font-sans);
+  font-size: calc(10.5px * var(--font-scale));
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.goto-input {
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--text-main);
+  font-family: var(--font-mono);
+  font-size: calc(10.5px * var(--font-scale));
+  width: 52px;
+  padding: 1px 2px;
+}
+
+.goto-input::-webkit-inner-spin-button,
+.goto-input::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
 .config-meta-right {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
+  flex-shrink: 0;
 }
 
 .dirty-badge {
@@ -827,6 +1001,26 @@ body {
   font-size: calc(10.5px * var(--font-scale));
 }
 
+.syntax-badge {
+  background-color: rgba(14, 165, 233, 0.14);
+  color: var(--primary-hover);
+  border: 1px solid rgba(14, 165, 233, 0.35);
+  padding: 0px 6px;
+  border-radius: 4px;
+  font-weight: 700;
+  font-size: calc(10px * var(--font-scale));
+  letter-spacing: 0.3px;
+}
+
+.cursor-badge {
+  background-color: var(--bg-subcard);
+  color: var(--text-muted);
+  border: 1px solid var(--border-color);
+  padding: 0px 6px;
+  border-radius: 4px;
+  font-size: calc(10px * var(--font-scale));
+}
+
 .config-editor-viewport {
   flex: 1;
   min-height: 0;
@@ -836,6 +1030,7 @@ body {
   overflow: hidden;
   border: 1px solid var(--border-color);
   border-radius: 8px;
+  background-color: var(--editor-bg);
 }
 
 .config-editor-pane {
@@ -845,11 +1040,12 @@ body {
   display: flex;
   flex-direction: column;
   position: relative;
+  background-color: var(--editor-bg);
 }
 
 .config-editor-pane.example-pane {
   border-left: 2px solid var(--primary);
-  background-color: var(--bg-subcard);
+  background-color: var(--editor-example-bg);
 }
 
 .example-header {
@@ -861,6 +1057,7 @@ body {
   border-bottom: 1px solid var(--border-color);
   font-size: calc(11px * var(--font-scale));
   font-family: var(--font-mono);
+  flex-shrink: 0;
 }
 
 .example-title {
@@ -893,42 +1090,255 @@ body {
   height: 24px;
 }
 
-.config-textarea {
+/* ==========================================================================
+   5.2 雙層同步語法高亮舞台 (Line Gutter + Highlight Backdrop + Textarea)
+   ========================================================================== */
+.code-editor-stage {
   flex: 1;
+  min-height: 0;
   width: 100%;
   height: 100%;
-  border: none;
-  outline: none;
-  padding: 12px 14px;
-  background-color: var(--bg-viewport);
-  color: #e2e8f0;
+  display: flex;
+  flex-direction: row;
+  position: relative;
+  overflow: hidden;
+  background-color: var(--editor-bg);
+}
+
+.code-editor-stage.example-stage {
+  background-color: var(--editor-example-bg);
+}
+
+/* 左側行號欄 */
+.code-gutter {
+  flex-shrink: 0;
+  min-width: 46px;
+  padding: 12px 0 40px 0;
+  background-color: var(--editor-gutter-bg);
+  border-right: 1px solid var(--editor-gutter-border);
+  color: var(--editor-gutter-text);
   font-family: var(--font-mono);
   font-size: calc(12px * var(--font-scale));
   line-height: 1.55;
-  resize: none;
+  text-align: right;
+  user-select: none;
+  overflow: hidden;
+  z-index: 4;
+}
+
+.gutter-line {
+  padding: 0 10px 0 8px;
+  min-height: calc(12px * var(--font-scale) * 1.55);
+  cursor: pointer;
+  transition: color 0.08s ease, background-color 0.08s ease;
+}
+
+.gutter-line:hover {
+  color: var(--text-main);
+}
+
+.gutter-line.active {
+  color: var(--editor-gutter-active-text);
+  background-color: var(--editor-gutter-active-bg);
+  font-weight: 700;
+}
+
+/* 右側重疊編輯畫布 */
+.code-canvas {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  position: relative;
+  overflow: hidden;
+}
+
+/* 底層語法渲染層與頂層透明輸入層必須 100% 像素對齊 */
+.code-backdrop,
+.config-textarea {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 12px 14px;
+  border: none;
+  outline: none;
+  box-sizing: border-box;
+  font-family: var(--font-mono);
+  font-size: calc(12px * var(--font-scale));
+  line-height: 1.55;
+  font-weight: 400;
+  font-style: normal;
+  letter-spacing: 0px;
+  word-spacing: 0px;
   tab-size: 4;
+  font-variant-ligatures: none;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  overflow-y: scroll;
+  overflow-x: hidden;
+}
+
+.code-backdrop {
+  background-color: transparent;
+  color: var(--editor-text);
+  pointer-events: none;
+  user-select: none;
+  z-index: 1;
+}
+
+/* 隱藏底層捲軸視覺但保留捲軸寬度佔位，確保與 Textarea 換行寬度 100% 一致 */
+.code-backdrop::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.code-backdrop::-webkit-scrollbar-track,
+.code-backdrop::-webkit-scrollbar-thumb {
+  background: transparent;
+  border: none;
+}
+
+.active-line-highlight {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 12px;
+  height: calc(12px * var(--font-scale) * 1.55);
+  background-color: var(--editor-active-line);
+  border-left: 2px solid var(--primary);
+  pointer-events: none;
+  z-index: 1;
+}
+
+.code-highlight {
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  font: inherit;
+  line-height: inherit;
+  letter-spacing: inherit;
+  word-spacing: inherit;
+  tab-size: inherit;
+  white-space: inherit;
+  word-wrap: inherit;
+  overflow-wrap: inherit;
+  color: var(--editor-text);
+  position: relative;
+  z-index: 2;
+}
+
+.code-highlight code {
+  font: inherit;
+  line-height: inherit;
+  letter-spacing: inherit;
+  word-spacing: inherit;
+  tab-size: inherit;
+  white-space: inherit;
+  word-wrap: inherit;
+  overflow-wrap: inherit;
+  background: transparent;
+  padding: 0;
+  margin: 0;
+  border: none;
+}
+
+.hl-line {
+  font: inherit;
+  line-height: inherit;
+  letter-spacing: inherit;
+}
+
+.config-textarea {
+  background: transparent !important;
+  color: transparent !important;
+  -webkit-text-fill-color: transparent !important;
+  caret-color: var(--editor-caret);
+  resize: none;
+  z-index: 3;
+  user-select: text;
+}
+
+.config-textarea::selection {
+  background-color: var(--editor-selection);
+  color: transparent !important;
+  -webkit-text-fill-color: transparent !important;
+}
+
+.config-textarea::placeholder {
+  color: var(--text-dim);
+  -webkit-text-fill-color: var(--text-dim);
 }
 
 .example-textarea {
-  background-color: rgba(0, 0, 0, 0.18);
-  opacity: 0.92;
   cursor: default;
 }
 
-[data-theme="light"] .example-textarea {
-  background-color: #f8fafc;
-  color: #334155;
-}
-
+.code-backdrop.no-wrap,
 .config-textarea.nowrap,
 .config-textarea.no-wrap {
   white-space: pre;
+  word-wrap: normal;
+  overflow-wrap: normal;
   overflow-x: auto;
 }
 
-[data-theme="light"] .config-textarea {
-  background-color: #ffffff;
-  color: #0f172a;
+/* 語法 Token 著色規則 (嚴格維持 font-weight: 400 與 font-style: normal 確保中英文字元寬度零偏差) */
+.hl-comment {
+  color: var(--hl-comment);
+}
+
+.hl-keyword {
+  color: var(--hl-keyword);
+}
+
+.hl-tag {
+  color: var(--hl-tag);
+}
+
+.hl-key {
+  color: var(--hl-key);
+}
+
+.hl-operator {
+  color: var(--hl-operator);
+}
+
+.hl-string {
+  color: var(--hl-string);
+}
+
+.hl-number {
+  color: var(--hl-number);
+}
+
+.hl-boolean {
+  color: var(--hl-boolean);
+}
+
+.hl-variable {
+  color: var(--hl-variable);
+}
+
+/* 關鍵字搜尋匹配高亮 */
+mark.hl-search-match {
+  background-color: var(--hl-search-bg);
+  color: inherit;
+  border-radius: 2px;
+  box-shadow: 0 0 0 1px var(--hl-search-border);
+  padding: 0;
+  margin: 0;
+  font: inherit;
+}
+
+mark.hl-search-match.current {
+  background-color: var(--hl-search-current-bg);
+  box-shadow: 0 0 0 1.5px var(--hl-search-current-border);
 }
 
 /* ==========================================================================

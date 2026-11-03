@@ -66,6 +66,12 @@ const state = {
   currentConfigHasExample: false,
   isExamplePaneOpen: false,
   currentExampleContent: '',
+  configSyntaxLang: 'plain',
+  configSearchQuery: '',
+  configSearchMatches: [],
+  configSearchCurrentIdx: -1,
+  configActiveLineNum: 1,
+  exampleActiveLineNum: 1,
 
   // 效能折線圖歷史緩衝區 (最多 60 筆取樣點)
   cpuHistory: [],
@@ -168,8 +174,27 @@ const el = {
   chkWrapConfig: document.getElementById('chkWrapConfig'),
   configPathInfo: document.getElementById('configPathInfo'),
   configDirtyFlag: document.getElementById('configDirtyFlag'),
+  configSyntaxBadge: document.getElementById('configSyntaxBadge'),
+  configCursorInfo: document.getElementById('configCursorInfo'),
   configMetaInfo: document.getElementById('configMetaInfo'),
   txtConfigEditor: document.getElementById('txtConfigEditor'),
+  txtConfigSearch: document.getElementById('txtConfigSearch'),
+  configSearchCount: document.getElementById('configSearchCount'),
+  btnConfigSearchPrev: document.getElementById('btnConfigSearchPrev'),
+  btnConfigSearchNext: document.getElementById('btnConfigSearchNext'),
+  btnConfigSearchClear: document.getElementById('btnConfigSearchClear'),
+  txtConfigGotoLine: document.getElementById('txtConfigGotoLine'),
+  btnConfigGotoLine: document.getElementById('btnConfigGotoLine'),
+  configLineGutter: document.getElementById('configLineGutter'),
+  configBackdrop: document.getElementById('configBackdrop'),
+  configActiveLine: document.getElementById('configActiveLine'),
+  configHighlightPre: document.getElementById('configHighlightPre'),
+  configHighlightCode: document.getElementById('configHighlightCode'),
+  exampleLineGutter: document.getElementById('exampleLineGutter'),
+  exampleBackdrop: document.getElementById('exampleBackdrop'),
+  exampleActiveLine: document.getElementById('exampleActiveLine'),
+  exampleHighlightPre: document.getElementById('exampleHighlightPre'),
+  exampleHighlightCode: document.getElementById('exampleHighlightCode'),
 
   // 沙盒終端機元素
   terminalScreen: document.getElementById('terminalScreen'),
@@ -341,6 +366,7 @@ const initApp = async () => {
       localStorage.setItem('lah_dashboard_font_scale', scale);
       const label = scale === '1' ? '一般 (100%)' : scale === '1.15' ? '中 (+15%)' : '大 (+25%)';
       showToast(`✓ 已套用字體大小：${label} (基礎放大 20%)`);
+      scheduleConfigEditorSync();
     });
   }
 
@@ -633,11 +659,12 @@ const initApp = async () => {
   });
 
   el.chkWrapConfig.addEventListener('change', (e) => {
-    if (e.target.checked) {
-      el.txtConfigEditor.classList.remove('no-wrap');
-    } else {
-      el.txtConfigEditor.classList.add('no-wrap');
-    }
+    const isWrap = e.target.checked;
+    el.txtConfigEditor.classList.toggle('no-wrap', !isWrap);
+    if (el.configBackdrop) el.configBackdrop.classList.toggle('no-wrap', !isWrap);
+    el.txtExampleViewer.classList.toggle('no-wrap', !isWrap);
+    if (el.exampleBackdrop) el.exampleBackdrop.classList.toggle('no-wrap', !isWrap);
+    scheduleConfigEditorSync();
   });
 
   el.txtConfigEditor.addEventListener('input', () => {
@@ -649,7 +676,90 @@ const initApp = async () => {
       el.configDirtyFlag.classList.add('hidden');
     }
     updateConfigEditorMeta();
+    renderMainConfigHighlight(true);
+    updateConfigCursorAndActiveLine('main');
   });
+
+  el.txtConfigEditor.addEventListener('scroll', () => {
+    syncEditorScroll('main');
+  });
+
+  ['click', 'keyup', 'select', 'focus'].forEach((evtName) => {
+    el.txtConfigEditor.addEventListener(evtName, () => {
+      updateConfigCursorAndActiveLine('main');
+    });
+  });
+
+  el.txtExampleViewer.addEventListener('scroll', () => {
+    syncEditorScroll('example');
+  });
+
+  ['click', 'keyup', 'select', 'focus'].forEach((evtName) => {
+    el.txtExampleViewer.addEventListener(evtName, () => {
+      updateConfigCursorAndActiveLine('example');
+    });
+  });
+
+  if (el.configLineGutter) {
+    el.configLineGutter.addEventListener('click', (e) => {
+      const lineItem = e.target.closest('.gutter-line');
+      if (lineItem && lineItem.dataset.line) {
+        jumpToConfigLine(parseInt(lineItem.dataset.line, 10), true);
+      }
+    });
+  }
+
+  // 組態編輯器內搜尋與跳行事件綁定
+  if (el.txtConfigSearch) {
+    el.txtConfigSearch.addEventListener('input', () => {
+      handleConfigSearchInput();
+    });
+    el.txtConfigSearch.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        navigateConfigSearch(e.shiftKey ? -1 : 1);
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        clearConfigSearch(true);
+      }
+    });
+  }
+
+  if (el.btnConfigSearchPrev) {
+    el.btnConfigSearchPrev.addEventListener('click', () => navigateConfigSearch(-1));
+  }
+  if (el.btnConfigSearchNext) {
+    el.btnConfigSearchNext.addEventListener('click', () => navigateConfigSearch(1));
+  }
+  if (el.btnConfigSearchClear) {
+    el.btnConfigSearchClear.addEventListener('click', () => clearConfigSearch(true));
+  }
+
+  if (el.txtConfigGotoLine) {
+    el.txtConfigGotoLine.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        const targetLine = parseInt(el.txtConfigGotoLine.value, 10);
+        if (targetLine > 0) {
+          jumpToConfigLine(targetLine, true);
+        }
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        el.txtConfigEditor.focus();
+      }
+    });
+  }
+
+  if (el.btnConfigGotoLine) {
+    el.btnConfigGotoLine.addEventListener('click', () => {
+      const targetLine = parseInt(el.txtConfigGotoLine.value, 10);
+      if (targetLine > 0) {
+        jumpToConfigLine(targetLine, true);
+      } else if (el.txtConfigGotoLine) {
+        el.txtConfigGotoLine.focus();
+      }
+    });
+  }
 
   el.txtConfigEditor.addEventListener('keydown', (e) => {
     if (e.key === 'Tab') {
@@ -693,10 +803,29 @@ const initApp = async () => {
     });
   }
 
-  // 按 ESC 鍵快速退出沙盒終端最大化模式
+  // 按 ESC 鍵快速退出沙盒終端最大化模式，並支援組態編輯器 Ctrl+F / Ctrl+G 快捷鍵
   window.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && state.isTerminalMaximized) {
       toggleTerminalMaximize(false);
+      return;
+    }
+    if (state.activeTab === 'tab-configs') {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f') {
+        e.preventDefault();
+        if (el.txtConfigSearch) {
+          el.txtConfigSearch.focus();
+          el.txtConfigSearch.select();
+        }
+      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'g') {
+        e.preventDefault();
+        if (el.txtConfigGotoLine) {
+          el.txtConfigGotoLine.focus();
+          el.txtConfigGotoLine.select();
+        }
+      } else if (e.key === 'F3') {
+        e.preventDefault();
+        navigateConfigSearch(e.shiftKey ? -1 : 1);
+      }
     }
   });
 
@@ -758,12 +887,14 @@ const initApp = async () => {
     });
   }
 
-  // 視窗大小改變時自動調校 xterm 尺寸
+  // 視窗大小改變時自動調校 xterm 尺寸與組態編輯器行高對齊
   window.addEventListener('resize', () => {
     if (state.fitAddonInstance && state.activeTab === 'tab-terminal') {
       try {
         state.fitAddonInstance.fit();
       } catch (_) {}
+    } else if (state.activeTab === 'tab-configs') {
+      scheduleConfigEditorSync();
     }
   });
 
@@ -805,6 +936,8 @@ const switchTab = (tabId) => {
     stopTerminalPolling();
     if (state.availableConfigs.length === 0) {
       loadCoreConfigsList();
+    } else {
+      scheduleConfigEditorSync();
     }
   } else if (tabId === 'tab-terminal') {
     startTerminalSession();
@@ -1639,8 +1772,951 @@ const stopPollingScheduler = () => {
 };
 
 // ==========================================================================
-// 6. 核心組態編輯器 (分頁四)
+// 6. 核心組態編輯器與多格式語法高亮引擎 (分頁四)
 // ==========================================================================
+const escapeHtmlConfig = (str) => {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+};
+
+const detectConfigLanguage = (filePath) => {
+  if (!filePath) return { id: 'plain', label: 'PLAIN' };
+  const fileName = String(filePath).split(/[\\/]/).pop() || '';
+  const cleanName = fileName.replace(/\.(example|sample|bak|orig|\d{8}_\d{6})$/i, '').toLowerCase();
+
+  if (cleanName === '.env' || cleanName === 'env' || cleanName.endsWith('.env') || cleanName.endsWith('.properties')) {
+    return { id: 'dotenv', label: 'DotEnv' };
+  }
+  if (cleanName.endsWith('.ini')) {
+    return { id: 'ini', label: 'PHP INI' };
+  }
+  if (cleanName.endsWith('.conf') || cleanName.includes('httpd') || cleanName.includes('vhost')) {
+    return { id: 'apache', label: 'Apache Conf' };
+  }
+  if (cleanName.endsWith('.js') || cleanName.endsWith('.cjs') || cleanName.endsWith('.mjs')) {
+    return { id: 'javascript', label: 'JavaScript' };
+  }
+  if (cleanName.endsWith('.json')) {
+    return { id: 'json', label: 'JSON' };
+  }
+  if (cleanName.endsWith('.xml') || cleanName.endsWith('.html')) {
+    return { id: 'xml', label: 'XML' };
+  }
+  if (cleanName.endsWith('.bat') || cleanName.endsWith('.cmd') || cleanName.endsWith('.ps1') || cleanName.endsWith('.sh')) {
+    return { id: 'batch', label: 'Shell / Bat' };
+  }
+  return { id: 'plain', label: 'Plain Text' };
+};
+
+const pushSyntaxToken = (tokens, type, text) => {
+  if (!text) return;
+  const last = tokens[tokens.length - 1];
+  if (last && last.type === type) {
+    last.text += text;
+  } else {
+    tokens.push({ type, text });
+  }
+};
+
+// 針對字串或參數內含之變數 ($1, ${VAR}, %{ENV:VAR}, %PATH%) 細分高亮
+const tokenizeWithVariables = (tokens, text, baseType) => {
+  const varRegex = /(\$\{[^}]+\}|%\{[^}]+\}|\$[0-9]+|\$[A-Za-z_][A-Za-z0-9_]*|%[A-Za-z0-9_~]+%)/g;
+  let lastIdx = 0;
+  let m;
+  while ((m = varRegex.exec(text)) !== null) {
+    if (m.index > lastIdx) {
+      pushSyntaxToken(tokens, baseType, text.slice(lastIdx, m.index));
+    }
+    pushSyntaxToken(tokens, 'hl-variable', m[0]);
+    lastIdx = m.index + m[0].length;
+  }
+  if (lastIdx < text.length) {
+    pushSyntaxToken(tokens, baseType, text.slice(lastIdx));
+  }
+};
+
+const tokenizeDotenvValue = (tokens, rhs) => {
+  let i = 0;
+  const n = rhs.length;
+  while (i < n) {
+    const ch = rhs[i];
+    if (ch === ' ' || ch === '\t') {
+      let j = i + 1;
+      while (j < n && (rhs[j] === ' ' || rhs[j] === '\t')) j++;
+      pushSyntaxToken(tokens, '', rhs.slice(i, j));
+      i = j;
+      if (i < n && rhs[i] === '#') {
+        pushSyntaxToken(tokens, 'hl-comment', rhs.slice(i));
+        break;
+      }
+      continue;
+    }
+    if ((ch === '#' || ch === ';') && i === 0) {
+      pushSyntaxToken(tokens, 'hl-comment', rhs.slice(i));
+      break;
+    }
+    if (ch === '"' || ch === "'") {
+      const quote = ch;
+      let j = i + 1;
+      while (j < n) {
+        if (rhs[j] === '\\') {
+          j += 2;
+          continue;
+        }
+        if (rhs[j] === quote) {
+          j++;
+          break;
+        }
+        j++;
+      }
+      tokenizeWithVariables(tokens, rhs.slice(i, j), 'hl-string');
+      i = j;
+      continue;
+    }
+    // 非引號區段：讀至空白或引號前
+    let j = i;
+    while (j < n && rhs[j] !== ' ' && rhs[j] !== '\t' && rhs[j] !== '"' && rhs[j] !== "'") {
+      j++;
+    }
+    const word = rhs.slice(i, j);
+    if (/^(true|false|null|yes|no|on|off)$/i.test(word)) {
+      pushSyntaxToken(tokens, 'hl-boolean', word);
+    } else if (/^-?\d+(\.\d+)*$/.test(word)) {
+      pushSyntaxToken(tokens, 'hl-number', word);
+    } else {
+      tokenizeWithVariables(tokens, word, 'hl-string');
+    }
+    i = j;
+  }
+};
+
+const tokenizeIniValue = (tokens, rhs) => {
+  let i = 0;
+  const n = rhs.length;
+  while (i < n) {
+    const ch = rhs[i];
+    if (ch === ';') {
+      pushSyntaxToken(tokens, 'hl-comment', rhs.slice(i));
+      break;
+    }
+    if (ch === ' ' || ch === '\t') {
+      let j = i + 1;
+      while (j < n && (rhs[j] === ' ' || rhs[j] === '\t')) j++;
+      pushSyntaxToken(tokens, '', rhs.slice(i, j));
+      i = j;
+      continue;
+    }
+    if (ch === '"' || ch === "'") {
+      const quote = ch;
+      let j = i + 1;
+      while (j < n) {
+        if (rhs[j] === '\\') {
+          j += 2;
+          continue;
+        }
+        if (rhs[j] === quote) {
+          j++;
+          break;
+        }
+        j++;
+      }
+      tokenizeWithVariables(tokens, rhs.slice(i, j), 'hl-string');
+      i = j;
+      continue;
+    }
+    if ('~&|^!()'.includes(ch)) {
+      pushSyntaxToken(tokens, 'hl-operator', ch);
+      i++;
+      continue;
+    }
+    let j = i;
+    while (j < n && !' \t;"\'~&|^!()'.includes(rhs[j])) {
+      j++;
+    }
+    const word = rhs.slice(i, j);
+    if (/^(On|Off|True|False|Yes|No|None|null|E_[A-Z_]+)$/i.test(word)) {
+      pushSyntaxToken(tokens, 'hl-boolean', word);
+    } else if (/^-?\d+(\.\d+)?[KMGkmg]?$/.test(word)) {
+      pushSyntaxToken(tokens, 'hl-number', word);
+    } else {
+      tokenizeWithVariables(tokens, word, 'hl-string');
+    }
+    i = j;
+  }
+};
+
+const tokenizeApacheArgs = (tokens, argsText, defaultType = '') => {
+  let i = 0;
+  const n = argsText.length;
+  while (i < n) {
+    const ch = argsText[i];
+    if (ch === ' ' || ch === '\t') {
+      let j = i + 1;
+      while (j < n && (argsText[j] === ' ' || argsText[j] === '\t')) j++;
+      pushSyntaxToken(tokens, '', argsText.slice(i, j));
+      i = j;
+      if (i < n && argsText[i] === '#') {
+        pushSyntaxToken(tokens, 'hl-comment', argsText.slice(i));
+        break;
+      }
+      continue;
+    }
+    if (ch === '#' && i === 0) {
+      pushSyntaxToken(tokens, 'hl-comment', argsText.slice(i));
+      break;
+    }
+    if (ch === '"' || ch === "'") {
+      const quote = ch;
+      let j = i + 1;
+      while (j < n) {
+        if (argsText[j] === '\\') {
+          j += 2;
+          continue;
+        }
+        if (argsText[j] === quote) {
+          j++;
+          break;
+        }
+        j++;
+      }
+      tokenizeWithVariables(tokens, argsText.slice(i, j), 'hl-string');
+      i = j;
+      continue;
+    }
+    let j = i;
+    while (j < n && argsText[j] !== ' ' && argsText[j] !== '\t' && argsText[j] !== '"' && argsText[j] !== "'") {
+      j++;
+    }
+    const word = argsText.slice(i, j);
+    if (/^(On|Off|all|none|granted|denied|Permanent|Temp|env|expr|from|allow|deny)$/i.test(word)) {
+      pushSyntaxToken(tokens, 'hl-boolean', word);
+    } else if (/^(\*:\d+|\d+(\.\d+)*(:\d+)?(\/\d+)?)$/.test(word)) {
+      pushSyntaxToken(tokens, 'hl-number', word);
+    } else if (/_module$/i.test(word)) {
+      pushSyntaxToken(tokens, 'hl-key', word);
+    } else if (/^[+\-][A-Za-z]+$/.test(word)) {
+      pushSyntaxToken(tokens, 'hl-boolean', word);
+    } else {
+      tokenizeWithVariables(tokens, word, defaultType || 'hl-string');
+    }
+    i = j;
+  }
+};
+
+const JS_KEYWORDS = new Set([
+  'module', 'exports', 'const', 'let', 'var', 'function', 'return', 'require',
+  'process', 'env', 'async', 'await', 'if', 'else', 'for', 'of', 'in', 'new',
+  'try', 'catch', 'finally', 'throw', 'typeof', 'import', 'from', 'export', 'default',
+]);
+
+const JS_BOOLEANS = new Set(['true', 'false', 'null', 'undefined', 'NaN', 'Infinity']);
+
+const tokenizeJsOrJsonLine = (tokens, line, parserState) => {
+  let i = 0;
+  const n = line.length;
+  while (i < n) {
+    if (parserState.inBlockComment) {
+      const endIdx = line.indexOf('*/', i);
+      if (endIdx === -1) {
+        pushSyntaxToken(tokens, 'hl-comment', line.slice(i));
+        return;
+      }
+      pushSyntaxToken(tokens, 'hl-comment', line.slice(i, endIdx + 2));
+      parserState.inBlockComment = false;
+      i = endIdx + 2;
+      continue;
+    }
+
+    const ch = line[i];
+    const next = line[i + 1];
+
+    if (ch === '/' && next === '/') {
+      pushSyntaxToken(tokens, 'hl-comment', line.slice(i));
+      return;
+    }
+    if (ch === '/' && next === '*') {
+      const endIdx = line.indexOf('*/', i + 2);
+      if (endIdx === -1) {
+        parserState.inBlockComment = true;
+        pushSyntaxToken(tokens, 'hl-comment', line.slice(i));
+        return;
+      }
+      pushSyntaxToken(tokens, 'hl-comment', line.slice(i, endIdx + 2));
+      i = endIdx + 2;
+      continue;
+    }
+    if (ch === '"' || ch === "'" || ch === '`') {
+      const quote = ch;
+      let j = i + 1;
+      while (j < n) {
+        if (line[j] === '\\') {
+          j += 2;
+          continue;
+        }
+        if (line[j] === quote) {
+          j++;
+          break;
+        }
+        j++;
+      }
+      const strToken = line.slice(i, j);
+      // 檢查是否為 JSON / Object 屬性鍵 (後面緊接著冒號 :)
+      const restAfterStr = line.slice(j);
+      if (/^\s*:/.test(restAfterStr)) {
+        pushSyntaxToken(tokens, 'hl-key', strToken);
+      } else {
+        tokenizeWithVariables(tokens, strToken, 'hl-string');
+      }
+      i = j;
+      continue;
+    }
+    if (/[A-Za-z_$]/.test(ch)) {
+      let j = i + 1;
+      while (j < n && /[A-Za-z0-9_$]/.test(line[j])) j++;
+      const ident = line.slice(i, j);
+      const restAfterIdent = line.slice(j);
+      if (/^\s*:/.test(restAfterIdent)) {
+        pushSyntaxToken(tokens, 'hl-key', ident);
+      } else if (JS_BOOLEANS.has(ident)) {
+        pushSyntaxToken(tokens, 'hl-boolean', ident);
+      } else if (JS_KEYWORDS.has(ident)) {
+        pushSyntaxToken(tokens, 'hl-keyword', ident);
+      } else {
+        pushSyntaxToken(tokens, '', ident);
+      }
+      i = j;
+      continue;
+    }
+    if (/\d/.test(ch) || (ch === '-' && /\d/.test(next))) {
+      let j = i + 1;
+      while (j < n && /[\d.xXa-fA-F_]/.test(line[j])) j++;
+      pushSyntaxToken(tokens, 'hl-number', line.slice(i, j));
+      i = j;
+      continue;
+    }
+    if ('=:+-*/&|<>!?,;{}[]().'.includes(ch)) {
+      pushSyntaxToken(tokens, 'hl-operator', ch);
+      i++;
+      continue;
+    }
+    pushSyntaxToken(tokens, '', ch);
+    i++;
+  }
+};
+
+const tokenizeXmlLine = (tokens, line, parserState) => {
+  let i = 0;
+  const n = line.length;
+  while (i < n) {
+    if (parserState.inBlockComment) {
+      const endIdx = line.indexOf('-->', i);
+      if (endIdx === -1) {
+        pushSyntaxToken(tokens, 'hl-comment', line.slice(i));
+        return;
+      }
+      pushSyntaxToken(tokens, 'hl-comment', line.slice(i, endIdx + 3));
+      parserState.inBlockComment = false;
+      i = endIdx + 3;
+      continue;
+    }
+    if (line.startsWith('<!--', i)) {
+      const endIdx = line.indexOf('-->', i + 4);
+      if (endIdx === -1) {
+        parserState.inBlockComment = true;
+        pushSyntaxToken(tokens, 'hl-comment', line.slice(i));
+        return;
+      }
+      pushSyntaxToken(tokens, 'hl-comment', line.slice(i, endIdx + 3));
+      i = endIdx + 3;
+      continue;
+    }
+    if (line[i] === '<') {
+      const closeIdx = line.indexOf('>', i);
+      if (closeIdx !== -1) {
+        const tagChunk = line.slice(i, closeIdx + 1);
+        const m = tagChunk.match(/^(<\/?[A-Za-z0-9_:-]+)(.*?)(\/?>)$/);
+        if (m) {
+          pushSyntaxToken(tokens, 'hl-tag', m[1]);
+          // 解析屬性名與值
+          const attrText = m[2];
+          const attrRe = /([A-Za-z0-9_:-]+)(\s*=\s*)("[^"]*"|'[^']*')/g;
+          let lastIdx = 0;
+          let am;
+          while ((am = attrRe.exec(attrText)) !== null) {
+            if (am.index > lastIdx) {
+              pushSyntaxToken(tokens, '', attrText.slice(lastIdx, am.index));
+            }
+            pushSyntaxToken(tokens, 'hl-key', am[1]);
+            pushSyntaxToken(tokens, 'hl-operator', am[2]);
+            tokenizeWithVariables(tokens, am[3], 'hl-string');
+            lastIdx = am.index + am[0].length;
+          }
+          if (lastIdx < attrText.length) {
+            pushSyntaxToken(tokens, '', attrText.slice(lastIdx));
+          }
+          pushSyntaxToken(tokens, 'hl-tag', m[3]);
+          i = closeIdx + 1;
+          continue;
+        }
+      }
+    }
+    let nextTag = line.indexOf('<', i + 1);
+    if (nextTag === -1) nextTag = n;
+    tokenizeWithVariables(tokens, line.slice(i, nextTag), '');
+    i = nextTag;
+  }
+};
+
+const tokenizeConfigLine = (line, lang, parserState) => {
+  if (!line) return [];
+  const tokens = [];
+
+  if (lang === 'dotenv') {
+    const leadMatch = line.match(/^(\s*)(.*)$/);
+    const indent = leadMatch ? leadMatch[1] : '';
+    const rest = leadMatch ? leadMatch[2] : line;
+    if (indent) pushSyntaxToken(tokens, '', indent);
+    if (!rest) return tokens;
+
+    if (rest.startsWith('#') || rest.startsWith(';')) {
+      pushSyntaxToken(tokens, 'hl-comment', rest);
+      return tokens;
+    }
+
+    let body = rest;
+    const exportMatch = body.match(/^(export\s+)(.*)$/);
+    if (exportMatch) {
+      pushSyntaxToken(tokens, 'hl-keyword', exportMatch[1]);
+      body = exportMatch[2];
+    }
+
+    const kvMatch = body.match(/^([A-Za-z_][A-Za-z0-9_.-]*)(\s*=\s*)(.*)$/);
+    if (kvMatch) {
+      pushSyntaxToken(tokens, 'hl-key', kvMatch[1]);
+      pushSyntaxToken(tokens, 'hl-operator', kvMatch[2]);
+      tokenizeDotenvValue(tokens, kvMatch[3]);
+    } else {
+      tokenizeDotenvValue(tokens, body);
+    }
+  } else if (lang === 'ini') {
+    const leadMatch = line.match(/^(\s*)(.*)$/);
+    const indent = leadMatch ? leadMatch[1] : '';
+    const rest = leadMatch ? leadMatch[2] : line;
+    if (indent) pushSyntaxToken(tokens, '', indent);
+    if (!rest) return tokens;
+
+    if (rest.startsWith(';') || rest.startsWith('#')) {
+      pushSyntaxToken(tokens, 'hl-comment', rest);
+      return tokens;
+    }
+
+    const secMatch = rest.match(/^(\[[^\]]+\])(.*)$/);
+    if (secMatch) {
+      pushSyntaxToken(tokens, 'hl-tag', secMatch[1]);
+      tokenizeIniValue(tokens, secMatch[2]);
+      return tokens;
+    }
+
+    const kvMatch = rest.match(/^([^=;]+?)(\s*=\s*)(.*)$/);
+    if (kvMatch) {
+      pushSyntaxToken(tokens, 'hl-key', kvMatch[1]);
+      pushSyntaxToken(tokens, 'hl-operator', kvMatch[2]);
+      tokenizeIniValue(tokens, kvMatch[3]);
+    } else {
+      tokenizeIniValue(tokens, rest);
+    }
+  } else if (lang === 'apache') {
+    const leadMatch = line.match(/^(\s*)(.*)$/);
+    const indent = leadMatch ? leadMatch[1] : '';
+    const rest = leadMatch ? leadMatch[2] : line;
+    if (indent) pushSyntaxToken(tokens, '', indent);
+    if (!rest) return tokens;
+
+    if (rest.startsWith('#')) {
+      pushSyntaxToken(tokens, 'hl-comment', rest);
+      return tokens;
+    }
+
+    const tagMatch = rest.match(/^(<\/?[A-Za-z0-9_:-]+)(.*?)(\/?>)(.*)$/);
+    if (tagMatch) {
+      pushSyntaxToken(tokens, 'hl-tag', tagMatch[1]);
+      tokenizeApacheArgs(tokens, tagMatch[2], 'hl-key');
+      pushSyntaxToken(tokens, 'hl-tag', tagMatch[3]);
+      if (tagMatch[4]) {
+        tokenizeApacheArgs(tokens, tagMatch[4], '');
+      }
+      return tokens;
+    }
+
+    const dirMatch = rest.match(/^([A-Za-z_][A-Za-z0-9_-]*)(.*)$/);
+    if (dirMatch) {
+      pushSyntaxToken(tokens, 'hl-keyword', dirMatch[1]);
+      tokenizeApacheArgs(tokens, dirMatch[2], '');
+    } else {
+      tokenizeApacheArgs(tokens, rest, '');
+    }
+  } else if (lang === 'javascript' || lang === 'json') {
+    tokenizeJsOrJsonLine(tokens, line, parserState);
+  } else if (lang === 'xml') {
+    tokenizeXmlLine(tokens, line, parserState);
+  } else if (lang === 'batch') {
+    const leadMatch = line.match(/^(\s*)(.*)$/);
+    const indent = leadMatch ? leadMatch[1] : '';
+    const rest = leadMatch ? leadMatch[2] : line;
+    if (indent) pushSyntaxToken(tokens, '', indent);
+    if (/^(rem\b|::|#)/i.test(rest)) {
+      pushSyntaxToken(tokens, 'hl-comment', rest);
+    } else {
+      const cmdMatch = rest.match(/^(@?[A-Za-z_][A-Za-z0-9_-]*)(.*)$/);
+      if (cmdMatch) {
+        pushSyntaxToken(tokens, 'hl-keyword', cmdMatch[1]);
+        tokenizeApacheArgs(tokens, cmdMatch[2], '');
+      } else {
+        tokenizeWithVariables(tokens, rest, '');
+      }
+    }
+  } else {
+    pushSyntaxToken(tokens, '', line);
+  }
+
+  // 安全防禦：確保拆分後之字元總和與原行 100% 一致，絕不遺失或增加任何字元
+  const joined = tokens.map((t) => t.text).join('');
+  if (joined !== line) {
+    return [{ type: '', text: line }];
+  }
+  return tokens;
+};
+
+// 將單行 Token 結合關鍵字搜尋範圍轉換為 HTML
+const renderTokensWithSearchMarks = (tokens, lineMatches, currentMatchIdx) => {
+  if (!tokens || tokens.length === 0) return '&#8203;';
+
+  if (!lineMatches || lineMatches.length === 0) {
+    let html = '';
+    for (let i = 0; i < tokens.length; i++) {
+      const tk = tokens[i];
+      const escaped = escapeHtmlConfig(tk.text);
+      html += tk.type ? `<span class="${tk.type}">${escaped}</span>` : escaped;
+    }
+    return html || '&#8203;';
+  }
+
+  let html = '';
+  let col = 0;
+  for (let i = 0; i < tokens.length; i++) {
+    const tk = tokens[i];
+    const tkStart = col;
+    const tkEnd = col + tk.text.length;
+    col = tkEnd;
+
+    let innerHtml = '';
+    let pos = tkStart;
+
+    for (let mIdx = 0; mIdx < lineMatches.length; mIdx++) {
+      const m = lineMatches[mIdx];
+      if (m.endCol <= pos) continue;
+      if (m.startCol >= tkEnd) break;
+
+      if (m.startCol > pos) {
+        innerHtml += escapeHtmlConfig(tk.text.slice(pos - tkStart, m.startCol - tkStart));
+        pos = m.startCol;
+      }
+
+      const sliceEnd = Math.min(tkEnd, m.endCol);
+      const matchedSlice = escapeHtmlConfig(tk.text.slice(pos - tkStart, sliceEnd - tkStart));
+      const isCurrent = m.matchIdx === currentMatchIdx;
+      innerHtml += `<mark class="hl-search-match${isCurrent ? ' current' : ''}" data-match-idx="${m.matchIdx}">${matchedSlice}</mark>`;
+      pos = sliceEnd;
+    }
+
+    if (pos < tkEnd) {
+      innerHtml += escapeHtmlConfig(tk.text.slice(pos - tkStart));
+    }
+
+    html += tk.type ? `<span class="${tk.type}">${innerHtml}</span>` : innerHtml;
+  }
+
+  return html || '&#8203;';
+};
+
+const computeSearchMatches = (text, query) => {
+  const matches = [];
+  if (!query || !text) return matches;
+
+  const qLower = query.toLowerCase();
+  const qLen = qLower.length;
+  const lines = text.split('\n');
+  let globalOffset = 0;
+
+  for (let i = 0; i < lines.length; i++) {
+    const lineLower = lines[i].toLowerCase();
+    let fromCol = 0;
+    while (fromCol <= lineLower.length - qLen) {
+      const foundCol = lineLower.indexOf(qLower, fromCol);
+      if (foundCol === -1) break;
+      matches.push({
+        matchIdx: matches.length,
+        lineNum: i + 1,
+        startCol: foundCol,
+        endCol: foundCol + qLen,
+        globalStart: globalOffset + foundCol,
+        globalEnd: globalOffset + foundCol + qLen,
+      });
+      fromCol = foundCol + Math.max(1, qLen);
+    }
+    globalOffset += lines[i].length + 1;
+  }
+  return matches;
+};
+
+const ensureGutterLinesCount = (gutterEl, lineCount, activeLineNum) => {
+  if (!gutterEl) return;
+  const targetCount = Math.max(1, lineCount);
+  if (gutterEl.childElementCount !== targetCount) {
+    let html = '';
+    for (let i = 1; i <= targetCount; i++) {
+      html += `<div class="gutter-line${i === activeLineNum ? ' active' : ''}" data-line="${i}">${i}</div>`;
+    }
+    gutterEl.innerHTML = html;
+  } else {
+    const prevActive = gutterEl.querySelector('.gutter-line.active');
+    if (prevActive && Number(prevActive.dataset.line) !== activeLineNum) {
+      prevActive.classList.remove('active');
+    }
+    const nextActive = gutterEl.children[activeLineNum - 1];
+    if (nextActive && !nextActive.classList.contains('active')) {
+      nextActive.classList.add('active');
+    }
+  }
+};
+
+const renderMainConfigHighlight = (preserveMatchIdx = true) => {
+  if (!el.configHighlightCode || !el.txtConfigEditor) return;
+  const text = el.txtConfigEditor.value || '';
+  const langInfo = detectConfigLanguage(state.currentConfigPath);
+  state.configSyntaxLang = langInfo.id;
+  if (el.configSyntaxBadge) {
+    el.configSyntaxBadge.textContent = langInfo.label;
+  }
+
+  const query = state.configSearchQuery || '';
+  const matches = computeSearchMatches(text, query);
+  state.configSearchMatches = matches;
+
+  if (matches.length === 0) {
+    state.configSearchCurrentIdx = -1;
+  } else if (!preserveMatchIdx || state.configSearchCurrentIdx < 0 || state.configSearchCurrentIdx >= matches.length) {
+    state.configSearchCurrentIdx = 0;
+  }
+  updateSearchCountUI();
+
+  const matchesByLine = new Map();
+  for (let i = 0; i < matches.length; i++) {
+    const m = matches[i];
+    if (!matchesByLine.has(m.lineNum)) {
+      matchesByLine.set(m.lineNum, []);
+    }
+    matchesByLine.get(m.lineNum).push(m);
+  }
+
+  const lines = text.split('\n');
+  const parserState = { inBlockComment: false };
+  const htmlLines = new Array(lines.length);
+
+  for (let i = 0; i < lines.length; i++) {
+    const lineNum = i + 1;
+    const tokens = tokenizeConfigLine(lines[i], langInfo.id, parserState);
+    const lineInner = renderTokensWithSearchMarks(
+      tokens,
+      matchesByLine.get(lineNum),
+      state.configSearchCurrentIdx
+    );
+    htmlLines[i] = `<span class="hl-line" data-line="${lineNum}">${lineInner}</span>`;
+  }
+
+  el.configHighlightCode.innerHTML = htmlLines.join('\n');
+  ensureGutterLinesCount(el.configLineGutter, lines.length, state.configActiveLineNum);
+  scheduleConfigEditorSync();
+};
+
+const renderExampleConfigHighlight = () => {
+  if (!el.exampleHighlightCode || !el.txtExampleViewer) return;
+  const text = el.txtExampleViewer.value || '';
+  const langInfo = detectConfigLanguage(state.currentConfigPath || '.env.example');
+  const query = state.configSearchQuery || '';
+  const matches = computeSearchMatches(text, query);
+
+  const matchesByLine = new Map();
+  for (let i = 0; i < matches.length; i++) {
+    const m = matches[i];
+    if (!matchesByLine.has(m.lineNum)) {
+      matchesByLine.set(m.lineNum, []);
+    }
+    matchesByLine.get(m.lineNum).push(m);
+  }
+
+  const lines = text.split('\n');
+  const parserState = { inBlockComment: false };
+  const htmlLines = new Array(lines.length);
+
+  for (let i = 0; i < lines.length; i++) {
+    const lineNum = i + 1;
+    const tokens = tokenizeConfigLine(lines[i], langInfo.id, parserState);
+    const lineInner = renderTokensWithSearchMarks(tokens, matchesByLine.get(lineNum), -1);
+    htmlLines[i] = `<span class="hl-line" data-line="${lineNum}">${lineInner}</span>`;
+  }
+
+  el.exampleHighlightCode.innerHTML = htmlLines.join('\n');
+  ensureGutterLinesCount(el.exampleLineGutter, lines.length, state.exampleActiveLineNum);
+  scheduleConfigEditorSync();
+};
+
+const syncEditorScroll = (pane = 'main') => {
+  if (pane === 'main') {
+    if (!el.txtConfigEditor || !el.configBackdrop || !el.configLineGutter) return;
+    el.configBackdrop.scrollTop = el.txtConfigEditor.scrollTop;
+    el.configBackdrop.scrollLeft = el.txtConfigEditor.scrollLeft;
+    el.configLineGutter.scrollTop = el.txtConfigEditor.scrollTop;
+  } else {
+    if (!el.txtExampleViewer || !el.exampleBackdrop || !el.exampleLineGutter) return;
+    el.exampleBackdrop.scrollTop = el.txtExampleViewer.scrollTop;
+    el.exampleBackdrop.scrollLeft = el.txtExampleViewer.scrollLeft;
+    el.exampleLineGutter.scrollTop = el.txtExampleViewer.scrollTop;
+  }
+};
+
+const syncSinglePaneMetrics = (codeEl, preEl, gutterEl, activeLineEl, activeLineNum, isWrap) => {
+  if (!codeEl || !preEl || !gutterEl) return;
+  const lineSpans = codeEl.children;
+  const count = lineSpans.length;
+  if (count === 0) return;
+
+  ensureGutterLinesCount(gutterEl, count, activeLineNum);
+  const gutterLines = gutterEl.children;
+
+  if (isWrap) {
+    const tops = new Array(count);
+    for (let i = 0; i < count; i++) {
+      tops[i] = lineSpans[i].offsetTop;
+    }
+    const totalPreHeight = preEl.offsetHeight;
+    for (let i = 0; i < count; i++) {
+      const h = i + 1 < count ? tops[i + 1] - tops[i] : Math.max(totalPreHeight - tops[i], 20);
+      if (gutterLines[i] && h > 0) {
+        gutterLines[i].style.height = `${h}px`;
+      }
+    }
+  } else {
+    for (let i = 0; i < gutterLines.length; i++) {
+      if (gutterLines[i].style.height) {
+        gutterLines[i].style.height = '';
+      }
+    }
+  }
+
+  if (activeLineEl) {
+    const clampedIdx = Math.min(Math.max(0, activeLineNum - 1), count - 1);
+    const activeSpan = lineSpans[clampedIdx];
+    if (activeSpan) {
+      const nextSpan = lineSpans[clampedIdx + 1];
+      const top = preEl.offsetTop + activeSpan.offsetTop;
+      const height = nextSpan
+        ? nextSpan.offsetTop - activeSpan.offsetTop
+        : Math.max(preEl.offsetHeight - activeSpan.offsetTop, activeSpan.offsetHeight || 20);
+      activeLineEl.style.top = `${top}px`;
+      activeLineEl.style.height = `${Math.max(18, height)}px`;
+    }
+  }
+};
+
+let configSyncRafId = null;
+const scheduleConfigEditorSync = () => {
+  if (configSyncRafId) cancelAnimationFrame(configSyncRafId);
+  configSyncRafId = requestAnimationFrame(() => {
+    configSyncRafId = null;
+    const isWrap = el.chkWrapConfig ? el.chkWrapConfig.checked : true;
+    syncSinglePaneMetrics(
+      el.configHighlightCode,
+      el.configHighlightPre,
+      el.configLineGutter,
+      el.configActiveLine,
+      state.configActiveLineNum,
+      isWrap
+    );
+    syncEditorScroll('main');
+
+    if (state.isExamplePaneOpen) {
+      syncSinglePaneMetrics(
+        el.exampleHighlightCode,
+        el.exampleHighlightPre,
+        el.exampleLineGutter,
+        el.exampleActiveLine,
+        state.exampleActiveLineNum,
+        isWrap
+      );
+      syncEditorScroll('example');
+    }
+  });
+};
+
+const updateConfigCursorAndActiveLine = (pane = 'main') => {
+  if (pane === 'main') {
+    if (!el.txtConfigEditor) return;
+    const pos = el.txtConfigEditor.selectionStart || 0;
+    const before = el.txtConfigEditor.value.slice(0, pos);
+    const lines = before.split('\n');
+    const lineNum = lines.length;
+    const colNum = lines[lines.length - 1].length + 1;
+    state.configActiveLineNum = lineNum;
+    if (el.configCursorInfo) {
+      el.configCursorInfo.textContent = `行 ${lineNum}, 列 ${colNum}`;
+    }
+    ensureGutterLinesCount(
+      el.configLineGutter,
+      (el.txtConfigEditor.value || '').split('\n').length,
+      lineNum
+    );
+    scheduleConfigEditorSync();
+  } else {
+    if (!el.txtExampleViewer) return;
+    const pos = el.txtExampleViewer.selectionStart || 0;
+    const before = el.txtExampleViewer.value.slice(0, pos);
+    const lineNum = before.split('\n').length;
+    state.exampleActiveLineNum = lineNum;
+    ensureGutterLinesCount(
+      el.exampleLineGutter,
+      (el.txtExampleViewer.value || '').split('\n').length,
+      lineNum
+    );
+    scheduleConfigEditorSync();
+  }
+};
+
+const updateSearchCountUI = () => {
+  if (!el.configSearchCount) return;
+  const total = state.configSearchMatches.length;
+  const query = state.configSearchQuery || '';
+  el.configSearchCount.classList.remove('has-match', 'no-match');
+
+  if (!query) {
+    el.configSearchCount.textContent = '0/0';
+  } else if (total === 0) {
+    el.configSearchCount.textContent = '0/0';
+    el.configSearchCount.classList.add('no-match');
+  } else {
+    el.configSearchCount.textContent = `${state.configSearchCurrentIdx + 1}/${total}`;
+    el.configSearchCount.classList.add('has-match');
+  }
+};
+
+const scrollConfigLineIntoView = (lineNum) => {
+  if (!el.txtConfigEditor || !el.configHighlightCode) return;
+  const spans = el.configHighlightCode.children;
+  const clampedIdx = Math.min(Math.max(0, lineNum - 1), spans.length - 1);
+  const targetSpan = spans[clampedIdx];
+  if (!targetSpan) return;
+
+  const targetTop = Math.max(0, targetSpan.offsetTop - el.txtConfigEditor.clientHeight / 2 + 24);
+  el.txtConfigEditor.scrollTop = targetTop;
+  syncEditorScroll('main');
+};
+
+const handleConfigSearchInput = () => {
+  state.configSearchQuery = el.txtConfigSearch ? el.txtConfigSearch.value : '';
+  state.configSearchCurrentIdx = 0;
+  renderMainConfigHighlight(false);
+  if (state.isExamplePaneOpen) {
+    renderExampleConfigHighlight();
+  }
+  if (state.configSearchMatches.length > 0) {
+    const firstMatch = state.configSearchMatches[0];
+    state.configActiveLineNum = firstMatch.lineNum;
+    if (el.configCursorInfo) {
+      el.configCursorInfo.textContent = `行 ${firstMatch.lineNum}, 列 ${firstMatch.startCol + 1}`;
+    }
+    scrollConfigLineIntoView(firstMatch.lineNum);
+    scheduleConfigEditorSync();
+  }
+};
+
+const navigateConfigSearch = (step = 1) => {
+  const total = state.configSearchMatches.length;
+  if (total === 0) {
+    if (state.configSearchQuery) {
+      showToast(`⚠️ 找不到匹配「${state.configSearchQuery}」的內容`);
+    }
+    return;
+  }
+
+  state.configSearchCurrentIdx = (state.configSearchCurrentIdx + step + total) % total;
+  updateSearchCountUI();
+
+  // 更新當前匹配項樣式
+  if (el.configHighlightCode) {
+    const prevMark = el.configHighlightCode.querySelector('mark.hl-search-match.current');
+    if (prevMark) prevMark.classList.remove('current');
+    const nextMarks = el.configHighlightCode.querySelectorAll(
+      `mark.hl-search-match[data-match-idx="${state.configSearchCurrentIdx}"]`
+    );
+    nextMarks.forEach((mk) => mk.classList.add('current'));
+  }
+
+  const currentMatch = state.configSearchMatches[state.configSearchCurrentIdx];
+  if (currentMatch) {
+    state.configActiveLineNum = currentMatch.lineNum;
+    if (el.configCursorInfo) {
+      el.configCursorInfo.textContent = `行 ${currentMatch.lineNum}, 列 ${currentMatch.startCol + 1}`;
+    }
+    scrollConfigLineIntoView(currentMatch.lineNum);
+    scheduleConfigEditorSync();
+  }
+};
+
+const clearConfigSearch = (focusEditor = false) => {
+  if (el.txtConfigSearch) el.txtConfigSearch.value = '';
+  state.configSearchQuery = '';
+  state.configSearchMatches = [];
+  state.configSearchCurrentIdx = -1;
+  updateSearchCountUI();
+  renderMainConfigHighlight(false);
+  if (state.isExamplePaneOpen) {
+    renderExampleConfigHighlight();
+  }
+  if (focusEditor && el.txtConfigEditor) {
+    el.txtConfigEditor.focus();
+  }
+};
+
+const jumpToConfigLine = (targetLineNum, focusEditor = true) => {
+  if (!el.txtConfigEditor) return;
+  const lines = (el.txtConfigEditor.value || '').split('\n');
+  const clampedLine = Math.min(Math.max(1, targetLineNum), lines.length);
+
+  let charOffset = 0;
+  for (let i = 0; i < clampedLine - 1; i++) {
+    charOffset += lines[i].length + 1;
+  }
+
+  state.configActiveLineNum = clampedLine;
+  if (el.txtConfigGotoLine) {
+    el.txtConfigGotoLine.value = String(clampedLine);
+  }
+  if (el.configCursorInfo) {
+    el.configCursorInfo.textContent = `行 ${clampedLine}, 列 1`;
+  }
+
+  if (focusEditor && !el.txtConfigEditor.disabled) {
+    el.txtConfigEditor.focus();
+    el.txtConfigEditor.setSelectionRange(charOffset, charOffset);
+  }
+
+  scrollConfigLineIntoView(clampedLine);
+  scheduleConfigEditorSync();
+};
+
 const loadCoreConfigsList = async () => {
   try {
     const list = await invoke('get_core_configs');
@@ -1677,17 +2753,27 @@ const fetchConfigContent = async (filePath) => {
   if (!filePath) return;
   state.currentConfigPath = filePath;
   el.configPathInfo.textContent = `路徑：${filePath}`;
+  el.configPathInfo.title = filePath;
   el.txtConfigEditor.value = '正在讀取組態內容...';
   el.txtConfigEditor.disabled = true;
+  state.configActiveLineNum = 1;
+  renderMainConfigHighlight(false);
 
   try {
     const content = await invoke('read_config_content', { path: filePath });
     el.txtConfigEditor.value = content;
     el.txtConfigEditor.disabled = false;
+    el.txtConfigEditor.scrollTop = 0;
+    el.txtConfigEditor.scrollLeft = 0;
     state.originalConfigContent = content;
     state.isConfigDirty = false;
+    state.configActiveLineNum = 1;
     el.configDirtyFlag.classList.add('hidden');
+    if (el.configCursorInfo) {
+      el.configCursorInfo.textContent = '行 1, 列 1';
+    }
     updateConfigEditorMeta();
+    renderMainConfigHighlight(false);
 
     // 載入該檔案之歷史備份
     await loadConfigBackupsList(filePath);
@@ -1735,6 +2821,7 @@ const fetchConfigContent = async (filePath) => {
     el.btnToggleExampleDiff.classList.add('hidden');
     await toggleExamplePane(false);
     updateConfigEditorMeta();
+    renderMainConfigHighlight(false);
   }
 };
 
@@ -1752,15 +2839,21 @@ const toggleExamplePane = async (open) => {
     el.btnToggleExampleDiff.classList.remove('btn-primary');
     el.btnToggleExampleDiff.classList.add('btn-secondary');
   }
+  scheduleConfigEditorSync();
 };
 
 const loadExampleContent = async (filePath) => {
   if (!filePath) return;
   try {
     el.txtExampleViewer.value = '正在讀取範本內容...';
+    renderExampleConfigHighlight();
     const content = await invoke('get_config_example_content', { path: filePath });
     state.currentExampleContent = content || '';
     el.txtExampleViewer.value = content || '(範本內容為空)';
+    el.txtExampleViewer.scrollTop = 0;
+    el.txtExampleViewer.scrollLeft = 0;
+    state.exampleActiveLineNum = 1;
+    renderExampleConfigHighlight();
 
     const normTarget = filePath.toLowerCase().replace(/\//g, '\\');
     const found = state.availableConfigs.find(
@@ -1776,6 +2869,7 @@ const loadExampleContent = async (filePath) => {
     console.warn('[範本讀取異常]', err);
     el.txtExampleViewer.value = `❌ 無法讀取範本檔案：\n${err}`;
     state.currentExampleContent = '';
+    renderExampleConfigHighlight();
   }
 };
 
@@ -1784,6 +2878,9 @@ const updateConfigEditorMeta = () => {
   const lines = text.split('\n').length;
   const bytes = new Blob([text]).size;
   el.configMetaInfo.textContent = `大小：${formatBytes(bytes)} ｜ 行數：${lines} ｜ 編碼：UTF-8`;
+  if (el.txtConfigGotoLine) {
+    el.txtConfigGotoLine.max = String(lines);
+  }
 };
 
 const loadConfigBackupsList = async (filePath) => {
@@ -1833,6 +2930,18 @@ const handleSaveConfig = async () => {
     if (res.syntax_checked && res.syntax_error) {
       const isJs = state.currentConfigPath.toLowerCase().endsWith('.js');
       const syntaxType = isJs ? 'Node.js (node -c)' : 'Apache (httpd -t)';
+
+      // 自動解析報錯行號並跳轉定位 (如 Syntax error on line 524 或 :12)
+      if (res.syntax_output) {
+        const lineMatch =
+          res.syntax_output.match(/on line\s+(\d+)/i) ||
+          res.syntax_output.match(/\.js:(\d+)/i) ||
+          res.syntax_output.match(/line\s+(\d+)/i);
+        if (lineMatch && lineMatch[1]) {
+          jumpToConfigLine(parseInt(lineMatch[1], 10), false);
+        }
+      }
+
       showConfirmModal(
         `⚠️ ${syntaxType} 組態語法驗證失敗`,
         `檔案已寫入，但執行 ${syntaxType} 檢測未通過！\n\n錯誤細節：\n${res.syntax_output}\n\n為避免服務重啟或運作崩潰，建議立即還原至儲存前自動建立的備份檔。\n是否立即自動還原？`,

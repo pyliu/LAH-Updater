@@ -421,9 +421,30 @@
           </div>
 
           <div class="config-info-bar">
-            <span id="configPathInfo">路徑：-</span>
+            <span id="configPathInfo" class="config-path-text">路徑：-</span>
+
+            <!-- 編輯器內關鍵字搜尋與跳行輔助列 -->
+            <div class="config-find-bar">
+              <div class="find-input-group" title="搜尋組態內容關鍵字 (快捷鍵 Ctrl+F，Enter 下一筆 / Shift+Enter 上一筆)">
+                <span class="find-icon">🔍</span>
+                <input type="text" id="txtConfigSearch" class="find-input" placeholder="搜尋關鍵字 (Ctrl+F)...">
+                <span id="configSearchCount" class="find-count">0/0</span>
+                <button type="button" class="btn-find-nav" id="btnConfigSearchPrev" title="上一個匹配項 (Shift+Enter)">▲</button>
+                <button type="button" class="btn-find-nav" id="btnConfigSearchNext" title="下一個匹配項 (Enter)">▼</button>
+                <button type="button" class="btn-find-nav" id="btnConfigSearchClear" title="清除搜尋 (Esc)">✕</button>
+              </div>
+
+              <div class="goto-line-group" title="直接跳轉至指定行號 (快捷鍵 Ctrl+G，輸入行號後按 Enter)">
+                <label for="txtConfigGotoLine">跳行：</label>
+                <input type="number" id="txtConfigGotoLine" class="goto-input" min="1" placeholder="行號">
+                <button type="button" class="btn-find-nav" id="btnConfigGotoLine" title="跳轉至指定行號">↵</button>
+              </div>
+            </div>
+
             <div class="config-meta-right">
               <span id="configDirtyFlag" class="dirty-badge hidden">● 未儲存變更</span>
+              <span id="configSyntaxBadge" class="syntax-badge" title="自動識別之語法高亮模式">PLAIN</span>
+              <span id="configCursorInfo" class="cursor-badge" title="目前游標所在行列位置">行 1, 列 1</span>
               <span id="configMetaInfo">大小：- ｜ 行數：- ｜ 編碼：UTF-8</span>
             </div>
           </div>
@@ -431,7 +452,18 @@
 
         <div class="config-editor-viewport card" id="configEditorContainer">
           <div class="config-editor-pane main-pane">
-            <textarea id="txtConfigEditor" class="config-textarea" spellcheck="false" placeholder="正在載入組態內容..."></textarea>
+            <div class="code-editor-stage" id="mainEditorStage">
+              <div class="code-gutter" id="configLineGutter" aria-hidden="true">
+                <div class="gutter-line active" data-line="1">1</div>
+              </div>
+              <div class="code-canvas">
+                <div class="code-backdrop" id="configBackdrop" aria-hidden="true">
+                  <div class="active-line-highlight" id="configActiveLine"></div>
+                  <pre class="code-highlight" id="configHighlightPre"><code id="configHighlightCode"></code></pre>
+                </div>
+                <textarea id="txtConfigEditor" class="config-textarea" spellcheck="false" autocomplete="off" autocapitalize="off" placeholder="正在載入組態內容..."></textarea>
+              </div>
+            </div>
           </div>
 
           <!-- 唯讀範本對照欄 (預設收合 hidden) -->
@@ -444,7 +476,18 @@
                 <button class="btn btn-outline btn-xs" id="btnCloseExample" title="關閉範本對照視圖">✕ 關閉</button>
               </div>
             </div>
-            <textarea id="txtExampleViewer" class="config-textarea example-textarea" readonly spellcheck="false" placeholder="正在載入範本內容..."></textarea>
+            <div class="code-editor-stage example-stage" id="exampleEditorStage">
+              <div class="code-gutter" id="exampleLineGutter" aria-hidden="true">
+                <div class="gutter-line" data-line="1">1</div>
+              </div>
+              <div class="code-canvas">
+                <div class="code-backdrop" id="exampleBackdrop" aria-hidden="true">
+                  <div class="active-line-highlight" id="exampleActiveLine"></div>
+                  <pre class="code-highlight" id="exampleHighlightPre"><code id="exampleHighlightCode"></code></pre>
+                </div>
+                <textarea id="txtExampleViewer" class="config-textarea example-textarea" readonly spellcheck="false" autocomplete="off" autocapitalize="off" placeholder="正在載入範本內容..."></textarea>
+              </div>
+            </div>
           </div>
         </div>
       </section>
@@ -506,7 +549,7 @@
       </div>
       <div class="footer-right">
         <span id="lastUpdatedTime">最後更新：-</span>
-        <span class="version-tag">v0.1.3</span>
+        <span class="version-tag">v0.1.4</span>
       </div>
     </footer>
   </div>
