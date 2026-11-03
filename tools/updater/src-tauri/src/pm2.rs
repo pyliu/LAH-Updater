@@ -1,5 +1,5 @@
 use crate::health::is_port_listening;
-use crate::services::{is_pm2_service_installed, stop_service};
+use crate::services::{is_pm2_service_installed, is_service_running, start_service, stop_service};
 use crate::system::{clean_and_prepend_path_string, run_cmd_hidden, run_cmd_hidden_in_dir, run_powershell};
 use regex::Regex;
 use std::fs;
@@ -863,6 +863,8 @@ pub fn setup_pm2_autostart(root_dir: &Path, log_fn: &dyn Fn(&str, &str)) -> (boo
     if is_pm2_service_installed() {
         let _ = stop_service("LAH_PM2_Service", log_fn);
         let _ = run_cmd_hidden(&exe_str, &["uninstall"]);
+        let _ = run_cmd_hidden("sc.exe", &["delete", "LAH_PM2_Service"]);
+        std::thread::sleep(std::time::Duration::from_millis(500));
     }
 
     // 1. 安裝服務
@@ -873,12 +875,64 @@ pub fn setup_pm2_autostart(root_dir: &Path, log_fn: &dyn Fn(&str, &str)) -> (boo
 
     // 2. 啟動服務
     let (ok_start, out_start, _) = run_cmd_hidden(&exe_str, &["start"]);
-    if ok_start || out_start.contains("Started") {
+    if (ok_start || out_start.contains("Started")) && is_service_running("LAH_PM2_Service") {
         log_fn("  ✓ LAH_PM2_Service 系統服務已成功啟動", "success");
         return (true, "LAH_PM2_Service 已註冊並啟動".to_string());
     }
 
+    if start_service("LAH_PM2_Service", log_fn) {
+        return (true, "LAH_PM2_Service 已註冊並啟動".to_string());
+    }
+
     (true, "LAH_PM2_Service 已註冊".to_string())
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum Pm2ServicePostUpdateAction {
+    RegisterAndStart,
+    RefreshFilesAndRestart,
+    Skip,
+}
+
+pub fn query_pm2_service_binary_path() -> Option<String> {
+    let (ok, stdout, _) = run_cmd_hidden("sc.exe", &["qc", "LAH_PM2_Service"]);
+    if !ok {
+        return None;
+    }
+    for line in stdout.lines() {
+        if line.contains("BINARY_PATH_NAME") {
+            if let Some((_, val)) = line.split_once(':') {
+                return Some(val.trim().trim_matches('"').to_string());
+            }
+        }
+    }
+    None
+}
+
+pub fn determine_pm2_service_post_update_action(
+    auto_register_pm2: bool,
+    service_installed: bool,
+    installed_bin_path: Option<&str>,
+    root_dir: &Path,
+) -> Pm2ServicePostUpdateAction {
+    if auto_register_pm2 {
+        return Pm2ServicePostUpdateAction::RegisterAndStart;
+    }
+    if !service_installed {
+        return Pm2ServicePostUpdateAction::Skip;
+    }
+    let expected_exe = root_dir
+        .join("node")
+        .join("service")
+        .join("lah-service.exe")
+        .to_string_lossy()
+        .to_lowercase();
+    if let Some(bin) = installed_bin_path {
+        if !bin.to_lowercase().contains(&expected_exe) {
+            return Pm2ServicePostUpdateAction::RegisterAndStart;
+        }
+    }
+    Pm2ServicePostUpdateAction::RefreshFilesAndRestart
 }
 
 /// 檢查並修復生態系設定檔（若無 cwd 則自動注入 cwd: __dirname，防止 PM2 在非專案目錄執行時遺失工作目錄）
@@ -1219,11 +1273,32 @@ pub fn idempotent_reconstruct_pm2_services(
     log_fn("💾 正在固化保存最新 PM2 受管程序存檔 (pm2 save)...", "info");
     let _ = run_cmd_hidden(&pm2_str, &["save", "--force", "--no-color"]);
 
-    // 7. 若有勾選自動註冊 PM2 系統服務，執行註冊與自啟動配置
-    if auto_register_pm2 {
-        setup_pm2_autostart(root_dir, log_fn);
-    } else {
-        log_fn("  ℹ️ 未勾選註冊 PM2 系統服務，跳過 LAH_PM2_Service 註冊與自啟配置", "info");
+    // 7. 根據安裝勾選狀態與既有服務狀態，決定 LAH_PM2_Service 後續處置
+    match determine_pm2_service_post_update_action(
+        auto_register_pm2,
+        is_pm2_service_installed(),
+        query_pm2_service_binary_path().as_deref(),
+        root_dir,
+    ) {
+        Pm2ServicePostUpdateAction::RegisterAndStart => {
+            setup_pm2_autostart(root_dir, log_fn);
+        }
+        Pm2ServicePostUpdateAction::RefreshFilesAndRestart => {
+            log_fn(
+                "🔄 正在同步 WinSW 守護設定並重新啟動已註冊之 PM2 系統服務 (LAH_PM2_Service)...",
+                "info",
+            );
+            let _ = ensure_winsw_service_files(root_dir, log_fn);
+            if !start_service("LAH_PM2_Service", log_fn) {
+                setup_pm2_autostart(root_dir, log_fn);
+            }
+        }
+        Pm2ServicePostUpdateAction::Skip => {
+            log_fn(
+                "  ℹ️ 未勾選註冊 PM2 系統服務，跳過 LAH_PM2_Service 註冊與自啟配置",
+                "info",
+            );
+        }
     }
 
     // 8. 重新查詢一次最新狀態印出摘要報告
@@ -1411,5 +1486,40 @@ mod tests {
         assert_eq!(conf["pm2-logrotate"]["compress"], serde_json::json!(true));
 
         let _ = fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn test_determine_pm2_service_post_update_action() {
+        let root_dir = Path::new(r"C:\Temp\WTF2");
+
+        assert_eq!(
+            determine_pm2_service_post_update_action(true, false, None, root_dir),
+            Pm2ServicePostUpdateAction::RegisterAndStart
+        );
+
+        assert_eq!(
+            determine_pm2_service_post_update_action(false, false, None, root_dir),
+            Pm2ServicePostUpdateAction::Skip
+        );
+
+        assert_eq!(
+            determine_pm2_service_post_update_action(
+                false,
+                true,
+                Some(r"C:\Temp\WTF2\node\service\lah-service.exe"),
+                root_dir
+            ),
+            Pm2ServicePostUpdateAction::RefreshFilesAndRestart
+        );
+
+        assert_eq!(
+            determine_pm2_service_post_update_action(
+                false,
+                true,
+                Some(r"C:\AppServ\node\service\lah-service.exe"),
+                root_dir
+            ),
+            Pm2ServicePostUpdateAction::RegisterAndStart
+        );
     }
 }
