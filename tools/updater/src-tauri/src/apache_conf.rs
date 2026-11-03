@@ -426,7 +426,7 @@ const rootDir = resolveRootDir();
 const php85Dir = path.join(rootDir, 'php85');
 const phpCgi = path.join(php85Dir, 'php-cgi.exe');
 const phpIni = path.join(php85Dir, 'php.ini');
-const ociDir = path.join(rootDir, 'instantclient_11_2');
+const ociDir = [process.env.OCI_DIR, path.join(rootDir, 'instantclient_11_2'), path.resolve(__dirname, '..', 'instantclient_11_2'), 'C:\\Tools\\instantclient_11_2', 'C:\\AppServ\\instantclient_11_2'].find(c => c && fs.existsSync(c)) || path.join(rootDir, 'instantclient_11_2');
 
 module.exports = {{
   apps: [
