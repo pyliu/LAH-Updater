@@ -139,12 +139,45 @@ pub fn run_cmd_hidden_in_dir(cmd: &str, args: &[&str], dir: &Path) -> (bool, Str
 }
 
 pub fn run_powershell(script: &str) -> (bool, String, String) {
-    run_cmd_hidden("powershell", &["-NoProfile", "-Command", script])
+    let utf8_script = format!(
+        "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $OutputEncoding = [System.Text.Encoding]::UTF8; {script}"
+    );
+    run_cmd_hidden("powershell", &["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", &utf8_script])
 }
 
 pub fn decode_console_bytes(bytes: &[u8]) -> String {
     if bytes.is_empty() {
         return String::new();
+    }
+    if let Ok(s) = std::str::from_utf8(bytes) {
+        return s.to_string();
+    }
+    #[cfg(windows)]
+    {
+        extern "system" {
+            fn MultiByteToWideChar(
+                CodePage: u32,
+                dwFlags: u32,
+                lpMultiByteStr: *const u8,
+                cbMultiByte: i32,
+                lpWideCharStr: *mut u16,
+                cchWideChar: i32,
+            ) -> i32;
+        }
+        const CP_OEMCP: u32 = 1;
+        let len = bytes.len() as i32;
+        let required = unsafe {
+            MultiByteToWideChar(CP_OEMCP, 0, bytes.as_ptr(), len, std::ptr::null_mut(), 0)
+        };
+        if required > 0 {
+            let mut wide_buf = vec![0u16; required as usize];
+            let written = unsafe {
+                MultiByteToWideChar(CP_OEMCP, 0, bytes.as_ptr(), len, wide_buf.as_mut_ptr(), required)
+            };
+            if written > 0 {
+                return String::from_utf16_lossy(&wide_buf);
+            }
+        }
     }
     String::from_utf8_lossy(bytes).to_string()
 }
@@ -758,5 +791,26 @@ mod tests {
             extract_exe_from_image_path(r"D:\DEV\node\service\lah-service.exe"),
             Some(PathBuf::from(r"D:\DEV\node\service\lah-service.exe"))
         );
+    }
+
+    #[test]
+    fn test_decode_console_bytes_handles_utf8_and_cp950() {
+        let utf8_sample = "智慧控管與監控系統 - 管理儀表板.lnk";
+        assert_eq!(decode_console_bytes(utf8_sample.as_bytes()), utf8_sample);
+
+        let cp950_bytes: &[u8] = &[
+            0xb4, 0xbc, 0xbc, 0x7a, 0xb1, 0xb1, 0xba, 0xde, 0xbb, 0x50, 0xba, 0xca, 0xb1, 0xb1,
+            0xa8, 0x74, 0xb2, 0xce, 0x20, 0x2d, 0x20, 0xba, 0xde, 0xb2, 0x7a, 0xbb, 0xf6, 0xaa,
+            0xed, 0xaa, 0x4f, 0x2e, 0x6c, 0x6e, 0x6b,
+        ];
+        let decoded = decode_console_bytes(cp950_bytes);
+        assert!(decoded.contains("智慧控管與監控系統 - 管理儀表板.lnk"));
+    }
+
+    #[test]
+    fn test_run_powershell_outputs_utf8_chinese() {
+        let (ok, stdout, _) = run_powershell("Write-Output '智慧控管與監控系統 - 管理儀表板'");
+        assert!(ok);
+        assert!(stdout.trim().contains("智慧控管與監控系統 - 管理儀表板"));
     }
 }
