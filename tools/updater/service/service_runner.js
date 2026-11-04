@@ -26,6 +26,9 @@ const TARGET_NODE_EXE = path.join(NODE_DIR, 'node.exe');
 const PM2_BIN = path.join(NODE_DIR, 'pm2.cmd');
 const LOG_DIR = path.join(TARGET_ROOT, 'logs', 'service');
 const LOG_FILE = path.join(LOG_DIR, 'lah-service-runner.log');
+const APACHE_MEM_LIMIT_MB = 2560;
+const APACHE_RESTART_COOLDOWN_MS = 10 * 60 * 1000;
+let lastApacheRestartMs = 0;
 
 function ensureDir(dir) {
   try {
@@ -356,9 +359,46 @@ function resurrectAndEnsureServices() {
   }
 }
 
-// 5. Watchdog 循環檢查
+// 5. Apache 記憶體水位防護閘與 Watchdog 循環檢查
+function resolveApacheServiceName() {
+  for (const svc of ['LAH_Web_Service', 'Apache2.4']) {
+    const q = spawnSync('sc.exe', ['query', svc], { encoding: 'utf8', windowsHide: true, timeout: 5000 });
+    if (q.status === 0) return svc;
+  }
+  return 'LAH_Web_Service';
+}
+
+function auditApacheMemory() {
+  try {
+    const psCmd = 'Get-Process -Name httpd -ErrorAction SilentlyContinue | Measure-Object -Property WorkingSet64 -Sum | Select-Object -ExpandProperty Sum';
+    const res = spawnSync('powershell', ['-NoProfile', '-Command', psCmd], { encoding: 'utf8', windowsHide: true, timeout: 8000 });
+    if (res.status === 0 && res.stdout && res.stdout.trim()) {
+      const totalBytes = parseInt(res.stdout.trim(), 10);
+      if (!isNaN(totalBytes) && totalBytes > 0) {
+        const memMb = Math.round(totalBytes / (1024 * 1024));
+        const now = Date.now();
+        if (memMb > APACHE_MEM_LIMIT_MB && (now - lastApacheRestartMs) > APACHE_RESTART_COOLDOWN_MS) {
+          lastApacheRestartMs = now;
+          log(`⚠️ [Memory Guard] 偵測到 Apache (httpd.exe) 記憶體佔用達 ${memMb} MB (超過閾值 ${APACHE_MEM_LIMIT_MB} MB)，正在執行保護性重啟 LAH_Web_Service...`, 'WARN');
+          const svcName = resolveApacheServiceName();
+          const stopRes = spawnSync('net.exe', ['stop', svcName], { encoding: 'utf8', windowsHide: true, timeout: 20000 });
+          const startRes = spawnSync('net.exe', ['start', svcName], { encoding: 'utf8', windowsHide: true, timeout: 20000 });
+          if (startRes.status === 0) {
+            log(`✅ [Memory Guard] 已完成 ${svcName} 保護性重啟，釋放 Apache 工作集記憶體。`, 'SUCCESS');
+          } else {
+            log(`⚠️ [Memory Guard] 重啟 ${svcName} 回傳非零狀態 (stop=${stopRes.status}, start=${startRes.status}): ${(startRes.stderr || startRes.stdout || '').trim()}`, 'WARN');
+          }
+        }
+      }
+    }
+  } catch (e) {
+    log(`檢測 Apache 記憶體水位發生例外: ${e.message}`, 'WARN');
+  }
+}
+
 function watchdogCheck() {
   try {
+    auditApacheMemory();
     const runtimeOk = auditDaemonRuntime();
     if (!runtimeOk) {
       resurrectAndEnsureServices();

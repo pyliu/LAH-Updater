@@ -120,21 +120,19 @@ pub fn ensure_php_ini_configured(php_dir: &Path, is_php85: bool, log_fn: &dyn Fn
         content.push_str("\ndate.timezone = \"Asia/Taipei\"\n");
     }
 
-    // 4. PHP 8.5 執行期資源參數調優
-    if is_php85 {
-        let re_met = Regex::new(r"(?m)^\s*;?\s*max_execution_time\s*=.*$").unwrap();
-        if re_met.is_match(&content) {
-            content = re_met.replace(&content, "max_execution_time = 300").to_string();
-        } else {
-            content.push_str("\nmax_execution_time = 300\n");
-        }
+    // 4. PHP 7.4 / 8.5 執行期資源參數統一調優
+    let re_met = Regex::new(r"(?m)^\s*;?\s*max_execution_time\s*=.*$").unwrap();
+    if re_met.is_match(&content) {
+        content = re_met.replace(&content, "max_execution_time = 300").to_string();
+    } else {
+        content.push_str("\nmax_execution_time = 300\n");
+    }
 
-        let re_mem = Regex::new(r"(?m)^\s*;?\s*memory_limit\s*=.*$").unwrap();
-        if re_mem.is_match(&content) {
-            content = re_mem.replace(&content, "memory_limit = 512M").to_string();
-        } else {
-            content.push_str("\nmemory_limit = 512M\n");
-        }
+    let re_mem = Regex::new(r"(?m)^\s*;?\s*memory_limit\s*=.*$").unwrap();
+    if re_mem.is_match(&content) {
+        content = re_mem.replace(&content, "memory_limit = 512M").to_string();
+    } else {
+        content.push_str("\nmemory_limit = 512M\n");
     }
 
     if content != orig {
@@ -546,6 +544,21 @@ pub fn apply_apache_security_hardening(conf_path: &Path, root_dir: &Path, log_fn
         log_fn("  ✓ Apache httpd.conf 已套用敏感檔案拒絕規則 (.env / *.db / dot 目錄)", "success");
     }
 
+    // 5. Apache mpm_winnt 記憶體治理與子程序輪替回收
+    let mpm_block = build_mpm_winnt_block();
+    let existing_mpm_re = Regex::new(&format!(
+        r"(?s){}.*?{}",
+        regex::escape(MPM_WINNT_BEGIN),
+        regex::escape(MPM_WINNT_END)
+    ))
+    .unwrap();
+    if existing_mpm_re.is_match(&content) {
+        content = existing_mpm_re.replace(&content, NoExpand(&mpm_block)).to_string();
+    } else {
+        content.push_str(&format!("\n{}\n", mpm_block));
+        log_fn("  ✓ Apache httpd.conf 已套用 mpm_winnt 記憶體回收規則 (MaxConnectionsPerChild 10000 / MaxMemFree 2048)", "success");
+    }
+
     let changed = content != orig;
     if changed {
         let _ = fs::write(conf_path, content);
@@ -556,6 +569,20 @@ pub fn apply_apache_security_hardening(conf_path: &Path, root_dir: &Path, log_fn
 const PHP2SHELL_END: &str = "# === End PHP2Shell Mitigation ===";
 const SENSITIVE_DENY_BEGIN: &str = "# === Sensitive Files Deny (.env / SQLite / dot-dir) ===";
 const SENSITIVE_DENY_END: &str = "# === End Sensitive Files Deny ===";
+const MPM_WINNT_BEGIN: &str = "# === LAH MPM WinNT Memory Governance ===";
+const MPM_WINNT_END: &str = "# === End LAH MPM WinNT Memory Governance ===";
+
+fn build_mpm_winnt_block() -> String {
+    format!(
+        "{MPM_WINNT_BEGIN}\n\
+<IfModule mpm_winnt_module>\n\
+    ThreadsPerChild        150\n\
+    MaxConnectionsPerChild 10000\n\
+    MaxMemFree             2048\n\
+</IfModule>\n\
+{MPM_WINNT_END}"
+    )
+}
 
 /// 全域拒絕敏感檔案，不論 DocumentRoot 或 Alias 皆生效。
 /// `.env.example` 為前端「下載範本」功能所需，刻意放行。
@@ -620,6 +647,7 @@ pub fn is_security_hardened(root_dir: &Path) -> bool {
     };
     content.contains(PHP2SHELL_END)
         && content.contains(SENSITIVE_DENY_END)
+        && content.contains(MPM_WINNT_END)
         && content.contains("ServerTokens Prod")
 }
 
@@ -633,7 +661,7 @@ mod tests {
         let temp_dir = std::env::temp_dir().join(format!("lah_test_php_{}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()));
         fs::create_dir_all(&temp_dir).unwrap();
         let ini_path = temp_dir.join("php.ini");
-        let initial_ini = "\n; Windows directory\n;include_path = \".;c:\\php\\includes\"\n;extension_dir = \"ext\"\nextension_dir = \"C:\\\\AppServ\\\\php7\\\\ext\"\ndate.timezone = \"UTC\"\n";
+        let initial_ini = "\n; Windows directory\n;include_path = \".;c:\\php\\includes\"\n;extension_dir = \"ext\"\nextension_dir = \"C:\\\\AppServ\\\\php7\\\\ext\"\ndate.timezone = \"UTC\"\nmax_execution_time = 0\nmemory_limit = 768M\n";
         fs::write(&ini_path, initial_ini).unwrap();
 
         let ok = ensure_php_ini_configured(&temp_dir, false, &|_, _| {});
@@ -645,6 +673,10 @@ mod tests {
         assert!(final_content.contains(&format!(r#"extension_dir = "{}""#, ext_fwd)));
         let count = final_content.lines().filter(|l| l.trim().starts_with("extension_dir")).count();
         assert_eq!(count, 1);
+        assert!(final_content.contains("max_execution_time = 300"));
+        assert!(final_content.contains("memory_limit = 512M"));
+        assert!(!final_content.contains("max_execution_time = 0"));
+        assert!(!final_content.contains("memory_limit = 768M"));
 
         let _ = fs::remove_dir_all(&temp_dir);
     }
@@ -715,6 +747,10 @@ mod tests {
         let first = fs::read_to_string(&conf_path).unwrap();
         assert_eq!(first.matches(SENSITIVE_DENY_BEGIN).count(), 1);
         assert_eq!(first.matches(SENSITIVE_DENY_END).count(), 1);
+        assert_eq!(first.matches(MPM_WINNT_BEGIN).count(), 1);
+        assert_eq!(first.matches(MPM_WINNT_END).count(), 1);
+        assert!(first.contains("MaxConnectionsPerChild 10000"));
+        assert!(first.contains("MaxMemFree             2048"));
         assert!(first.contains(r#"<FilesMatch "(?i)^\.(?!env\.example$)">"#));
         assert!(first.contains(r#"<FilesMatch "(?i)\.(db|sqlite3?|bak|sql|log)([. ]+|:.*)?$|\.(db|sqlite3?)-(wal|shm|journal)$">"#));
         assert!(first.contains(r#"<FilesMatch "(?i)^composer\.(json|lock)$">"#));
@@ -727,12 +763,15 @@ mod tests {
         assert!(!changed2);
         assert_eq!(fs::read_to_string(&conf_path).unwrap(), first);
 
-        let stale = first.replace("Require all denied\n</DirectoryMatch>", "Require all granted\n</DirectoryMatch>");
+        let stale = first
+            .replace("Require all denied\n</DirectoryMatch>", "Require all granted\n</DirectoryMatch>")
+            .replace("MaxConnectionsPerChild 10000", "MaxConnectionsPerChild 0");
         fs::write(&conf_path, stale).unwrap();
         let (_, changed3) = apply_apache_security_hardening(&conf_path, &temp_root, &|_, _| {});
         assert!(changed3);
         let healed = fs::read_to_string(&conf_path).unwrap();
         assert_eq!(healed.matches(SENSITIVE_DENY_BEGIN).count(), 1);
+        assert_eq!(healed.matches(MPM_WINNT_BEGIN).count(), 1);
         assert_eq!(healed, first);
 
         let _ = fs::remove_dir_all(&temp_root);
