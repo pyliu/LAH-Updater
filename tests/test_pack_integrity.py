@@ -4,6 +4,7 @@ import unittest
 import zipfile
 import tempfile
 import shutil
+import subprocess
 
 # 將 pack 目錄加入模組搜尋路徑
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -114,6 +115,20 @@ class TestPackIntegrity(unittest.TestCase):
             self.assertIn("更新包成品完整性校驗失敗", err_msg)
             # 驗證破損 ZIP 已被自動銷毀
             self.assertFalse(os.path.exists(test_zip), "破損 ZIP 未被自動刪除！")
+
+    def test_pack_summary_handles_missing_optional_node_without_unbound_error(self):
+        """【防回歸測試】驗證當本機未安裝 Node.js 綠色環境時，打包結尾摘要不會拋出 UnboundLocalError 崩潰"""
+        pack_script = os.path.join(UPDATER_ROOT, "pack", "pack.py")
+        proc = subprocess.run(
+            [sys.executable, pack_script, "--node-only", "--no-notes"],
+            capture_output=True,
+            text=True,
+            encoding="utf-8"
+        )
+        self.assertEqual(proc.returncode, 0, f"執行失敗，stderr: {proc.stderr}")
+        self.assertNotIn("UnboundLocalError", proc.stderr)
+        self.assertIn("全部打包作業順利完成", proc.stdout)
+        self.assertIn("略過，找不到 Node.js 綠色環境目錄", proc.stdout)
 
 
 if __name__ == "__main__":

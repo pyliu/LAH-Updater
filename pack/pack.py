@@ -1015,6 +1015,15 @@ def main():
 
     overall_start = time.time()
 
+    www_zip_path = None
+    api8_zip_path = None
+    fe_zip_path = None
+    ms_zip_path = None
+    fe_mod_zip = None
+    server_mod_zip = None
+    node_zip_path = None
+    vcredist_zip_path = None
+
     # 1. 前端 yarn build
     if do_fe and not args.skip_build:
         if not run_fe_build(fe_dir):
@@ -1115,7 +1124,8 @@ def main():
     # 8.5. 檢查並打包 VC++ 獨立執行期程式庫至 base/vcredist-x64.zip
     vcredist_zip_path = os.path.join(base_dir, "vcredist-x64.zip")
     if do_vcredist:
-        build_vcredist_package(base_dir)
+        if not build_vcredist_package(base_dir):
+            vcredist_zip_path = None
 
     # 9. 自動生成並同步更新說明文件至 dist/ 與 patch/ 子資料夾
     if not args.no_notes:
@@ -1161,21 +1171,45 @@ def main():
     if published_dir:
         print(f"發布資料夾  ：{published_dir}")
     if do_api:
-        print(f"  - [patch]        {www_zip_path}")
+        if www_zip_path:
+            print(f"  - [patch]        {www_zip_path}")
+        else:
+            print(f"  - [patch]        (略過，未產生 www.zip)")
     if do_api8:
-        print(f"  - [patch]        {api8_zip_path}")
+        if api8_zip_path:
+            print(f"  - [patch]        {api8_zip_path}")
+        else:
+            print(f"  - [patch]        (略過，未產生 LAH-API.zip)")
     if do_fe:
-        print(f"  - [patch]        {fe_zip_path}")
+        if fe_zip_path:
+            print(f"  - [patch]        {fe_zip_path}")
+        else:
+            print(f"  - [patch]        (略過，未產生 LAH-NUXTJS.zip)")
     if do_messenger:
-        print(f"  - [patch]        {ms_zip_path}")
+        if ms_zip_path:
+            print(f"  - [patch]        {ms_zip_path}")
+        else:
+            print(f"  - [patch]        (略過，未產生 lah-messenger-server.zip)")
     if do_fe_modules:
-        print(f"  - [node_modules] {fe_mod_zip}")
+        if fe_mod_zip:
+            print(f"  - [node_modules] {fe_mod_zip}")
+        else:
+            print(f"  - [node_modules] (略過，找不到前端 node_modules 目錄)")
     if do_server_modules:
-        print(f"  - [node_modules] {server_mod_zip}")
+        if server_mod_zip:
+            print(f"  - [node_modules] {server_mod_zip}")
+        else:
+            print(f"  - [node_modules] (略過，找不到即時通伺服器 node_modules 目錄)")
     if do_node:
-        print(f"  - [base]         {node_zip_path}")
+        if node_zip_path:
+            print(f"  - [base]         {node_zip_path}")
+        else:
+            print(f"  - [base]         (略過，找不到 Node.js 綠色環境目錄)")
     if do_vcredist:
-        print(f"  - [base]         {vcredist_zip_path}")
+        if vcredist_zip_path:
+            print(f"  - [base]         {vcredist_zip_path}")
+        else:
+            print(f"  - [base]         (略過，未找到 VC++ 核心程式庫)")
     print("=" * 60)
 
 
