@@ -91,7 +91,7 @@ pub fn query_all_system_services() -> Vec<SystemServiceStatus> {
 }
 
 pub fn start_service(svc_name: &str) -> Result<String, String> {
-    let (installed, running, _) = get_service_status(svc_name);
+    let (installed, running, status) = get_service_status(svc_name);
     if !installed {
         return Err(format!("服務 [{}] 尚未在系統中註冊！", svc_name));
     }
@@ -99,41 +99,90 @@ pub fn start_service(svc_name: &str) -> Result<String, String> {
         return Ok(format!("服務 [{}] 已處於運行中狀態。", svc_name));
     }
 
-    let (ok, _, stderr) = run_cmd_hidden("net.exe", &["start", svc_name]);
-    for _ in 0..12 {
+    // 若服務正處於 STOP_PENDING (STOPPING)，先等待其完全停止，避免 net start 因狀態衝突而直接失敗
+    if status == "STOPPING" {
+        for _ in 0..40 {
+            sleep(Duration::from_millis(500));
+            let (_, r, st) = get_service_status(svc_name);
+            if r {
+                return Ok(format!("服務 [{}] 已處於運行中狀態。", svc_name));
+            }
+            if st != "STOPPING" {
+                break;
+            }
+        }
+        sleep(Duration::from_millis(600));
+    }
+
+    let mut last_err = String::new();
+    let mut last_ok = false;
+
+    for attempt in 0..3 {
+        let (ok, _, stderr) =
+            run_cmd_hidden_with_timeout("net.exe", &["start", svc_name], Duration::from_secs(25));
+        last_ok = ok;
+        if !stderr.trim().is_empty() {
+            last_err = stderr;
+        }
+
+        for _ in 0..24 {
+            let (_, r, st) = get_service_status(svc_name);
+            if r {
+                return Ok(format!("服務 [{}] 已成功啟動！", svc_name));
+            }
+            if st == "STOPPED" && !ok {
+                break;
+            }
+            sleep(Duration::from_millis(500));
+        }
+
         let (_, r, _) = get_service_status(svc_name);
         if r {
             return Ok(format!("服務 [{}] 已成功啟動！", svc_name));
         }
-        sleep(Duration::from_millis(500));
+
+        if attempt < 2 {
+            sleep(Duration::from_millis(1200));
+        }
     }
 
-    if ok {
+    if last_ok {
         Ok(format!("啟動指令已送出，服務 [{}] 正在啟動中...", svc_name))
     } else {
-        Err(format!("啟動服務 [{}] 失敗：{}", svc_name, stderr))
+        Err(format!("啟動服務 [{}] 失敗：{}", svc_name, last_err))
     }
 }
 
 pub fn stop_service(svc_name: &str) -> Result<String, String> {
-    let (installed, running, _) = get_service_status(svc_name);
+    let (installed, running, status) = get_service_status(svc_name);
     if !installed {
         return Err(format!("服務 [{}] 尚未在系統中註冊！", svc_name));
     }
-    if !running {
+    if !running && status == "STOPPED" {
         return Ok(format!("服務 [{}] 已經停止。", svc_name));
     }
 
-    let (ok, _, stderr) = run_cmd_hidden("net.exe", &["stop", svc_name]);
-    for _ in 0..12 {
-        let (_, r, _) = get_service_status(svc_name);
-        if !r {
+    let (ok, _, stderr) = if status == "STOPPING" {
+        (true, String::new(), String::new())
+    } else {
+        run_cmd_hidden_with_timeout("net.exe", &["stop", svc_name], Duration::from_secs(25))
+    };
+
+    // 必須確認狀態真正進入 STOPPED（不可僅檢查 !r，否則 STOP_PENDING 會被誤判為已停止）
+    for _ in 0..40 {
+        let (_, r, st) = get_service_status(svc_name);
+        if !r && st == "STOPPED" {
             return Ok(format!("服務 [{}] 已成功停止。", svc_name));
         }
         sleep(Duration::from_millis(500));
     }
 
-    if ok {
+    let (_, r, st) = get_service_status(svc_name);
+    if !r && st == "STOPPED" {
+        return Ok(format!("服務 [{}] 已成功停止。", svc_name));
+    }
+
+    if ok || st == "STOPPING" {
         Ok(format!("停止指令已送出，服務 [{}] 正在停止中...", svc_name))
     } else {
         Err(format!("停止服務 [{}] 失敗：{}", svc_name, stderr))
@@ -147,6 +196,16 @@ pub fn restart_service(svc_name: &str) -> Result<String, String> {
     }
 
     let _ = stop_service(svc_name);
+
+    // 確保服務已完全脫離 STOPPING / RUNNING 狀態後再執行啟動
+    for _ in 0..30 {
+        let (_, r, st) = get_service_status(svc_name);
+        if !r && st == "STOPPED" {
+            break;
+        }
+        sleep(Duration::from_millis(500));
+    }
+
     sleep(Duration::from_millis(800));
     start_service(svc_name)
 }

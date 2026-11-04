@@ -9,9 +9,19 @@ use std::os::windows::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use std::sync::mpsc;
+use std::sync::{mpsc, Mutex, OnceLock};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
+
+static PM2_JLIST_CACHE: OnceLock<Mutex<Option<(Instant, Vec<Pm2ProcessInfo>)>>> = OnceLock::new();
+
+fn invalidate_pm2_cache() {
+    if let Some(lock) = PM2_JLIST_CACHE.get() {
+        if let Ok(mut guard) = lock.lock() {
+            *guard = None;
+        }
+    }
+}
 
 pub fn resolve_pm2_cmd(root_dir: &Path) -> Option<PathBuf> {
     let cand = root_dir.join("node").join("pm2.cmd");
@@ -22,7 +32,7 @@ pub fn resolve_pm2_cmd(root_dir: &Path) -> Option<PathBuf> {
 }
 
 pub fn run_pm2_command(root_dir: &Path, args: &[&str]) -> (bool, String, String) {
-    run_pm2_command_with_timeout(root_dir, args, Duration::from_secs(8))
+    run_pm2_command_with_timeout(root_dir, args, Duration::from_secs(15))
 }
 
 pub fn run_pm2_command_with_timeout(root_dir: &Path, args: &[&str], timeout: Duration) -> (bool, String, String) {
@@ -84,6 +94,26 @@ pub fn run_pm2_command_with_timeout(root_dir: &Path, args: &[&str], timeout: Dur
 }
 
 pub fn query_pm2_processes(root_dir: &Path) -> Result<Vec<Pm2ProcessInfo>, String> {
+    let cache_mutex = PM2_JLIST_CACHE.get_or_init(|| Mutex::new(None));
+    let mut guard = cache_mutex
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+
+    // 若 900ms 內已有查詢結果（例如 get_pm2_processes 與 get_host_metrics 同時觸發），直接共用快取避免重複開啟 cmd.exe / pm2 jlist
+    if let Some((ts, ref cached_list)) = *guard {
+        if ts.elapsed() < Duration::from_millis(900) {
+            return Ok(cached_list.clone());
+        }
+    }
+
+    let result = query_pm2_processes_uncached(root_dir);
+    if let Ok(ref list) = result {
+        *guard = Some((Instant::now(), list.clone()));
+    }
+    result
+}
+
+fn query_pm2_processes_uncached(root_dir: &Path) -> Result<Vec<Pm2ProcessInfo>, String> {
     let (ok, stdout, stderr) = run_pm2_command(root_dir, &["jlist"]);
     if !ok && stdout.trim().is_empty() {
         return Err(format!("PM2 查詢失敗：{}", stderr));
@@ -158,8 +188,9 @@ pub fn query_pm2_processes(root_dir: &Path) -> Result<Vec<Pm2ProcessInfo>, Strin
 }
 
 pub fn pm2_restart(root_dir: &Path, target: &str) -> Result<String, String> {
-    let timeout = if target == "all" { Duration::from_secs(15) } else { Duration::from_secs(8) };
+    let timeout = if target == "all" { Duration::from_secs(30) } else { Duration::from_secs(15) };
     let (ok, stdout, stderr) = run_pm2_command_with_timeout(root_dir, &["restart", target], timeout);
+    invalidate_pm2_cache();
     if ok {
         Ok(format!("PM2 重啟指令 [{}] 已成功送出！", target))
     } else {
@@ -169,6 +200,7 @@ pub fn pm2_restart(root_dir: &Path, target: &str) -> Result<String, String> {
 
 pub fn pm2_stop(root_dir: &Path, target: &str) -> Result<String, String> {
     let (ok, stdout, stderr) = run_pm2_command(root_dir, &["stop", target]);
+    invalidate_pm2_cache();
     if ok {
         Ok(format!("PM2 停止指令 [{}] 已成功送出！", target))
     } else {
@@ -178,6 +210,7 @@ pub fn pm2_stop(root_dir: &Path, target: &str) -> Result<String, String> {
 
 pub fn pm2_start(root_dir: &Path, target: &str) -> Result<String, String> {
     let (ok, stdout, stderr) = run_pm2_command(root_dir, &["start", target]);
+    invalidate_pm2_cache();
     if ok {
         Ok(format!("PM2 啟動指令 [{}] 已成功送出！", target))
     } else {

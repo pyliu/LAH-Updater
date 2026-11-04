@@ -3,8 +3,8 @@
  * 100% 純原生 JavaScript，零外連依賴，Tauri 2 IPC 橋接
  */
 
-// 安全調用 Tauri 2 API (附帶 8 秒防死當熔斷超時機制)
-const invoke = async (cmd, args = {}, timeoutMs = 8000) => {
+// 安全調用 Tauri 2 API (附帶 15 秒防死當熔斷超時機制)
+const invoke = async (cmd, args = {}, timeoutMs = 15000) => {
   const invokePromise = (async () => {
     if (window.__TAURI__ && window.__TAURI__.core && window.__TAURI__.core.invoke) {
       return await window.__TAURI__.core.invoke(cmd, args);
@@ -49,6 +49,10 @@ const state = {
   isPolling: true,
   pollingInterval: 5000,
   isBackgroundPaused: false,
+  isRestarting: false,
+  isLoadingServices: false,
+  isLoadingPm2: false,
+  isRefreshingAll: false,
   activeTab: 'tab-services',
   pollingTimer: null,
   autoTail: true,
@@ -56,6 +60,7 @@ const state = {
   availableLogs: [],
   apiLogFiles: [],
   rawLogLines: [],
+  filteredLogLines: [],
   lastLogFingerprint: '',
 
   // 組態編輯器狀態
@@ -453,6 +458,20 @@ const initApp = async () => {
     });
   }
 
+  const btnRestartRetryFailed = document.getElementById('btnRestartRetryFailed');
+  if (btnRestartRetryFailed) {
+    btnRestartRetryFailed.addEventListener('click', async () => {
+      await retryUnreadyServicesInOverlay();
+    });
+  }
+
+  const btnRestartContinuePoll = document.getElementById('btnRestartContinuePoll');
+  if (btnRestartContinuePoll) {
+    btnRestartContinuePoll.addEventListener('click', async () => {
+      await continuePollingServicesInOverlay();
+    });
+  }
+
   // 快捷維運工具箱
   el.btnLaunchSandboxCmd.addEventListener('click', async () => {
     try {
@@ -540,7 +559,8 @@ const initApp = async () => {
 
   el.btnClearLogCanvas.addEventListener('click', () => {
     state.rawLogLines = [];
-    el.logContent.textContent = '【已清空日誌畫布】';
+    state.filteredLogLines = [];
+    el.logContent.innerHTML = highlightLogLine('【已清空日誌畫布】', '');
   });
 
   el.btnOpenNotepad.addEventListener('click', async () => {
@@ -558,7 +578,10 @@ const initApp = async () => {
   });
 
   el.btnCopyLog.addEventListener('click', async () => {
-    const text = el.logContent.textContent;
+    const text =
+      state.filteredLogLines && state.filteredLogLines.length > 0
+        ? state.filteredLogLines.join('\n')
+        : el.logContent.textContent;
     if (!text) {
       showToast('⚠️ 無日誌內容可複製');
       return;
@@ -947,47 +970,71 @@ const switchTab = (tabId) => {
 // ==========================================================================
 // 3. 服務狀態查詢與渲染 (分頁一)
 // ==========================================================================
-const loadSystemServices = async () => {
-  try {
-    const list = await invoke('get_system_services');
-    if (!list || list.length === 0) {
+const renderSystemServicesList = (list) => {
+  if (!list || list.length === 0) {
+    if (!state.isRestarting) {
       el.systemServicesTableBody.innerHTML = '<tr><td colspan="4" class="text-center loading-row">未偵測到註冊之系統服務</td></tr>';
-      return;
     }
+    return;
+  }
 
-    let html = '';
-    list.forEach((s) => {
-      const isRun = s.is_running;
-      const statusPill = isRun
-        ? '<span class="status-pill running"><span class="status-dot"></span>正在執行</span>'
-        : s.is_installed
-        ? '<span class="status-pill stopped"><span class="status-dot"></span>已停止</span>'
-        : '<span class="status-pill unknown"><span class="status-dot"></span>未註冊</span>';
+  let html = '';
+  list.forEach((s) => {
+    const isRun = s.is_running;
+    const isTransitioning = s.status === 'STARTING' || s.status === 'STOPPING';
+    const statusPill = isRun
+      ? '<span class="status-pill running"><span class="status-dot"></span>正在執行</span>'
+      : isTransitioning || state.isRestarting
+      ? `<span class="status-pill restarting"><span class="spin-icon">🔄</span>${s.status === 'STOPPING' ? '停止中...' : '啟動中...'}</span>`
+      : s.is_installed
+      ? '<span class="status-pill stopped"><span class="status-dot"></span>已停止</span>'
+      : '<span class="status-pill unknown"><span class="status-dot"></span>未註冊</span>';
 
-      const actions = `
-        <div class="action-buttons">
-          ${isRun ? `<button class="btn btn-secondary btn-sm" onclick="handleServiceAction('stop', '${s.name}')">停止</button>` : ''}
-          ${!isRun && s.is_installed ? `<button class="btn btn-primary btn-sm" onclick="handleServiceAction('start', '${s.name}')">啟動</button>` : ''}
-          ${s.is_installed ? `<button class="btn btn-warning btn-sm" onclick="handleServiceAction('restart', '${s.name}')">重啟</button>` : ''}
-        </div>
-      `;
+    const actions = `
+      <div class="action-buttons">
+        ${isRun ? `<button class="btn btn-secondary btn-sm" onclick="handleServiceAction('stop', '${s.name}')">停止</button>` : ''}
+        ${!isRun && s.is_installed ? `<button class="btn btn-primary btn-sm" onclick="handleServiceAction('start', '${s.name}')">啟動</button>` : ''}
+        ${s.is_installed ? `<button class="btn btn-warning btn-sm" onclick="handleServiceAction('restart', '${s.name}')">重啟</button>` : ''}
+      </div>
+    `;
 
-      html += `
-        <tr>
-          <td><span class="service-name">${s.name}</span></td>
-          <td><span class="service-desc">${s.display_name}</span></td>
-          <td>${statusPill}</td>
-          <td>${actions}</td>
-        </tr>
-      `;
-    });
-    el.systemServicesTableBody.innerHTML = html;
+    html += `
+      <tr>
+        <td><span class="service-name">${s.name}</span></td>
+        <td><span class="service-desc">${s.display_name}</span></td>
+        <td>${statusPill}</td>
+        <td>${actions}</td>
+      </tr>
+    `;
+  });
+  el.systemServicesTableBody.innerHTML = html;
+};
+
+const loadSystemServices = async () => {
+  if (state.isLoadingServices) return;
+  state.isLoadingServices = true;
+  try {
+    let list;
+    try {
+      list = await invoke('get_system_services', {}, 15000);
+    } catch (firstErr) {
+      await new Promise((r) => setTimeout(r, 1000));
+      list = await invoke('get_system_services', {}, 15000);
+    }
+    renderSystemServicesList(list);
+    if (el.footerStatusText && el.footerStatusText.textContent.includes('探測系統服務逾時')) {
+      el.footerStatusText.textContent = '系統監控總線運作中';
+    }
   } catch (err) {
     console.error('讀取系統服務失敗：', err);
-    el.systemServicesTableBody.innerHTML = `<tr><td colspan="4" class="text-center loading-row text-danger" style="padding: 1.25rem;">⚠️ 探測後端系統服務逾時或失敗 (8秒防死當機制) <button class="btn btn-primary btn-sm" style="margin-left: 0.75rem; padding: 2px 10px;" onclick="loadSystemServices()">立即重試</button></td></tr>`;
-    if (el.footerStatusText) {
-      el.footerStatusText.textContent = '⚠️ 探測系統服務逾時';
+    if (!state.isRestarting) {
+      el.systemServicesTableBody.innerHTML = `<tr><td colspan="4" class="text-center loading-row text-danger" style="padding: 1.25rem;">⚠️ 探測後端系統服務逾時或失敗 <button class="btn btn-primary btn-sm" style="margin-left: 0.75rem; padding: 2px 10px;" onclick="loadSystemServices()">立即重試</button></td></tr>`;
+      if (el.footerStatusText) {
+        el.footerStatusText.textContent = '⚠️ 探測系統服務逾時';
+      }
     }
+  } finally {
+    state.isLoadingServices = false;
   }
 };
 
@@ -995,99 +1042,15 @@ window.handleServiceAction = async (action, svcName) => {
   const actionText = action === 'start' ? '啟動' : action === 'stop' ? '停止' : '重啟';
   showToast(`正在${actionText}系統服務 [${svcName}]...`);
 
-  if (action === 'restart') {
-    // 視覺反饋
-    const svcPills = el.systemServicesTableBody.querySelectorAll('.status-pill');
-    svcPills.forEach((p) => {
-      p.className = 'status-pill restarting';
-      p.innerHTML = '<span class="spin-icon">🔄</span>重啟中...';
-    });
-  }
-
-  try {
-    let res;
-    if (action === 'start') res = await invoke('start_system_service', { name: svcName });
-    else if (action === 'stop') res = await invoke('stop_system_service', { name: svcName });
-    else res = await invoke('restart_system_service', { name: svcName });
-
-    if (res && res.success) {
-      showToast(`✓ ${res.message}`);
-    } else {
-      showToast(`⚠️ ${res ? res.message : '操作未完成'}`);
-    }
-    if (action === 'restart') {
-      triggerBurstPolling(6000, 1200);
-    } else {
-      await loadSystemServices();
-    }
-  } catch (e) {
-    showToast(`❌ ${actionText}失敗: ${e}`);
-    await loadSystemServices();
-  }
-};
-
-const loadPm2Processes = async () => {
-  try {
-    const list = await invoke('get_pm2_processes');
-    if (!list || list.length === 0) {
-      el.pm2TableBody.innerHTML = '<tr><td colspan="8" class="text-center loading-row">目前無 PM2 進程在線或守護進程尚未就緒</td></tr>';
-      return;
-    }
-
-    let html = '';
-    list.forEach((p) => {
-      const isOnline = p.status === 'online';
-      const statusPill = isOnline
-        ? '<span class="status-pill online"><span class="status-dot"></span>在線</span>'
-        : `<span class="status-pill stopped"><span class="status-dot"></span>${p.status}</span>`;
-
-      const memFormatted = formatBytes(p.memory);
-      const uptimeStr = formatUptime(p.uptime);
-
-      const actions = `
-        <div class="action-buttons">
-          ${isOnline ? `<button class="btn btn-secondary btn-sm" onclick="handlePm2Action('stop', '${p.name}')">停止</button>` : ''}
-          ${!isOnline ? `<button class="btn btn-primary btn-sm" onclick="handlePm2Action('start', '${p.name}')">啟動</button>` : ''}
-          <button class="btn btn-warning btn-sm" onclick="handlePm2Action('restart', '${p.name}')">重啟</button>
-        </div>
-      `;
-
-      html += `
-        <tr>
-          <td><span class="text-dim">${p.pm_id}</span></td>
-          <td><span class="service-name">${p.name}</span></td>
-          <td><span class="font-mono text-dim">${p.pid > 0 ? p.pid : '-'}</span></td>
-          <td>${statusPill}</td>
-          <td><span class="font-mono">${p.cpu.toFixed(1)}%</span></td>
-          <td><span class="font-mono">${memFormatted}</span></td>
-          <td><span class="font-mono ${p.restarts > 5 ? 'text-warning' : ''}">${p.restarts}</span></td>
-          <td>${actions}</td>
-        </tr>
-      `;
-    });
-    el.pm2TableBody.innerHTML = html;
-  } catch (err) {
-    console.error('讀取 PM2 進程失敗：', err);
-    el.pm2TableBody.innerHTML = `<tr><td colspan="8" class="text-center loading-row text-danger" style="padding: 1.25rem;">⚠️ 探測後端 PM2 進程逾時或失敗 (8秒防死當機制) <button class="btn btn-primary btn-sm" style="margin-left: 0.75rem; padding: 2px 10px;" onclick="loadPm2Processes()">立即重試</button></td></tr>`;
-    if (el.footerStatusText) {
-      el.footerStatusText.textContent = '⚠️ 探測 PM2 進程逾時';
-    }
-  }
-};
-
-window.handlePm2Action = async (action, target) => {
-  const actionText = action === 'start' ? '啟動' : action === 'stop' ? '停止' : '重啟';
-  showToast(`正在${actionText} PM2 進程 [${target}]...`);
-
-  if (action === 'restart') {
-    // 視覺即時反饋：找到該目標所在的列轉為重啟態
-    const rows = el.pm2TableBody.querySelectorAll('tr');
+  stopPollingScheduler();
+  if (action === 'restart' || action === 'start') {
+    const rows = el.systemServicesTableBody.querySelectorAll('tr');
     rows.forEach((r) => {
-      if (r.textContent.includes(target)) {
+      if (r.textContent.includes(svcName)) {
         const pill = r.querySelector('.status-pill');
         if (pill) {
           pill.className = 'status-pill restarting';
-          pill.innerHTML = '<span class="spin-icon">🔄</span>重啟中...';
+          pill.innerHTML = `<span class="spin-icon">🔄</span>${actionText}中...`;
         }
       }
     });
@@ -1095,23 +1058,138 @@ window.handlePm2Action = async (action, target) => {
 
   try {
     let res;
-    if (action === 'start') res = await invoke('start_pm2_process', { target });
-    else if (action === 'stop') res = await invoke('stop_pm2_process', { target });
-    else res = await invoke('restart_pm2_process', { target });
+    if (action === 'start') res = await invoke('start_system_service', { name: svcName }, 45000);
+    else if (action === 'stop') res = await invoke('stop_system_service', { name: svcName }, 45000);
+    else res = await invoke('restart_system_service', { name: svcName }, 45000);
+
+    if (res && res.success) {
+      showToast(`✓ ${res.message}`);
+    } else {
+      showToast(`⚠️ ${res ? res.message : '操作未完成'}`);
+    }
+    if (action === 'restart' || action === 'start') {
+      triggerBurstPolling(8000, 1500);
+    } else {
+      await loadSystemServices();
+      if (state.isPolling) startPollingScheduler();
+    }
+  } catch (e) {
+    showToast(`❌ ${actionText}失敗: ${e}`);
+    await loadSystemServices();
+    if (state.isPolling) startPollingScheduler();
+  }
+};
+
+const renderPm2ProcessesList = (list) => {
+  if (!list || list.length === 0) {
+    if (!state.isRestarting) {
+      el.pm2TableBody.innerHTML = '<tr><td colspan="8" class="text-center loading-row">目前無 PM2 進程在線或守護進程尚未就緒</td></tr>';
+    }
+    return;
+  }
+
+  let html = '';
+  list.forEach((p) => {
+    const isOnline = p.status === 'online';
+    const statusPill = isOnline
+      ? '<span class="status-pill online"><span class="status-dot"></span>在線</span>'
+      : state.isRestarting || p.status === 'launching'
+      ? '<span class="status-pill restarting"><span class="spin-icon">🔄</span>啟動中...</span>'
+      : `<span class="status-pill stopped"><span class="status-dot"></span>${p.status}</span>`;
+
+    const memFormatted = formatBytes(p.memory);
+
+    const actions = `
+      <div class="action-buttons">
+        ${isOnline ? `<button class="btn btn-secondary btn-sm" onclick="handlePm2Action('stop', '${p.name}')">停止</button>` : ''}
+        ${!isOnline ? `<button class="btn btn-primary btn-sm" onclick="handlePm2Action('start', '${p.name}')">啟動</button>` : ''}
+        <button class="btn btn-warning btn-sm" onclick="handlePm2Action('restart', '${p.name}')">重啟</button>
+      </div>
+    `;
+
+    html += `
+      <tr>
+        <td><span class="text-dim">${p.pm_id}</span></td>
+        <td><span class="service-name">${p.name}</span></td>
+        <td><span class="font-mono text-dim">${p.pid > 0 ? p.pid : '-'}</span></td>
+        <td>${statusPill}</td>
+        <td><span class="font-mono">${p.cpu.toFixed(1)}%</span></td>
+        <td><span class="font-mono">${memFormatted}</span></td>
+        <td><span class="font-mono ${p.restarts > 5 ? 'text-warning' : ''}">${p.restarts}</span></td>
+        <td>${actions}</td>
+      </tr>
+    `;
+  });
+  el.pm2TableBody.innerHTML = html;
+};
+
+const loadPm2Processes = async () => {
+  if (state.isLoadingPm2) return;
+  state.isLoadingPm2 = true;
+  try {
+    let list;
+    try {
+      list = await invoke('get_pm2_processes', {}, 15000);
+    } catch (firstErr) {
+      await new Promise((r) => setTimeout(r, 1000));
+      list = await invoke('get_pm2_processes', {}, 15000);
+    }
+    renderPm2ProcessesList(list);
+    if (el.footerStatusText && el.footerStatusText.textContent.includes('探測 PM2 進程逾時')) {
+      el.footerStatusText.textContent = '系統監控總線運作中';
+    }
+  } catch (err) {
+    console.error('讀取 PM2 進程失敗：', err);
+    if (!state.isRestarting) {
+      el.pm2TableBody.innerHTML = `<tr><td colspan="8" class="text-center loading-row text-danger" style="padding: 1.25rem;">⚠️ 探測後端 PM2 進程逾時或失敗 <button class="btn btn-primary btn-sm" style="margin-left: 0.75rem; padding: 2px 10px;" onclick="loadPm2Processes()">立即重試</button></td></tr>`;
+      if (el.footerStatusText) {
+        el.footerStatusText.textContent = '⚠️ 探測 PM2 進程逾時';
+      }
+    }
+  } finally {
+    state.isLoadingPm2 = false;
+  }
+};
+
+window.handlePm2Action = async (action, target) => {
+  const actionText = action === 'start' ? '啟動' : action === 'stop' ? '停止' : '重啟';
+  showToast(`正在${actionText} PM2 進程 [${target}]...`);
+
+  stopPollingScheduler();
+  if (action === 'restart' || action === 'start') {
+    const rows = el.pm2TableBody.querySelectorAll('tr');
+    rows.forEach((r) => {
+      if (r.textContent.includes(target)) {
+        const pill = r.querySelector('.status-pill');
+        if (pill) {
+          pill.className = 'status-pill restarting';
+          pill.innerHTML = `<span class="spin-icon">🔄</span>${actionText}中...`;
+        }
+      }
+    });
+  }
+
+  try {
+    let res;
+    if (action === 'start') res = await invoke('start_pm2_process', { target }, 30000);
+    else if (action === 'stop') res = await invoke('stop_pm2_process', { target }, 30000);
+    else res = await invoke('restart_pm2_process', { target }, 30000);
 
     if (res && res.success) {
       showToast(`✓ ${res.message}`);
     } else {
       showToast(`⚠️ ${res ? res.message : '操作失敗'}`);
     }
-    if (action === 'restart') {
-      triggerBurstPolling(6000, 1200);
+    if (action === 'restart' || action === 'start') {
+      triggerBurstPolling(8000, 1500);
     } else {
       await loadPm2Processes();
+      if (state.isPolling) startPollingScheduler();
     }
   } catch (e) {
     showToast(`❌ ${actionText}失敗: ${e}`);
     await loadPm2Processes();
+    if (state.isPolling) startPollingScheduler();
   }
 };
 
@@ -1225,19 +1303,117 @@ const fetchLogTail = async (forceScroll = false) => {
   }
 };
 
+const escapeAndMark = (text, filterKw) => {
+  if (!text) return '';
+  if (!filterKw) return escapeHtmlConfig(text);
+  const lowerText = text.toLowerCase();
+  const lowerKw = filterKw.toLowerCase();
+  const kwLen = lowerKw.length;
+  if (kwLen === 0) return escapeHtmlConfig(text);
+
+  let result = '';
+  let lastIdx = 0;
+  let idx = lowerText.indexOf(lowerKw, lastIdx);
+  while (idx !== -1) {
+    if (idx > lastIdx) {
+      result += escapeHtmlConfig(text.slice(lastIdx, idx));
+    }
+    result += `<mark class="log-filter-mark">${escapeHtmlConfig(text.slice(idx, idx + kwLen))}</mark>`;
+    lastIdx = idx + kwLen;
+    idx = lowerText.indexOf(lowerKw, lastIdx);
+  }
+  if (lastIdx < text.length) {
+    result += escapeHtmlConfig(text.slice(lastIdx));
+  }
+  return result;
+};
+
+const LOG_TOKEN_REGEX = new RegExp(
+  [
+    '(?<ts>\\[\\d{4}-\\d{2}-\\d{2}[T\\s]\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?(?:Z|[+-]\\d{2}:?\\d{2})?\\]|\\b\\d{4}-\\d{2}-\\d{2}[T\\s]\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?(?:Z|[+-]\\d{2}:?\\d{2})?\\b|\\[(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)\\s+[A-Za-z]{3}\\s+\\d{2}\\s+\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?\\s+\\d{4}\\]|\\[\\d{2}\\/[A-Za-z]{3}\\/\\d{4}:\\d{2}:\\d{2}:\\d{2}\\s+[+-]\\d{4}\\])',
+    '(?<httpProto>HTTP\\/[12](?:\\.[01])?"\\s+)(?<httpCode>[1-5]\\d{2})\\b',
+    '(?<lvlErr>\\[(?:error|fatal|critical|ERROR|FATAL|CRITICAL)\\]|\\[[\\w_]+:(?:error|crit|emerg|alert)\\]|\\b(?:PHP\\s+Fatal\\s+error|PHP\\s+Parse\\s+error|ERROR|FATAL|CRITICAL|Exception|ParseError)\\b|❌)',
+    '(?<lvlWarn>\\[(?:warn|warning|WARN|WARNING)\\]|\\[[\\w_]+:warn\\]|\\b(?:PHP\\s+Warning|WARN|WARNING)\\b|⚠️)',
+    '(?<lvlInfo>\\[(?:info|notice|INFO|NOTICE)\\]|\\[[\\w_]+:notice\\]|\\b(?:PHP\\s+Notice|INFO|NOTICE)\\b)',
+    '(?<lvlOk>\\[(?:ok|success|OK|SUCCESS)\\]|✅|✓|\\b(?:SUCCESS)\\b)',
+    '(?<cls>\\[pid\\s+\\d+(?::tid\\s+\\d+)?\\]|\\bAH\\d{5}:|\\b[A-Z][A-Za-z0-9_]+::[A-Za-z0-9_]+\\b)',
+    '(?<ip>\\b(?:\\d{1,3}\\.){3}\\d{1,3}(?::\\d{2,5})?\\b)',
+    '(?<httpMethod>"(?:GET|POST|PUT|DELETE|OPTIONS|HEAD|PATCH)\\b|\\b(?:GET|POST|PUT|DELETE|OPTIONS|HEAD|PATCH)(?=\\s+\\/))',
+    '(?<path>[A-Za-z]:\\\\[^\\s"\'<>]+|\\/(?:api|assets|js|css|logs|www)\\/[^\\s"\'<>]*)',
+  ].join('|'),
+  'g'
+);
+
+const highlightLogLine = (rawLine, filterKw) => {
+  if (!rawLine) {
+    return '<div class="log-line">&#8203;</div>';
+  }
+  if (/^\s*(?:【提示】|【已清空|載入中|無法讀取)/.test(rawLine)) {
+    return `<div class="log-line log-ts">${escapeAndMark(rawLine, filterKw)}</div>`;
+  }
+
+  let lineClass = 'log-line';
+  if (/\b(ERROR|FATAL|CRITICAL|Exception|ParseError|Error)\b|:error\]|❌|失敗|異常|告警/i.test(rawLine)) {
+    lineClass += ' log-line-error';
+  } else if (/\b(WARN|WARNING)\b|:warn\]|⚠️|警告/i.test(rawLine)) {
+    lineClass += ' log-line-warn';
+  }
+
+  let html = '';
+  let lastIdx = 0;
+  LOG_TOKEN_REGEX.lastIndex = 0;
+  let m;
+
+  while ((m = LOG_TOKEN_REGEX.exec(rawLine)) !== null) {
+    if (m.index > lastIdx) {
+      html += escapeAndMark(rawLine.slice(lastIdx, m.index), filterKw);
+    }
+
+    const g = m.groups;
+    if (g.httpProto && g.httpCode) {
+      const codeNum = parseInt(g.httpCode, 10);
+      const codeCls = codeNum >= 500 ? 'log-lvl-error' : codeNum >= 400 ? 'log-lvl-warn' : 'log-lvl-ok';
+      html += `${escapeAndMark(g.httpProto, filterKw)}<span class="${codeCls}">${escapeAndMark(g.httpCode, filterKw)}</span>`;
+    } else {
+      let spanCls = '';
+      if (g.ts) spanCls = 'log-ts';
+      else if (g.lvlErr) spanCls = 'log-lvl-error';
+      else if (g.lvlWarn) spanCls = 'log-lvl-warn';
+      else if (g.lvlInfo) spanCls = 'log-lvl-info';
+      else if (g.lvlOk) spanCls = 'log-lvl-ok';
+      else if (g.cls) spanCls = 'log-cls';
+      else if (g.ip) spanCls = 'log-ip';
+      else if (g.httpMethod) spanCls = 'log-http-method';
+      else if (g.path) spanCls = 'log-path';
+
+      html += `<span class="${spanCls}">${escapeAndMark(m[0], filterKw)}</span>`;
+    }
+
+    lastIdx = m.index + m[0].length;
+  }
+
+  if (lastIdx < rawLine.length) {
+    html += escapeAndMark(rawLine.slice(lastIdx), filterKw);
+  }
+
+  return `<div class="${lineClass}">${html}</div>`;
+};
+
 const renderFilteredLog = (forceScroll = false) => {
-  const kw = el.txtLogFilter.value.trim().toLowerCase();
+  const rawKw = el.txtLogFilter.value.trim();
+  const kw = rawKw.toLowerCase();
   let filtered = state.rawLogLines;
   if (kw) {
     filtered = filtered.filter((line) => line.toLowerCase().includes(kw));
   }
+  state.filteredLogLines = filtered;
 
   // 判斷使用者是否正在往上滾動檢視舊內容：
   // 若距底部超過 40px，表示使用者主動向上翻閱，此時不強制跳到底部，避免打斷閱讀
   const isNearBottom =
     el.logViewport.scrollHeight - el.logViewport.scrollTop - el.logViewport.clientHeight < 40;
 
-  el.logContent.textContent = filtered.join('\n');
+  el.logContent.innerHTML = filtered.map((line) => highlightLogLine(line, rawKw)).join('\n');
 
   if (forceScroll || (state.autoTail && isNearBottom)) {
     el.logViewport.scrollTop = el.logViewport.scrollHeight;
@@ -1512,21 +1688,27 @@ const loadHostMetrics = async () => {
 // 6. 全方位資料重新整理與排程機制
 // ==========================================================================
 const refreshAllData = async (isManual = false) => {
+  if (state.isRefreshingAll && !isManual) return;
+  state.isRefreshingAll = true;
   if (isManual) showToast('正在更新服務與系統指標...');
 
-  if (state.activeTab === 'tab-services') {
-    await Promise.all([loadSystemServices(), loadPm2Processes()]);
-  } else if (state.activeTab === 'tab-logs') {
-    await fetchLogTail(false);
-  } else if (state.activeTab === 'tab-metrics') {
-    await loadHostMetrics();
+  try {
+    if (state.activeTab === 'tab-services') {
+      await Promise.all([loadSystemServices(), loadPm2Processes()]);
+    } else if (state.activeTab === 'tab-logs') {
+      await fetchLogTail(false);
+    } else if (state.activeTab === 'tab-metrics') {
+      await loadHostMetrics();
+    }
+
+    const now = new Date();
+    const timeStr = now.toLocaleTimeString('zh-TW', { hour12: false });
+    el.lastUpdatedTime.textContent = `最後更新：${timeStr}`;
+
+    if (isManual) showToast('✓ 狀態更新完成');
+  } finally {
+    state.isRefreshingAll = false;
   }
-
-  const now = new Date();
-  const timeStr = now.toLocaleTimeString('zh-TW', { hour12: false });
-  el.lastUpdatedTime.textContent = `最後更新：${timeStr}`;
-
-  if (isManual) showToast('✓ 狀態更新完成');
 };
 
 const togglePolling = () => {
@@ -1548,10 +1730,11 @@ const togglePolling = () => {
 
 const startPollingScheduler = () => {
   stopPollingScheduler();
+  if (state.isRestarting) return;
 
   // 主輪詢迴圈：依使用者設定之週期 (預設 5000ms) 探測當前分頁資料
   state.pollingTimer = setInterval(async () => {
-    if (!state.isPolling) return;
+    if (!state.isPolling || state.isRestarting) return;
     await refreshAllData();
   }, state.pollingInterval);
 };
@@ -1559,23 +1742,29 @@ const startPollingScheduler = () => {
 let burstTimer = null;
 
 const triggerBurstPolling = (totalMs = 8000, intervalMs = 1500) => {
-  if (burstTimer) clearInterval(burstTimer);
+  if (burstTimer) {
+    clearTimeout(burstTimer);
+    burstTimer = null;
+  }
   stopPollingScheduler();
 
   const startTime = Date.now();
-  burstTimer = setInterval(async () => {
-    const elapsed = Date.now() - startTime;
+  const runBurstTick = async () => {
+    if (state.isRestarting) return;
     await refreshAllData();
-
+    const elapsed = Date.now() - startTime;
     if (elapsed >= totalMs) {
-      clearInterval(burstTimer);
       burstTimer = null;
       if (state.isPolling) {
         startPollingScheduler();
       }
       showToast('✓ 服務狀態已全面恢復上線');
+    } else {
+      burstTimer = setTimeout(runBurstTick, intervalMs);
     }
-  }, intervalMs);
+  };
+
+  burstTimer = setTimeout(runBurstTick, intervalMs);
 };
 
 // ==========================================================================
@@ -1626,15 +1815,194 @@ const showRestartProgressOverlay = () => {
 };
 
 const hideRestartProgressOverlay = () => {
+  state.isRestarting = false;
   const overlay = document.getElementById('restartProgressOverlay');
-  if (!overlay) return;
-  overlay.classList.add('fade-out');
-  setTimeout(() => {
-    overlay.classList.add('hidden');
-  }, 380);
+  if (overlay) {
+    overlay.classList.add('fade-out');
+    setTimeout(() => {
+      overlay.classList.add('hidden');
+    }, 380);
+  }
+  refreshAllData();
+  if (state.isPolling) {
+    startPollingScheduler();
+  }
+};
+
+// 步驟 3 密集探測與自動補救 (Auto-Heal)
+const pollAndHealUntilAllOnline = async (maxAttempts = 20) => {
+  setRestartStepStatus(3, 'running', '步驟 3/3：正在密集探測各項服務與進程在線綠燈狀態...');
+
+  let allOnline = false;
+  let lastUnreadyName = '';
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    await new Promise((r) => setTimeout(r, 1200));
+
+    let svcs = [];
+    try {
+      svcs = await invoke('get_system_services', {}, 15000);
+      if (svcs && svcs.length > 0 && state.activeTab === 'tab-services') {
+        renderSystemServicesList(svcs);
+      }
+    } catch (_) {}
+
+    const apacheSvc = (svcs || []).find((s) => s.name === 'LAH_Web_Service');
+    const isApacheOk = apacheSvc ? apacheSvc.is_running : false;
+
+    let procs = [];
+    try {
+      procs = await invoke('get_pm2_processes', {}, 15000);
+      if (procs && procs.length > 0 && state.activeTab === 'tab-services') {
+        renderPm2ProcessesList(procs);
+      }
+    } catch (_) {}
+
+    let isPm2Ok = true;
+    const unreadyPm2Names = [];
+    if (!procs || procs.length === 0) {
+      isPm2Ok = false;
+      lastUnreadyName = 'PM2 尚未回傳進程列表';
+    } else {
+      for (const p of procs) {
+        if (p.status !== 'online') {
+          isPm2Ok = false;
+          unreadyPm2Names.push(p.name);
+          lastUnreadyName = `${p.name} (${p.status})`;
+        }
+      }
+    }
+
+    if (!isApacheOk) {
+      lastUnreadyName = apacheSvc ? `LAH_Web_Service (${apacheSvc.status})` : 'LAH_Web_Service (探測中)';
+    }
+
+    if (isApacheOk && isPm2Ok) {
+      allOnline = true;
+      break;
+    }
+
+    setRestartStepStatus(
+      3,
+      'running',
+      `步驟 3/3：等待服務就緒 (${attempt}/${maxAttempts}) — 目前等待：${lastUnreadyName}`
+    );
+
+    // 自動補救機制 (Auto-Heal)：若第 4 次或第 10 次探測發現服務呈現 STOPPED，自動補發啟動指令
+    if (attempt === 4 || attempt === 10) {
+      if (apacheSvc && !apacheSvc.is_running && apacheSvc.status === 'STOPPED') {
+        setRestartStepStatus(3, 'running', '步驟 3/3：偵測到 Apache 尚未啟動，正在自動補發啟動指令...');
+        try {
+          await invoke('start_system_service', { name: 'LAH_Web_Service' }, 35000);
+        } catch (_) {}
+      }
+      if (unreadyPm2Names.length > 0) {
+        for (const procName of unreadyPm2Names) {
+          setRestartStepStatus(3, 'running', `步驟 3/3：正在自動補救喚醒 PM2 進程 [${procName}]...`);
+          try {
+            await invoke('restart_pm2_process', { target: procName }, 25000);
+          } catch (_) {}
+        }
+      }
+    }
+  }
+
+  if (allOnline) {
+    state.isRestarting = false;
+    await refreshAllData();
+    setRestartStepStatus(3, 'success', '✓ 全系統服務已順利重啟並全數在線！');
+    const title = document.getElementById('restartModalTitle');
+    if (title) {
+      title.textContent = '✓ 全域服務已全數成功上線';
+      title.style.color = '#10b981';
+    }
+    const errorActions = document.getElementById('restartErrorActions');
+    if (errorActions) errorActions.classList.add('hidden');
+    await new Promise((r) => setTimeout(r, 800));
+    hideRestartProgressOverlay();
+    showToast('✓ 全系統服務已全面恢復在線運作！');
+    return true;
+  } else {
+    setRestartStepStatus(3, 'error', `⚠️ 部分服務尚未就緒：${lastUnreadyName}`);
+    handleRestartError(`部分服務尚未就緒 (${lastUnreadyName})，可點擊下方「重試未就緒服務」或「繼續等待探測」。`);
+    return false;
+  }
+};
+
+// 遮罩內按鈕：僅針對尚未就緒之服務執行補救重試
+const retryUnreadyServicesInOverlay = async () => {
+  state.isRestarting = true;
+  stopPollingScheduler();
+
+  const errorActions = document.getElementById('restartErrorActions');
+  if (errorActions) errorActions.classList.add('hidden');
+
+  const title = document.getElementById('restartModalTitle');
+  if (title) {
+    title.textContent = '正在補救重試未就緒服務...';
+    title.style.color = '';
+  }
+
+  setRestartStepStatus(3, 'running', '正在檢查並重新啟動未就緒的服務項目...');
+
+  try {
+    let svcs = [];
+    try {
+      svcs = await invoke('get_system_services', {}, 15000);
+    } catch (_) {}
+    const apacheSvc = (svcs || []).find((s) => s.name === 'LAH_Web_Service');
+    if (!apacheSvc || !apacheSvc.is_running) {
+      setRestartStepStatus(2, 'running', '正在重新啟動 Apache 2.4 系統服務 (LAH_Web_Service)...');
+      await invoke('start_system_service', { name: 'LAH_Web_Service' }, 45000);
+      setRestartStepStatus(2, 'success');
+    } else {
+      setRestartStepStatus(2, 'success');
+    }
+
+    let procs = [];
+    try {
+      procs = await invoke('get_pm2_processes', {}, 15000);
+    } catch (_) {}
+    if (!procs || procs.length === 0) {
+      setRestartStepStatus(1, 'running', '正在重新喚醒 PM2 應用進程群...');
+      await invoke('restart_pm2_process', { target: 'all' }, 45000);
+      setRestartStepStatus(1, 'success');
+    } else {
+      for (const p of procs) {
+        if (p.status !== 'online') {
+          setRestartStepStatus(1, 'running', `正在重新啟動 PM2 進程 [${p.name}]...`);
+          await invoke('restart_pm2_process', { target: p.name }, 25000);
+        }
+      }
+      setRestartStepStatus(1, 'success');
+    }
+
+    await pollAndHealUntilAllOnline(15);
+  } catch (err) {
+    handleRestartError(`重試過程發生異常：${err}`);
+  }
+};
+
+// 遮罩內按鈕：不重發重啟指令，直接延長等待探測
+const continuePollingServicesInOverlay = async () => {
+  state.isRestarting = true;
+  stopPollingScheduler();
+
+  const errorActions = document.getElementById('restartErrorActions');
+  if (errorActions) errorActions.classList.add('hidden');
+
+  const title = document.getElementById('restartModalTitle');
+  if (title) {
+    title.textContent = '正在繼續追蹤服務狀態...';
+    title.style.color = '';
+  }
+
+  await pollAndHealUntilAllOnline(15);
 };
 
 const executeRestartAllPipeline = async () => {
+  state.isRestarting = true;
+  stopPollingScheduler();
   showRestartProgressOverlay();
   setAllServicesRestartingVisual();
 
@@ -1642,7 +2010,7 @@ const executeRestartAllPipeline = async () => {
     // 步驟 1：重新啟動 PM2 應用進程層
     setRestartStepStatus(1, 'running', '步驟 1/3：正在重啟 PM2 應用進程群 (FE, WSS, 排程, FastCGI)...');
     try {
-      const pm2Res = await invoke('restart_pm2_process', { target: 'all' }, 20000);
+      const pm2Res = await invoke('restart_pm2_process', { target: 'all' }, 45000);
       if (pm2Res && !pm2Res.success) {
         throw new Error(pm2Res.message || 'PM2 重啟失敗');
       }
@@ -1656,7 +2024,7 @@ const executeRestartAllPipeline = async () => {
     // 步驟 2：重新啟動 Apache 2.4 系統閘道 (LAH_Web_Service)
     setRestartStepStatus(2, 'running', '步驟 2/3：正在重啟 Apache 2.4 系統服務 (LAH_Web_Service)...');
     try {
-      const apacheRes = await invoke('restart_system_service', { name: 'LAH_Web_Service' }, 20000);
+      const apacheRes = await invoke('restart_system_service', { name: 'LAH_Web_Service' }, 45000);
       if (apacheRes && !apacheRes.success) {
         throw new Error(apacheRes.message || 'Apache 重啟失敗');
       }
@@ -1667,69 +2035,15 @@ const executeRestartAllPipeline = async () => {
       return;
     }
 
-    // 步驟 3：追蹤探測所有服務在線就緒狀態
-    setRestartStepStatus(3, 'running', '步驟 3/3：正在密集探測各項服務與進程在線綠燈狀態...');
-
-    let allOnline = false;
-    let lastUnreadyName = '';
-
-    for (let attempt = 1; attempt <= 12; attempt++) {
-      await new Promise((r) => setTimeout(r, 1000));
-      await refreshAllData();
-
-      let svcs = [];
-      try {
-        svcs = await invoke('get_system_services');
-      } catch (_) {}
-      const apacheSvc = (svcs || []).find((s) => s.name === 'LAH_Web_Service');
-      const isApacheOk = apacheSvc ? apacheSvc.is_running : true;
-
-      let procs = [];
-      try {
-        procs = await invoke('get_pm2_processes');
-      } catch (_) {}
-
-      let isPm2Ok = true;
-      if (!procs || procs.length === 0) {
-        isPm2Ok = false;
-        lastUnreadyName = 'PM2 尚未回傳進程列表';
-      } else {
-        for (const p of procs) {
-          if (p.status !== 'online') {
-            isPm2Ok = false;
-            lastUnreadyName = `${p.name} (${p.status})`;
-            break;
-          }
-        }
-      }
-
-      if (isApacheOk && isPm2Ok) {
-        allOnline = true;
-        break;
-      }
-    }
-
-    if (allOnline) {
-      setRestartStepStatus(3, 'success', '✓ 全系統服務已順利重啟並全數在線！');
-      const title = document.getElementById('restartModalTitle');
-      if (title) {
-        title.textContent = '✓ 全域服務已全數成功上線';
-        title.style.color = '#10b981';
-      }
-      // 依使用者指示：自動停留 0.8 秒確認後淡出
-      await new Promise((r) => setTimeout(r, 800));
-      hideRestartProgressOverlay();
-      showToast('✓ 全系統服務已全面恢復在線運作！');
-    } else {
-      setRestartStepStatus(3, 'error', `⚠️ 部分服務尚未就緒：${lastUnreadyName}`);
-      handleRestartError(`部分服務尚未就緒 (${lastUnreadyName})，請檢視日誌確認。`);
-    }
+    // 步驟 3：追蹤探測所有服務在線就緒狀態（含自動補救）
+    await pollAndHealUntilAllOnline(20);
   } catch (globalErr) {
     handleRestartError(`重啟程序發生未預期異常：${globalErr}`);
   }
 };
 
 const handleRestartError = (errMsg) => {
+  state.isRestarting = false;
   const subtitle = document.getElementById('restartModalSubtitle');
   const errorActions = document.getElementById('restartErrorActions');
   const title = document.getElementById('restartModalTitle');
@@ -1766,7 +2080,7 @@ const stopPollingScheduler = () => {
     state.pollingTimer = null;
   }
   if (burstTimer) {
-    clearInterval(burstTimer);
+    clearTimeout(burstTimer);
     burstTimer = null;
   }
 };

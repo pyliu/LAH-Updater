@@ -49,6 +49,11 @@ fn build_log_info(key: String, label: String, path_str: String, exists: bool) ->
     if exists {
         if let Ok(meta) = fs::metadata(&path_str) {
             size_bytes = meta.len();
+            if size_bytes == 0 {
+                if let Ok(real_size) = File::open(&path_str).and_then(|mut f| f.seek(SeekFrom::End(0))) {
+                    size_bytes = real_size;
+                }
+            }
             if let Ok(mtime) = meta.modified() {
                 let dt: DateTime<Local> = mtime.into();
                 modified = dt.format("%Y-%m-%d %H:%M:%S").to_string();
@@ -124,29 +129,33 @@ pub fn list_available_logs(root_dir: &Path) -> Vec<LogFileInfo> {
             "apache_error",
             "Apache 2.4 錯誤日誌",
             &apache_logs_dir,
-            "error_log",
-            "",
+            "error",
+            ".log",
+            Some(("error_log", "")),
         ),
         (
             "apache_access",
             "Apache 2.4 存取紀錄",
             &apache_logs_dir,
-            "access_log",
-            "",
+            "access",
+            ".log",
+            Some(("access_log", "")),
         ),
         (
             "service_pm2",
             "LAH_PM2_Service 包裝日誌",
             &logs_dir.join("service"),
-            "wrapper",
+            "lah-service",
             ".log",
+            Some(("wrapper", ".log")),
         ),
         (
             "service_web",
             "LAH_Web_Service 包裝日誌",
             &logs_dir.join("web_service"),
-            "wrapper",
+            "lah-web-service",
             ".log",
+            Some(("wrapper", ".log")),
         ),
         (
             "pm2_logrotate",
@@ -154,6 +163,7 @@ pub fn list_available_logs(root_dir: &Path) -> Vec<LogFileInfo> {
             &pm2_logs_dir,
             "pm2-logrotate-out",
             ".log",
+            None,
         ),
     ];
 
@@ -205,8 +215,8 @@ pub fn list_available_logs(root_dir: &Path) -> Vec<LogFileInfo> {
     }
 
     // 3. Apache 2.4、Windows 系統服務與 PM2 日誌輪替
-    for (key, label, dir, prefix, suffix) in after_api_targets {
-        let file_path = if suffix.is_empty() {
+    for (key, label, dir, prefix, suffix, fallback) in after_api_targets {
+        let mut file_path = if suffix.is_empty() {
             let p = dir.join(prefix);
             if p.is_file() {
                 Some(p)
@@ -216,6 +226,21 @@ pub fn list_available_logs(root_dir: &Path) -> Vec<LogFileInfo> {
         } else {
             find_latest_matching_file(dir, prefix, suffix)
         };
+
+        if file_path.is_none() {
+            if let Some((fb_prefix, fb_suffix)) = fallback {
+                file_path = if fb_suffix.is_empty() {
+                    let p = dir.join(fb_prefix);
+                    if p.is_file() {
+                        Some(p)
+                    } else {
+                        None
+                    }
+                } else {
+                    find_latest_matching_file(dir, fb_prefix, fb_suffix)
+                };
+            }
+        }
 
         let exists = file_path.is_some();
         let path_str = file_path
@@ -227,6 +252,66 @@ pub fn list_available_logs(root_dir: &Path) -> Vec<LogFileInfo> {
     }
 
     result
+}
+
+#[cfg(target_os = "windows")]
+fn decode_cp950(bytes: &[u8]) -> Option<String> {
+    extern "system" {
+        fn MultiByteToWideChar(
+            CodePage: u32,
+            dwFlags: u32,
+            lpMultiByteStr: *const u8,
+            cbMultiByte: i32,
+            lpWideCharStr: *mut u16,
+            cchWideChar: i32,
+        ) -> i32;
+    }
+    const CP_BIG5: u32 = 950;
+    const MB_ERR_INVALID_CHARS: u32 = 0x00000008;
+
+    if bytes.is_empty() {
+        return Some(String::new());
+    }
+    unsafe {
+        let len = MultiByteToWideChar(
+            CP_BIG5,
+            MB_ERR_INVALID_CHARS,
+            bytes.as_ptr(),
+            bytes.len() as i32,
+            std::ptr::null_mut(),
+            0,
+        );
+        if len <= 0 {
+            return None;
+        }
+        let mut wide = vec![0u16; len as usize];
+        let written = MultiByteToWideChar(
+            CP_BIG5,
+            MB_ERR_INVALID_CHARS,
+            bytes.as_ptr(),
+            bytes.len() as i32,
+            wide.as_mut_ptr(),
+            len,
+        );
+        if written <= 0 {
+            return None;
+        }
+        Some(String::from_utf16_lossy(&wide[..written as usize]))
+    }
+}
+
+fn decode_log_line(mut bytes: Vec<u8>) -> String {
+    if bytes.last() == Some(&b'\r') {
+        bytes.pop();
+    }
+    if let Ok(s) = std::str::from_utf8(&bytes) {
+        return s.to_string();
+    }
+    #[cfg(target_os = "windows")]
+    if let Some(s) = decode_cp950(&bytes) {
+        return s;
+    }
+    String::from_utf8_lossy(&bytes).into_owned()
 }
 
 pub fn read_log_tail(path_str: &str, max_lines: usize) -> Result<LogContentResult, String> {
@@ -241,8 +326,11 @@ pub fn read_log_tail(path_str: &str, max_lines: usize) -> Result<LogContentResul
         });
     }
 
-    let meta = fs::metadata(p).map_err(|e| format!("無法取得日誌屬性：{}", e))?;
-    let file_size = meta.len();
+    let mut file = File::open(p).map_err(|e| format!("開啟檔案失敗：{}", e))?;
+    let file_size = file
+        .seek(SeekFrom::End(0))
+        .or_else(|_| fs::metadata(p).map(|m| m.len()))
+        .map_err(|e| format!("無法取得日誌屬性：{}", e))?;
     if file_size == 0 {
         return Ok(LogContentResult {
             key: String::new(),
@@ -252,8 +340,6 @@ pub fn read_log_tail(path_str: &str, max_lines: usize) -> Result<LogContentResul
             exists: true,
         });
     }
-
-    let mut file = File::open(p).map_err(|e| format!("開啟檔案失敗：{}", e))?;
 
     // 針對大檔案，僅從末尾 512KB 開始讀取
     let read_start = if file_size > 524_288 {
@@ -266,13 +352,9 @@ pub fn read_log_tail(path_str: &str, max_lines: usize) -> Result<LogContentResul
 
     let reader = BufReader::new(file);
     let mut all_lines: Vec<String> = Vec::new();
-    for line_res in reader.lines() {
-        match line_res {
-            Ok(line) => all_lines.push(line),
-            Err(_) => {
-                // 若遇非 UTF-8，以替代符號安全處理
-                all_lines.push("[Non-UTF8 line skipped]".to_string());
-            }
+    for byte_res in reader.split(b'\n') {
+        if let Ok(bytes) = byte_res {
+            all_lines.push(decode_log_line(bytes));
         }
     }
 
