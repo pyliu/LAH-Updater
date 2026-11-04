@@ -34,6 +34,7 @@ pub struct InstallReport {
     pub success: bool,
     pub message: String,
     pub elapsed_secs: f64,
+    pub deployed_exe_path: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -68,4 +69,61 @@ pub struct SecurityAuditReport {
     pub overall_secure: bool,
     pub report_file_path: Option<String>,
     pub summary: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Pm2ProcessInfo {
+    pub pm_id: u32,
+    pub name: String,
+    pub status: String,
+    pub pid: u32,
+    pub cpu: f32,
+    pub memory: u64,
+    pub uptime: u64,
+    pub restarts: u32,
+    pub is_module: bool,
+    pub version: String,
+    pub exec_path: String,
+    pub out_log_path: String,
+    pub err_log_path: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConsoleOverview {
+    pub root_dir: String,
+    pub installed: bool,
+    pub node_version: Option<String>,
+    pub pm2_version: Option<String>,
+    pub service_installed: bool,
+    pub service_running: bool,
+    pub logrotate_installed: bool,
+    pub logrotate_configured: bool,
+    pub logrotate_version: Option<String>,
+    pub logrotate_compress: bool,
+    pub processes: Vec<Pm2ProcessInfo>,
+    pub pm2_error: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CommandActionResult {
+    pub success: bool,
+    pub message: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LogFileInfo {
+    pub key: String,
+    pub label: String,
+    pub path: String,
+    pub exists: bool,
+    pub size_bytes: u64,
+    pub modified: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LogContentResult {
+    pub path: String,
+    pub lines: Vec<String>,
+    pub file_size: u64,
+    pub exists: bool,
 }

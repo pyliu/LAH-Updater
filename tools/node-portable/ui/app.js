@@ -4,24 +4,92 @@ const { open } = window.__TAURI__.dialog;
 
 const $ = (id) => document.getElementById(id);
 let isBusy = false;
+let currentTab = "install";
+let initialTabDecided = false;
+let consolePollTimer = null;
+let lastOverview = null;
+let currentLogProcess = null;
 
 async function initAdminStatus() {
   const badge = $("admin_badge");
   try {
     const isAdmin = await invoke("check_admin");
-    badge.textContent = isAdmin ? "👑 管理員權限" : "⚠️ 一般使用者權限（註冊服務需管理員）";
+    badge.textContent = isAdmin ? "👑 管理員權限" : "⚠️ 一般權限（服務控制需管理員）";
     badge.className = "admin-badge " + (isAdmin ? "is-admin" : "not-admin");
   } catch (e) {
     console.error("check_admin failed:", e);
   }
 }
 
+function escapeHtml(str) {
+  return String(str ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function formatBytes(bytes) {
+  const n = Number(bytes) || 0;
+  if (n <= 0) return "0 MB";
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function formatUptime(pmUptimeMs) {
+  const start = Number(pmUptimeMs) || 0;
+  if (start <= 0) return "-";
+  const diffSec = Math.max(0, Math.floor((Date.now() - start) / 1000));
+  if (diffSec < 60) return `${diffSec}秒`;
+  const mins = Math.floor(diffSec / 60);
+  if (mins < 60) return `${mins}分`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}時${mins % 60}分`;
+  const days = Math.floor(hours / 24);
+  return `${days}天${hours % 24}時`;
+}
+
+function setToast(msg, type = "normal") {
+  const bar = $("console_toast");
+  const text = $("console_toast_msg");
+  text.textContent = msg;
+  bar.className = "toast-bar" + (type === "error" ? " error" : type === "success" ? " success" : "");
+}
+
+function switchTab(tab) {
+  currentTab = tab;
+  $("tab_btn_install").classList.toggle("active", tab === "install");
+  $("tab_btn_console").classList.toggle("active", tab === "console");
+  $("pane_install").classList.toggle("active", tab === "install");
+  $("pane_console").classList.toggle("active", tab === "console");
+
+  if (consolePollTimer) {
+    clearInterval(consolePollTimer);
+    consolePollTimer = null;
+  }
+
+  if (tab === "console") {
+    refreshConsole();
+    consolePollTimer = setInterval(() => {
+      if ($("chk_auto_refresh").checked && !isBusy) {
+        refreshConsole(true);
+      }
+    }, 4000);
+  } else {
+    rescan();
+  }
+}
+
+$("tab_btn_install").onclick = () => switchTab("install");
+$("tab_btn_console").onclick = () => switchTab("console");
+$("btn_goto_console").onclick = () => switchTab("console");
+
 function row(label, value, ok) {
   const mark = ok === undefined ? "" : ok ? "✅ " : "⚪ ";
   return `<div>${mark}<strong>${label}</strong>：${value}</div>`;
 }
 
-async function rescan() {
+async function rescan(isInitial = false) {
   const curInput = $("root_dir").value.trim();
   const s = await invoke("scan_environment", { rootDir: curInput });
   if (!curInput && s.root_dir) {
@@ -30,21 +98,359 @@ async function rescan() {
   let lrText = "尚未安裝（安裝時將由 node.zip 便攜版內建啟動）";
   if (s.logrotate_version) {
     lrText = s.logrotate_configured
-      ? `${s.logrotate_version}（便攜版內建，已掛載啟用）`
-      : `${s.logrotate_version}（便攜版內建，點擊開始安裝即可啟動）`;
+      ? `v${s.logrotate_version}（便攜版內建，已掛載啟用）`
+      : `v${s.logrotate_version}（便攜版內建，點擊開始安裝即可啟動）`;
   } else if (s.logrotate_configured) {
     lrText = "已掛載啟用";
   }
   $("scan_box").innerHTML = [
     row("node.zip 安裝包", s.zip_found || "未找到（請放於工具旁 base 資料夾、工具同層或 C:\\Temp）", !!s.zip_found),
     row("已安裝 Node.js", s.node_version || "尚未安裝", !!s.node_version),
-    row("已安裝 PM2", s.pm2_version || "尚未安裝", !!s.pm2_version),
+    row("已安裝 PM2", s.pm2_version ? `v${s.pm2_version}` : "尚未安裝", !!s.pm2_version),
     row("pm2-logrotate 模組", lrText, s.logrotate_installed),
     row("PM2_Portable_Service", s.service_installed ? (s.service_running ? "已註冊，執行中" : "已註冊，未執行") : "未註冊", s.service_installed),
   ].join("");
   $("btn_start").disabled = !s.zip_found;
+
+  const isInstalled = !!(s.node_version && s.pm2_version);
+  $("btn_goto_console").style.display = isInstalled ? "inline-block" : "none";
+
+  // 啟動預設畫面：若偵測到沙盒 Node 與 PM2 已經安裝，直接預設打開控制台分頁
+  if (isInitial && !initialTabDecided) {
+    initialTabDecided = true;
+    if (isInstalled) {
+      switchTab("console");
+    }
+  }
 }
 
+async function refreshConsole(silent = false) {
+  const rootDir = $("root_dir").value.trim();
+  if (!silent) {
+    setToast("⏳ 正在同步沙盒 Node / PM2 狀態...");
+  }
+  try {
+    const ov = await invoke("get_console_overview", { rootDir });
+    lastOverview = ov;
+    if (!rootDir && ov.root_dir) {
+      $("root_dir").value = ov.root_dir;
+    }
+
+    $("con_root_dir").textContent = ov.root_dir || "-";
+    $("con_node_ver").textContent = ov.node_version || "尚未安裝";
+    $("con_pm2_ver").textContent = ov.pm2_version ? `v${ov.pm2_version}` : "尚未安裝";
+
+    const svcBadge = $("con_svc_badge");
+    if (ov.service_running) {
+      svcBadge.textContent = "🟢 服務執行中";
+      svcBadge.className = "status-pill online";
+    } else if (ov.service_installed) {
+      svcBadge.textContent = "⚪ 服務已停止";
+      svcBadge.className = "status-pill stopped";
+    } else {
+      svcBadge.textContent = "⚪ 服務未註冊";
+      svcBadge.className = "status-pill stopped";
+    }
+
+    // 解析內建 pm2-logrotate 模組狀態
+    const lrProc = (ov.processes || []).find((p) => p.name === "pm2-logrotate" || p.is_module);
+    const lrBadge = $("con_lr_badge");
+    if (lrProc && lrProc.status === "online") {
+      lrBadge.textContent = "🟢 運作中 (online)";
+      lrBadge.className = "status-pill online";
+    } else if (lrProc) {
+      lrBadge.textContent = `🔴 ${lrProc.status}`;
+      lrBadge.className = "status-pill errored";
+    } else if (ov.logrotate_configured) {
+      lrBadge.textContent = "⚪ 已掛載 (待喚醒)";
+      lrBadge.className = "status-pill stopped";
+    } else {
+      lrBadge.textContent = "⚪ 未掛載";
+      lrBadge.className = "status-pill stopped";
+    }
+
+    $("con_lr_ver").textContent = ov.logrotate_version
+      ? `v${ov.logrotate_version}`
+      : lrProc && lrProc.version !== "-"
+      ? `v${lrProc.version}`
+      : "-";
+    $("con_lr_compress").textContent = ov.logrotate_compress ? "✅ 已啟用 (Gzip)" : "⚪ 未啟用";
+    $("con_lr_pid").textContent = lrProc && lrProc.pid ? String(lrProc.pid) : "-";
+    $("con_lr_mem").textContent = lrProc ? formatBytes(lrProc.memory) : "-";
+
+    // 渲染受管業務系統清單（排除 pm2-logrotate 模組）
+    const apps = (ov.processes || []).filter((p) => !p.is_module && p.name !== "pm2-logrotate");
+    const onlineApps = apps.filter((p) => p.status === "online").length;
+    const countBadge = $("con_app_count");
+    countBadge.textContent = `${onlineApps} / ${apps.length} 系統在線`;
+    countBadge.className = "status-pill " + (onlineApps === apps.length && apps.length > 0 ? "online" : "stopped");
+
+    const tbody = $("pm2_apps_tbody");
+    if (!ov.installed) {
+      tbody.innerHTML = `<tr><td colspan="9" style="text-align:center; padding: 26px; color:#b45309;">
+        ⚠️ 此目錄尚未安裝沙盒 Node.js 與 PM2，請先切換至「📦 沙盒安裝與部署」分頁執行安裝。
+      </td></tr>`;
+    } else if (ov.pm2_error && apps.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="9" style="text-align:center; padding: 24px; color:#64748b;">
+        ℹ️ 目前尚無活躍進程或 PM2 守護進程待喚醒（可點擊上方「♻️ 還原快照」或「▶ 啟動服務」喚醒）
+      </td></tr>`;
+    } else if (apps.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="9" style="text-align:center; padding: 24px; color:#64748b;">
+        目前沙盒 PM2 尚無受管業務系統（可點擊「♻️ 還原快照」載入 dump.pm2，或開啟「💻 沙盒終端」啟動系統）
+      </td></tr>`;
+    } else {
+      tbody.innerHTML = apps
+        .map((app) => {
+          const isOnline = app.status === "online";
+          const pillClass = isOnline ? "online" : app.status === "stopped" ? "stopped" : "errored";
+          const toggleAction = isOnline ? "stop" : "start";
+          const toggleLabel = isOnline ? "⏹ 停止" : "▶ 啟動";
+          const safeName = escapeHtml(app.name);
+          return `<tr>
+            <td class="mono">${app.pm_id}</td>
+            <td><strong>${safeName}</strong></td>
+            <td><span class="status-pill ${pillClass}">${escapeHtml(app.status)}</span></td>
+            <td class="mono">${app.pid || "-"}</td>
+            <td class="mono">${app.cpu.toFixed(1)}%</td>
+            <td class="mono">${formatBytes(app.memory)}</td>
+            <td class="mono">${isOnline ? formatUptime(app.uptime) : "-"}</td>
+            <td class="mono">${app.restarts}</td>
+            <td style="text-align:right;">
+              <div class="btn-group" style="justify-content:flex-end; gap:4px;">
+                <button class="btn-sm" data-pm2-action="${toggleAction}" data-pm2-target="${safeName}">${toggleLabel}</button>
+                <button class="btn-sm btn-green" data-pm2-action="restart" data-pm2-target="${safeName}">🔄 重啟</button>
+                <button class="btn-sm primary" data-pm2-log="${safeName}">📄 日誌</button>
+              </div>
+            </td>
+          </tr>`;
+        })
+        .join("");
+    }
+
+    const now = new Date();
+    const p = (n) => String(n).padStart(2, "0");
+    $("console_last_updated").textContent = `更新於 ${p(now.getHours())}:${p(now.getMinutes())}:${p(now.getSeconds())}`;
+    if (!silent) {
+      setToast("🟢 沙盒狀態同步完成");
+    }
+  } catch (err) {
+    setToast(`❌ 同步沙盒狀態失敗：${err}`, "error");
+  }
+}
+
+// 綁定受管系統表格內的動態按鈕事件
+$("pm2_apps_tbody").onclick = async (e) => {
+  const btn = e.target.closest("button");
+  if (!btn || isBusy) return;
+
+  const action = btn.getAttribute("data-pm2-action");
+  const target = btn.getAttribute("data-pm2-target");
+  const logName = btn.getAttribute("data-pm2-log");
+
+  if (action && target) {
+    await executePm2Action(action, target, btn);
+  } else if (logName) {
+    const proc = (lastOverview?.processes || []).find((p) => p.name === logName);
+    await openLogModal(proc?.out_log_path || "", proc || null);
+  }
+};
+
+async function executePm2Action(action, target, btnEl = null) {
+  if (isBusy) return;
+  const rootDir = $("root_dir").value.trim();
+  isBusy = true;
+  if (btnEl) btnEl.disabled = true;
+  setToast(`⏳ 正在對 [${target}] 執行 PM2 ${action} 指令...`);
+  try {
+    const res = await invoke("pm2_process_action", { rootDir, action, target });
+    setToast(res.message, res.success ? "success" : "error");
+    await refreshConsole(true);
+  } catch (err) {
+    setToast(`❌ 執行失敗：${err}`, "error");
+  } finally {
+    isBusy = false;
+    if (btnEl) btnEl.disabled = false;
+  }
+}
+
+async function executeServiceAction(action, btnEl = null) {
+  if (isBusy) return;
+  const rootDir = $("root_dir").value.trim();
+  isBusy = true;
+  if (btnEl) btnEl.disabled = true;
+  setToast(`⏳ 正在對 PM2_Portable_Service 執行 [${action}]...`);
+  try {
+    const res = await invoke("pm2_service_action", { rootDir, action });
+    setToast(res.message, res.success ? "success" : "error");
+    await refreshConsole(true);
+  } catch (err) {
+    setToast(`❌ 服務操作失敗：${err}`, "error");
+  } finally {
+    isBusy = false;
+    if (btnEl) btnEl.disabled = false;
+  }
+}
+
+$("btn_svc_start").onclick = (e) => executeServiceAction("start", e.currentTarget);
+$("btn_svc_stop").onclick = (e) => executeServiceAction("stop", e.currentTarget);
+$("btn_svc_restart").onclick = (e) => executeServiceAction("restart", e.currentTarget);
+
+$("btn_open_cmd").onclick = async () => {
+  const rootDir = $("root_dir").value.trim();
+  const res = await invoke("open_lah_cmd", { rootDir });
+  setToast(res.message, res.success ? "success" : "error");
+};
+
+$("btn_lr_trigger").onclick = async (e) => {
+  if (isBusy) return;
+  const btn = e.currentTarget;
+  const rootDir = $("root_dir").value.trim();
+  isBusy = true;
+  btn.disabled = true;
+  setToast("⏳ 正在執行 Gzip 日誌壓縮輪替與 pm2 reloadLogs...");
+  try {
+    const res = await invoke("trigger_logrotate_now", { rootDir });
+    setToast(res.message, res.success ? "success" : "error");
+    await refreshConsole(true);
+  } catch (err) {
+    setToast(`❌ 日誌輪替失敗：${err}`, "error");
+  } finally {
+    isBusy = false;
+    btn.disabled = false;
+  }
+};
+
+$("btn_lr_repair").onclick = async (e) => {
+  if (isBusy) return;
+  const btn = e.currentTarget;
+  const rootDir = $("root_dir").value.trim();
+  isBusy = true;
+  btn.disabled = true;
+  setToast("⏳ 正在由沙盒內建模組掛載並啟動 pm2-logrotate...");
+  try {
+    const res = await invoke("repair_logrotate", { rootDir });
+    setToast(res.message, res.success ? "success" : "error");
+    await refreshConsole(true);
+  } catch (err) {
+    setToast(`❌ 啟動 pm2-logrotate 失敗：${err}`, "error");
+  } finally {
+    isBusy = false;
+    btn.disabled = false;
+  }
+};
+
+$("btn_lr_logs").onclick = async () => {
+  const lrProc = (lastOverview?.processes || []).find((p) => p.name === "pm2-logrotate" || p.is_module);
+  await openLogModal(lrProc?.out_log_path || "", lrProc || null);
+};
+
+$("btn_pm2_refresh").onclick = () => refreshConsole(false);
+$("btn_pm2_restart_all").onclick = (e) => executePm2Action("restart", "all", e.currentTarget);
+$("btn_pm2_save").onclick = (e) => executePm2Action("save", "all", e.currentTarget);
+$("btn_pm2_resurrect").onclick = (e) => executePm2Action("resurrect", "all", e.currentTarget);
+
+$("btn_open_logs_dir").onclick = async () => {
+  const rootDir = $("root_dir").value.trim();
+  const res = await invoke("open_logs_folder", { rootDir });
+  setToast(res.message, res.success ? "success" : "error");
+};
+
+$("btn_open_log_modal").onclick = () => openLogModal("", null);
+
+// ==================== 即時日誌預覽彈窗 (Log Tail Modal) ====================
+async function openLogModal(preferredPath = "", procContext = null) {
+  currentLogProcess = procContext;
+  const quickWrap = $("proc_quick_logs");
+  if (procContext && (procContext.out_log_path || procContext.err_log_path)) {
+    quickWrap.style.display = "inline-flex";
+  } else {
+    quickWrap.style.display = "none";
+  }
+
+  $("modal_logs").classList.add("active");
+  $("log_tail_box").textContent = "正在載入日誌清單...";
+
+  const rootDir = $("root_dir").value.trim();
+  try {
+    const logs = await invoke("get_sandbox_logs", { rootDir });
+    const sel = $("sel_log_file");
+    if (!logs || logs.length === 0) {
+      sel.innerHTML = `<option value="">（目前尚無日誌檔案）</option>`;
+      $("log_meta_bar").textContent = "檔案路徑：尚未產生任何 .log 檔案";
+      $("log_tail_box").textContent = "目前沙盒 .pm2\\logs 與 logs 目錄下尚無日誌檔案。";
+      return;
+    }
+
+    sel.innerHTML = logs
+      .map(
+        (l) =>
+          `<option value="${escapeHtml(l.path)}">${escapeHtml(l.label)} (${formatBytes(l.size_bytes)})</option>`
+      )
+      .join("");
+
+    if (preferredPath) {
+      const match = logs.find((l) => l.path.toLowerCase() === preferredPath.toLowerCase());
+      if (match) {
+        sel.value = match.path;
+      }
+    }
+
+    await loadSelectedLog();
+  } catch (err) {
+    $("log_tail_box").textContent = `載入日誌清單失敗：${err}`;
+  }
+}
+
+async function loadSelectedLog() {
+  const path = $("sel_log_file").value;
+  if (!path) return;
+  const maxLines = Number($("sel_log_lines").value) || 200;
+  $("log_tail_box").textContent = "讀取中...";
+  try {
+    const res = await invoke("get_log_tail", { path, maxLines });
+    $("log_meta_bar").textContent = `檔案路徑：${res.path} ｜ 檔案大小：${formatBytes(res.file_size)}`;
+    const box = $("log_tail_box");
+    box.textContent = (res.lines || []).join("\n");
+    box.scrollTop = box.scrollHeight;
+  } catch (err) {
+    $("log_tail_box").textContent = `讀取日誌失敗：${err}`;
+  }
+}
+
+$("sel_log_file").onchange = loadSelectedLog;
+$("sel_log_lines").onchange = loadSelectedLog;
+$("btn_log_reload").onclick = loadSelectedLog;
+
+$("btn_quick_out").onclick = async () => {
+  if (currentLogProcess?.out_log_path) {
+    $("sel_log_file").value = currentLogProcess.out_log_path;
+    await loadSelectedLog();
+  }
+};
+$("btn_quick_err").onclick = async () => {
+  if (currentLogProcess?.err_log_path) {
+    $("sel_log_file").value = currentLogProcess.err_log_path;
+    await loadSelectedLog();
+  }
+};
+
+$("btn_log_Notepad").onclick = async () => {
+  const path = $("sel_log_file").value;
+  if (!path) return;
+  const res = await invoke("open_log_in_notepad", { path });
+  if (!res.success) alert(res.message);
+};
+
+$("btn_log_Folder").onclick = async () => {
+  const rootDir = $("root_dir").value.trim();
+  await invoke("open_logs_folder", { rootDir });
+};
+
+$("btn_close_logs").onclick = () => {
+  $("modal_logs").classList.remove("active");
+};
+
+// ==================== 安裝與資安自檢邏輯 ====================
 function appendLog(message, level = "info") {
   const box = $("log_box");
   const now = new Date();
@@ -76,8 +482,8 @@ $("browse_btn").onclick = async () => {
     rescan();
   }
 };
-$("root_dir").onchange = rescan;
-$("btn_rescan").onclick = rescan;
+$("root_dir").onchange = () => rescan();
+$("btn_rescan").onclick = () => rescan();
 
 $("btn_audit").onclick = async () => {
   if (isBusy) return;
@@ -142,6 +548,13 @@ $("btn_modal_back").onclick = () => {
   rescan();
 };
 
+$("btn_modal_to_console").onclick = () => {
+  if (isBusy) return;
+  $("modal_progress").classList.remove("active");
+  $("btn_exit").disabled = false;
+  switchTab("console");
+};
+
 $("btn_start").onclick = async () => {
   const rootDir = $("root_dir").value.trim();
   if (!rootDir) {
@@ -159,6 +572,7 @@ $("btn_start").onclick = async () => {
   $("btn_start").disabled = true;
   $("btn_exit").disabled = true;
   $("btn_modal_back").style.display = "none";
+  $("btn_modal_to_console").style.display = "none";
   $("btn_close_modal").disabled = true;
   $("log_box").innerHTML = "";
   $("progress_bar").value = 0;
@@ -171,6 +585,9 @@ $("btn_start").onclick = async () => {
     $("status_text").textContent = res.success
       ? `✅ ${res.message}（耗時 ${res.elapsed_secs.toFixed(1)} 秒）`
       : `⚠️ 安裝失敗：${res.message}`;
+    if (res.success) {
+      $("btn_modal_to_console").style.display = "inline-block";
+    }
   } catch (err) {
     appendLog(`❌ 安裝發生嚴重異常: ${err}`, "error");
     $("status_text").textContent = "安裝過程發生異常！";
@@ -183,4 +600,4 @@ $("btn_start").onclick = async () => {
 };
 
 initAdminStatus();
-rescan();
+rescan(true);

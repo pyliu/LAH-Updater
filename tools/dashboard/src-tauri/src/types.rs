@@ -6,6 +6,10 @@ pub struct AppInfo {
     pub is_valid_root: bool,
     pub has_apache: bool,
     pub has_pm2: bool,
+    #[serde(default)]
+    pub is_custom: bool,
+    #[serde(default)]
+    pub cli_specified: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -15,6 +19,8 @@ pub struct SystemServiceStatus {
     pub status: String,
     pub is_running: bool,
     pub is_installed: bool,
+    #[serde(default)]
+    pub binary_path: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

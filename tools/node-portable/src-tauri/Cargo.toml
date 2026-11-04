@@ -1,7 +1,7 @@
 [package]
 name = "lah-node-portable"
-version = "0.1.1"
-description = "智慧控管與監控系統 - 可攜 Node 安裝工具"
+version = "0.1.2"
+description = "智慧控管與監控系統 - Node 沙盒監管工具"
 edition = "2021"
 
 [lib]
@@ -16,6 +16,8 @@ tauri = { version = "2", features = [] }
 tauri-plugin-dialog = "2"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
+flate2 = "1.0"
 zip = { version = "2", default-features = false, features = ["deflate"] }
 regex = "1"
 winreg = "0.56"
@@ -28,4 +30,3 @@ windows-sys = { version = "0.61", features = [
 
 [profile.dev]
 incremental = false
-

@@ -37,7 +37,7 @@ LAH-Updater/
 │   │   ├── ui/             # 彈現式日誌介面 (Modal Overlay、動態高度自適應)
 │   │   ├── build.py / build.bat# 一鍵編譯發布腳本 (輸出至 dist/)
 │   │   └── README.md
-│   ├── node-portable/      # 智慧控管與監控系統 - 可攜 Node 安裝工具 (Tauri 2 / Rust)
+│   ├── node-portable/      # 智慧控管與監控系統 - Node 沙盒監管工具 (Tauri 2 / Rust)
 │   │   ├── src-tauri/      # Rust 核心 (Node 16.20.2 解壓、零全域污染沙盒隔離、WinSW 註冊、pm2-logrotate 預載)
 │   │   ├── ui/             # 純靜態 HTML/JS 介面 (無捲軸緊緻版面、Unicode 4.0 符號向下相容)
 │   │   ├── service/        # WinSW 服務模板與 pm2_service_runner.js
@@ -164,10 +164,10 @@ LAH-Updater/
   python tools\uninstaller\build.py
   # 或執行：.\建立解除安裝工具.bat
   ```
-- **建立可攜 Node 工具**：
+- **建立 Node 沙盒監管工具**：
   ```powershell
   python tools\node-portable\build.py
-  # 或執行：.\建立可攜NODE工具.bat
+  # 或執行：.\建立NODE沙盒監管工具.bat (亦相容 .\建立可攜NODE工具.bat)
   ```
 - **建立自動備份工具**：
   ```powershell

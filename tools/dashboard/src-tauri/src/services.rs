@@ -64,6 +64,22 @@ pub fn get_service_status(svc_name: &str) -> (bool, bool, String) {
     }
 }
 
+pub fn get_service_binary_path(svc_name: &str) -> String {
+    let (ok, stdout, _) = run_cmd_hidden("sc.exe", &["qc", svc_name]);
+    if !ok {
+        return String::new();
+    }
+    for line in stdout.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with("BINARY_PATH_NAME") {
+            if let Some((_, val)) = trimmed.split_once(':') {
+                return val.trim().trim_matches('"').to_string();
+            }
+        }
+    }
+    String::new()
+}
+
 pub fn query_all_system_services() -> Vec<SystemServiceStatus> {
     let defs = [
         (
@@ -85,6 +101,11 @@ pub fn query_all_system_services() -> Vec<SystemServiceStatus> {
                 status,
                 is_running: running,
                 is_installed: installed,
+                binary_path: if installed {
+                    get_service_binary_path(name)
+                } else {
+                    String::new()
+                },
             }
         })
         .collect()

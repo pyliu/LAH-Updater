@@ -7,8 +7,9 @@ pub mod terminal;
 pub mod types;
 
 use std::os::windows::process::CommandExt;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::{OnceLock, RwLock};
 use types::{
     AppInfo, CommandActionResult, HostMetrics, LogContentResult, LogFileInfo, Pm2ProcessInfo,
     SystemServiceStatus,
@@ -46,18 +47,116 @@ pub fn resolve_root_dir() -> PathBuf {
         .unwrap_or_else(|| PathBuf::from(r"C:\AppServ"))
 }
 
-#[tauri::command]
-fn get_app_info() -> AppInfo {
-    let root = resolve_root_dir();
+static CURRENT_ROOT_DIR: OnceLock<RwLock<PathBuf>> = OnceLock::new();
+static CLI_SPECIFIED: OnceLock<bool> = OnceLock::new();
+
+fn get_cli_root_dir() -> Option<PathBuf> {
+    let args: Vec<String> = std::env::args().collect();
+    let mut i = 1;
+    while i < args.len() {
+        if (args[i] == "--root" || args[i] == "-r") && i + 1 < args.len() {
+            let p = PathBuf::from(&args[i + 1]);
+            return Some(p);
+        } else if !args[i].starts_with('-') && i == 1 {
+            let p = PathBuf::from(&args[i]);
+            return Some(p);
+        }
+        i += 1;
+    }
+    None
+}
+
+pub fn get_current_root_dir() -> PathBuf {
+    let lock = CURRENT_ROOT_DIR.get_or_init(|| {
+        if let Some(cli_root) = get_cli_root_dir() {
+            let _ = CLI_SPECIFIED.set(true);
+            return RwLock::new(cli_root);
+        }
+        let _ = CLI_SPECIFIED.set(false);
+        RwLock::new(resolve_root_dir())
+    });
+    lock.read().map(|g| g.clone()).unwrap_or_else(|_| resolve_root_dir())
+}
+
+pub fn set_current_root_dir(new_root: PathBuf) -> AppInfo {
+    let lock = CURRENT_ROOT_DIR.get_or_init(|| RwLock::new(resolve_root_dir()));
+    if let Ok(mut g) = lock.write() {
+        *g = new_root.clone();
+    }
+    // 清除 PM2 快取
+    pm2::invalidate_pm2_cache();
+    // 重置沙盒終端機 Session
+    let _ = terminal::reset_session(&new_root);
+
+    build_app_info(&new_root)
+}
+
+pub fn build_app_info(root: &Path) -> AppInfo {
     let has_apache = root.join("Apache24").is_dir();
     let has_pm2 = root.join("node").join("pm2.cmd").is_file();
     let is_valid = root.join("lah-cmd.bat").is_file() || (has_apache && has_pm2);
+    let cli_specified = *CLI_SPECIFIED.get().unwrap_or(&false);
 
     AppInfo {
         root_dir: root.to_string_lossy().to_string(),
         is_valid_root: is_valid,
         has_apache,
         has_pm2,
+        is_custom: is_valid,
+        cli_specified,
+    }
+}
+
+#[tauri::command]
+fn get_app_info() -> AppInfo {
+    let root = get_current_root_dir();
+    build_app_info(&root)
+}
+
+#[tauri::command]
+fn set_root_dir(path: String) -> Result<AppInfo, String> {
+    let p = PathBuf::from(path.trim());
+    if !p.exists() || !p.is_dir() {
+        return Err(format!("指定之路徑不存在或不是資料夾：{}", path));
+    }
+    let info = set_current_root_dir(p);
+    Ok(info)
+}
+
+#[tauri::command]
+fn reset_to_default_root() -> AppInfo {
+    let default_root = resolve_root_dir();
+    set_current_root_dir(default_root)
+}
+
+#[tauri::command]
+fn pick_root_directory() -> Option<String> {
+    let ps_script = r#"
+Add-Type -AssemblyName System.Windows.Forms
+$dialog = New-Object System.Windows.Forms.FolderBrowserDialog
+$dialog.Description = "請選擇 LAH 智慧控管系統安裝根目錄"
+$dialog.ShowNewFolderButton = $false
+if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
+    Write-Output $dialog.SelectedPath
+}
+"#;
+    let mut cmd = Command::new("powershell.exe");
+    cmd.arg("-NoProfile");
+    cmd.arg("-NonInteractive");
+    cmd.arg("-Command");
+    cmd.arg(ps_script);
+    cmd.creation_flags(services::CREATE_NO_WINDOW);
+
+    match cmd.output() {
+        Ok(out) => {
+            let path = String::from_utf8_lossy(&out.stdout).trim().to_string();
+            if path.is_empty() {
+                None
+            } else {
+                Some(path)
+            }
+        }
+        Err(_) => None,
     }
 }
 
@@ -110,13 +209,13 @@ fn restart_system_service(name: String) -> CommandActionResult {
 
 #[tauri::command]
 fn get_pm2_processes() -> Result<Vec<Pm2ProcessInfo>, String> {
-    let root = resolve_root_dir();
+    let root = get_current_root_dir();
     pm2::query_pm2_processes(&root)
 }
 
 #[tauri::command]
 fn restart_pm2_process(target: String) -> CommandActionResult {
-    let root = resolve_root_dir();
+    let root = get_current_root_dir();
     match pm2::pm2_restart(&root, &target) {
         Ok(msg) => CommandActionResult {
             success: true,
@@ -131,7 +230,7 @@ fn restart_pm2_process(target: String) -> CommandActionResult {
 
 #[tauri::command]
 fn stop_pm2_process(target: String) -> CommandActionResult {
-    let root = resolve_root_dir();
+    let root = get_current_root_dir();
     match pm2::pm2_stop(&root, &target) {
         Ok(msg) => CommandActionResult {
             success: true,
@@ -146,7 +245,7 @@ fn stop_pm2_process(target: String) -> CommandActionResult {
 
 #[tauri::command]
 fn start_pm2_process(target: String) -> CommandActionResult {
-    let root = resolve_root_dir();
+    let root = get_current_root_dir();
     match pm2::pm2_start(&root, &target) {
         Ok(msg) => CommandActionResult {
             success: true,
@@ -161,7 +260,7 @@ fn start_pm2_process(target: String) -> CommandActionResult {
 
 #[tauri::command]
 fn restart_all_services() -> CommandActionResult {
-    let root = resolve_root_dir();
+    let root = get_current_root_dir();
     let mut messages = Vec::new();
 
     // 1. 重啟 PM2 所有進程
@@ -187,20 +286,20 @@ fn restart_all_services() -> CommandActionResult {
 
 #[tauri::command]
 fn get_host_metrics() -> HostMetrics {
-    let root = resolve_root_dir();
+    let root = get_current_root_dir();
     let pm2_procs = pm2::query_pm2_processes(&root).unwrap_or_default();
     sysinfo::query_host_metrics(&root, &pm2_procs)
 }
 
 #[tauri::command]
 fn get_available_logs() -> Vec<LogFileInfo> {
-    let root = resolve_root_dir();
+    let root = get_current_root_dir();
     logs::list_available_logs(&root)
 }
 
 #[tauri::command]
 fn get_api_log_files() -> Vec<LogFileInfo> {
-    let root = resolve_root_dir();
+    let root = get_current_root_dir();
     logs::list_api_log_files(&root)
 }
 
@@ -225,7 +324,7 @@ fn open_log_in_notepad(path: String) -> CommandActionResult {
 
 #[tauri::command]
 fn open_logs_folder() -> CommandActionResult {
-    let root = resolve_root_dir();
+    let root = get_current_root_dir();
     let logs_dir = root.join("logs");
     match logs::open_folder(&logs_dir.to_string_lossy()) {
         Ok(_) => CommandActionResult {
@@ -241,7 +340,7 @@ fn open_logs_folder() -> CommandActionResult {
 
 #[tauri::command]
 fn open_lah_cmd() -> CommandActionResult {
-    let root = resolve_root_dir();
+    let root = get_current_root_dir();
     let bat = root.join("lah-cmd.bat");
     if !bat.is_file() {
         return CommandActionResult {
@@ -287,7 +386,7 @@ fn open_web_frontend() -> CommandActionResult {
 
 #[tauri::command]
 fn check_apache_syntax() -> CommandActionResult {
-    let root = resolve_root_dir();
+    let root = get_current_root_dir();
     let httpd = root.join("Apache24").join("bin").join("httpd.exe");
     if !httpd.is_file() {
         return CommandActionResult {
@@ -331,7 +430,7 @@ fn check_apache_syntax() -> CommandActionResult {
 
 #[tauri::command]
 fn trigger_logrotate() -> CommandActionResult {
-    let root = resolve_root_dir();
+    let root = get_current_root_dir();
     match pm2::pm2_trigger_logrotate(&root) {
         Ok(msg) => CommandActionResult {
             success: true,
@@ -346,7 +445,7 @@ fn trigger_logrotate() -> CommandActionResult {
 
 #[tauri::command]
 fn get_core_configs() -> Vec<types::ConfigFileInfo> {
-    let root = resolve_root_dir();
+    let root = get_current_root_dir();
     configs::list_core_configs(&root)
 }
 
@@ -357,7 +456,7 @@ fn read_config_content(path: String) -> Result<String, String> {
 
 #[tauri::command]
 fn save_config_content(path: String, content: String) -> types::ConfigSaveResult {
-    let root = resolve_root_dir();
+    let root = get_current_root_dir();
     configs::write_config_file(&root, &path, &content)
 }
 
@@ -383,7 +482,7 @@ fn get_config_example_content(path: String) -> Result<String, String> {
 
 #[tauri::command]
 fn terminal_send_command(command: String) -> CommandActionResult {
-    let root = resolve_root_dir();
+    let root = get_current_root_dir();
     terminal::send_command(&root, &command)
 }
 
@@ -394,13 +493,13 @@ fn terminal_poll_output() -> String {
 
 #[tauri::command]
 fn terminal_reset_session() -> CommandActionResult {
-    let root = resolve_root_dir();
+    let root = get_current_root_dir();
     terminal::reset_session(&root)
 }
 
 #[tauri::command]
 fn terminal_ensure_started() -> CommandActionResult {
-    let root = resolve_root_dir();
+    let root = get_current_root_dir();
     match terminal::ensure_terminal_started(&root) {
         Ok(_) => CommandActionResult {
             success: true,
@@ -420,6 +519,7 @@ fn terminal_set_encoding(encoding: String) -> CommandActionResult {
 
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             use tauri::Manager;
             if let Some(window) = app.get_webview_window("main") {
@@ -429,6 +529,9 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             get_app_info,
+            set_root_dir,
+            reset_to_default_root,
+            pick_root_directory,
             get_system_services,
             start_system_service,
             stop_system_service,

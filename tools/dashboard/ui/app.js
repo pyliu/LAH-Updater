@@ -100,6 +100,14 @@ const state = {
 const el = {
   rootDirText: document.getElementById('rootDirText'),
   rootBadge: document.getElementById('rootBadge'),
+  rootDot: document.getElementById('rootDot'),
+  switchRootModal: document.getElementById('switchRootModal'),
+  inputCustomRoot: document.getElementById('inputCustomRoot'),
+  btnBrowseRootDir: document.getElementById('btnBrowseRootDir'),
+  quickRootList: document.getElementById('quickRootList'),
+  btnResetDefaultRoot: document.getElementById('btnResetDefaultRoot'),
+  btnCancelSwitchRoot: document.getElementById('btnCancelSwitchRoot'),
+  btnConfirmSwitchRoot: document.getElementById('btnConfirmSwitchRoot'),
   selectPollingInterval: document.getElementById('selectPollingInterval'),
   btnRestartAll: document.getElementById('btnRestartAll'),
   btnTogglePolling: document.getElementById('btnTogglePolling'),
@@ -416,18 +424,25 @@ const initApp = async () => {
     }
   });
   try {
-    const info = await invoke('get_app_info');
-    if (info) {
-      state.rootDir = info.root_dir;
-      el.rootDirText.textContent = info.root_dir;
-      if (info.is_valid_root) {
-        el.rootBadge.title = `已鎖定標準安裝根目錄 (${info.root_dir})`;
-      } else {
-        el.rootBadge.title = `注意：目錄缺少標準環境腳本 (${info.root_dir})`;
+    let info = await invoke('get_app_info');
+    if (info && !info.cli_specified) {
+      const savedRoot = localStorage.getItem('lah_dashboard_custom_root');
+      if (savedRoot && savedRoot.trim() && savedRoot.trim().toLowerCase() !== info.root_dir.toLowerCase()) {
+        try {
+          const customInfo = await invoke('set_root_dir', { path: savedRoot.trim() });
+          if (customInfo) {
+            info = customInfo;
+          }
+        } catch (e) {
+          console.warn('[Root] 套用上次儲存目錄失敗，維持預設：', e);
+        }
       }
     }
+    if (info) {
+      updateRootDirDisplay(info);
+    }
   } catch (err) {
-    el.rootDirText.textContent = '無法辨識安裝目錄';
+    if (el.rootDirText) el.rootDirText.textContent = '無法辨識安裝目錄';
   }
 
   // 綁定分頁切換
@@ -441,6 +456,28 @@ const initApp = async () => {
   // 綁定全域按鈕
   el.btnTogglePolling.addEventListener('click', togglePolling);
   el.btnManualRefresh.addEventListener('click', () => refreshAllData(true));
+  if (el.rootBadge) {
+    el.rootBadge.addEventListener('click', openSwitchRootModal);
+  }
+  if (el.btnBrowseRootDir) {
+    el.btnBrowseRootDir.addEventListener('click', handleBrowseRoot);
+  }
+  if (el.btnConfirmSwitchRoot) {
+    el.btnConfirmSwitchRoot.addEventListener('click', handleConfirmSwitchRoot);
+  }
+  if (el.btnCancelSwitchRoot) {
+    el.btnCancelSwitchRoot.addEventListener('click', closeSwitchRootModal);
+  }
+  if (el.btnResetDefaultRoot) {
+    el.btnResetDefaultRoot.addEventListener('click', handleResetDefaultRoot);
+  }
+  if (el.inputCustomRoot) {
+    el.inputCustomRoot.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') handleConfirmSwitchRoot();
+      if (e.key === 'Escape') closeSwitchRootModal();
+    });
+  }
+
   el.btnRestartAll.addEventListener('click', () => {
     showConfirmModal(
       '一鍵重啟全部服務確認',
@@ -936,6 +973,148 @@ const initApp = async () => {
 // ==========================================================================
 // 2. 分頁切換
 // ==========================================================================
+// ==========================================================================
+// 1.1 監控安裝目錄切換管理
+// ==========================================================================
+const updateRootDirDisplay = (info) => {
+  state.rootDir = info.root_dir;
+  if (el.rootDirText) el.rootDirText.textContent = info.root_dir;
+  const rootDot = document.getElementById('rootDot');
+  if (info.is_valid_root) {
+    if (el.rootBadge) el.rootBadge.title = `點擊切換監控安裝目錄 (當前：${info.root_dir})`;
+    if (rootDot) {
+      rootDot.style.backgroundColor = 'var(--success)';
+      rootDot.style.boxShadow = '0 0 6px var(--success)';
+    }
+  } else {
+    if (el.rootBadge) el.rootBadge.title = `注意：目錄缺少標準環境腳本 (${info.root_dir})，點擊切換`;
+    if (rootDot) {
+      rootDot.style.backgroundColor = 'var(--warning)';
+      rootDot.style.boxShadow = '0 0 6px var(--warning)';
+    }
+  }
+};
+
+const openSwitchRootModal = () => {
+  if (!el.switchRootModal) return;
+  el.inputCustomRoot.value = state.rootDir || '';
+  renderQuickRoots();
+  el.switchRootModal.classList.remove('hidden');
+  el.inputCustomRoot.focus();
+};
+
+const closeSwitchRootModal = () => {
+  if (el.switchRootModal) el.switchRootModal.classList.add('hidden');
+};
+
+const renderQuickRoots = () => {
+  if (!el.quickRootList) return;
+  const defaults = ['C:\\AppServ', 'D:\\AppServ', 'C:\\Temp\\WTF2'];
+  let history = [];
+  try {
+    const raw = localStorage.getItem('lah_dashboard_root_history');
+    if (raw) history = JSON.parse(raw);
+  } catch (e) {}
+
+  const allCandidates = Array.from(new Set([state.rootDir, ...defaults, ...history].filter(Boolean)));
+  el.quickRootList.innerHTML = '';
+  allCandidates.forEach((cand) => {
+    const isActive = cand.toLowerCase() === (state.rootDir || '').toLowerCase();
+    const btn = document.createElement('div');
+    btn.className = `root-candidate-btn ${isActive ? 'active' : ''}`;
+    btn.innerHTML = `
+      <span>📁 ${cand}</span>
+      ${isActive ? '<span style="font-size: 11px; color: var(--primary);">目前監控中</span>' : ''}
+    `;
+    btn.addEventListener('click', () => {
+      el.inputCustomRoot.value = cand;
+    });
+    btn.addEventListener('dblclick', async () => {
+      el.inputCustomRoot.value = cand;
+      await handleConfirmSwitchRoot();
+    });
+    el.quickRootList.appendChild(btn);
+  });
+};
+
+const handleBrowseRoot = async () => {
+  try {
+    let selected = null;
+    const dialog = window.__TAURI__?.plugin?.dialog || window.__TAURI__?.dialog;
+    if (dialog && dialog.open) {
+      selected = await dialog.open({ directory: true, multiple: false });
+    }
+    if (!selected) {
+      selected = await invoke('pick_root_directory');
+    }
+    if (selected) {
+      el.inputCustomRoot.value = selected;
+    }
+  } catch (err) {
+    console.error('[BrowseRoot] 瀏覽目錄失敗：', err);
+    showToast(`瀏覽目錄失敗：${err}`);
+  }
+};
+
+const handleConfirmSwitchRoot = async () => {
+  const targetPath = el.inputCustomRoot.value.trim();
+  if (!targetPath) {
+    showToast('請輸入或選擇有效目錄路徑！');
+    return;
+  }
+  showToast(`正在切換至：${targetPath}...`);
+  try {
+    const newInfo = await invoke('set_root_dir', { path: targetPath });
+    if (newInfo) {
+      updateRootDirDisplay(newInfo);
+      localStorage.setItem('lah_dashboard_custom_root', newInfo.root_dir);
+
+      try {
+        let history = [];
+        const raw = localStorage.getItem('lah_dashboard_root_history');
+        if (raw) history = JSON.parse(raw);
+        history = [newInfo.root_dir, ...history.filter((p) => p.toLowerCase() !== newInfo.root_dir.toLowerCase())].slice(0, 5);
+        localStorage.setItem('lah_dashboard_root_history', JSON.stringify(history));
+      } catch (e) {}
+
+      closeSwitchRootModal();
+      showToast(`已成功切換監控目錄至：${newInfo.root_dir}`);
+
+      await reloadAllAfterRootChange();
+    }
+  } catch (err) {
+    console.error('[SwitchRoot] 切換目錄失敗：', err);
+    showToast(`切換目錄失敗：${err}`);
+  }
+};
+
+const handleResetDefaultRoot = async () => {
+  showToast('正在還原自動探測目錄...');
+  try {
+    const newInfo = await invoke('reset_to_default_root');
+    if (newInfo) {
+      updateRootDirDisplay(newInfo);
+      localStorage.removeItem('lah_dashboard_custom_root');
+      closeSwitchRootModal();
+      showToast(`已還原至預設探測目錄：${newInfo.root_dir}`);
+      await reloadAllAfterRootChange();
+    }
+  } catch (err) {
+    console.error('[ResetRoot] 還原預設失敗：', err);
+    showToast(`還原預設目錄失敗：${err}`);
+  }
+};
+
+const reloadAllAfterRootChange = async () => {
+  await refreshAllData(true);
+  if (state.activeTab === 'tab-logs') {
+    if (typeof loadAvailableLogsList === 'function') await loadAvailableLogsList();
+  }
+  if (state.activeTab === 'tab-configs') {
+    if (typeof loadCoreConfigsList === 'function') await loadCoreConfigsList();
+  }
+};
+
 const switchTab = (tabId) => {
   state.activeTab = tabId;
   el.tabBtns.forEach((btn) => {
@@ -998,10 +1177,19 @@ const renderSystemServicesList = (list) => {
       </div>
     `;
 
+    let pathWarning = '';
+    if (s.binary_path && state.rootDir) {
+      const normBin = s.binary_path.toLowerCase().replace(/\\/g, '/');
+      const normRoot = state.rootDir.toLowerCase().replace(/\\/g, '/');
+      if (!normBin.includes(normRoot)) {
+        pathWarning = `<div style="font-size: 11px; color: var(--warning); margin-top: 2px;" title="此 Windows 服務註冊路徑為：${s.binary_path}，與當前儀表板監控目錄 (${state.rootDir}) 不同">⚠️ 服務註冊於其他目錄</div>`;
+      }
+    }
+
     html += `
       <tr>
         <td><span class="service-name">${s.name}</span></td>
-        <td><span class="service-desc">${s.display_name}</span></td>
+        <td><span class="service-desc">${s.display_name}</span>${pathWarning}</td>
         <td>${statusPill}</td>
         <td>${actions}</td>
       </tr>

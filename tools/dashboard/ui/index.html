@@ -22,9 +22,10 @@
         </div>
         <div class="brand-info">
           <h1 class="brand-title">智慧控管與監控系統 - 管理儀表板</h1>
-          <div class="root-badge" id="rootBadge" title="當前安裝根目錄">
-            <span class="dot"></span>
+          <div class="root-badge" id="rootBadge" title="點擊切換監控安裝目錄 (支援任意自訂本機路徑)">
+            <span class="dot" id="rootDot"></span>
             <span class="path-text" id="rootDirText">載入中...</span>
+            <span class="switch-icon" style="font-size: 11px; opacity: 0.8; margin-left: 2px;">📁</span>
           </div>
         </div>
       </div>
@@ -565,6 +566,41 @@
 
   <!-- 全域訊息提示 Toast -->
   <div id="toast" class="toast"></div>
+
+  <!-- 切換監控安裝目錄 Modal -->
+  <div id="switchRootModal" class="modal-overlay hidden">
+    <div class="modal-card" style="max-width: 520px;">
+      <h3 class="modal-title">切換監控安裝目錄</h3>
+      <p class="modal-body" style="font-size: 13px; color: var(--text-muted); margin-bottom: 14px;">
+        您可以指定管理儀表板欲監控的系統根目錄，支援任意本機路徑，無需將本工具放置於目標資料夾內。
+      </p>
+
+      <div style="margin-bottom: 14px;">
+        <label style="font-size: 12px; font-weight: 600; display: block; margin-bottom: 6px;">指定安裝根目錄路徑：</label>
+        <div style="display: flex; gap: 8px;">
+          <input type="text" id="inputCustomRoot" class="form-input" placeholder="例如 C:\AppServ 或 C:\Temp\WTF2" style="flex: 1; padding: 7px 10px; font-family: var(--font-mono); font-size: 13px; border: 1px solid var(--border-color); border-radius: 6px; background: var(--bg-main); color: var(--text-main);" />
+          <button class="btn btn-secondary" id="btnBrowseRootDir" title="瀏覽本機資料夾" style="white-space: nowrap;">
+            📁 瀏覽...
+          </button>
+        </div>
+      </div>
+
+      <div style="margin-bottom: 16px;">
+        <label style="font-size: 12px; font-weight: 600; display: block; margin-bottom: 6px;">常用與候選目錄清單：</label>
+        <div id="quickRootList" style="display: flex; flex-direction: column; gap: 6px; max-height: 140px; overflow-y: auto;">
+          <!-- 動態載入快速選取項目 -->
+        </div>
+      </div>
+
+      <div class="modal-actions" style="display: flex; justify-content: space-between; align-items: center;">
+        <button class="btn btn-secondary" id="btnResetDefaultRoot" title="還原至系統自動探測之目錄">🔄 還原自動探測</button>
+        <div style="display: flex; gap: 8px;">
+          <button class="btn btn-secondary" id="btnCancelSwitchRoot">取消</button>
+          <button class="btn btn-primary" id="btnConfirmSwitchRoot">確認切換</button>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <!-- 確認對話視窗 Modal -->
   <div id="confirmModal" class="modal-overlay hidden">

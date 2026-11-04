@@ -499,7 +499,7 @@
       <li class="nav-category">維運工具與模組</li>
       <li class="nav-item"><a href="#updater-overview" class="nav-link">LAH-Updater 工具套件總覽</a></li>
       <li class="nav-item"><a href="#updater-overview" class="nav-link" onclick="switchTab('tab-updater')">1. 自動安裝與更新工具 (updater)</a></li>
-      <li class="nav-item"><a href="#updater-overview" class="nav-link" onclick="switchTab('tab-portable')">2. 可攜 Node 安裝工具</a></li>
+      <li class="nav-item"><a href="#updater-overview" class="nav-link" onclick="switchTab('tab-portable')">2. Node 沙盒監管工具</a></li>
       <li class="nav-item"><a href="#updater-overview" class="nav-link" onclick="switchTab('tab-uninstaller')">3. 解除安裝工具 (uninstaller)</a></li>
       <li class="nav-item"><a href="#updater-overview" class="nav-link" onclick="switchTab('tab-backuper')">4. 自動備份工具 (backuper)</a></li>
       <li class="nav-item"><a href="#updater-overview" class="nav-link" onclick="switchTab('tab-pack')">5. 原始碼打包腳本 (pack.py)</a></li>
@@ -959,9 +959,9 @@ ode 等雙層</text>
 
       <!-- Tab 2: node-portable -->
       <div id="tab-portable" class="tab-content">
-        <h3 style="color: var(--accent-purple); margin-bottom: 10px;">智慧控管與監控系統 - 可攜 Node 安裝工具 (node-portable)</h3>
+        <h3 style="color: var(--accent-purple); margin-bottom: 10px;">智慧控管與監控系統 - Node 沙盒監管工具 (node-portable)</h3>
         <p style="font-size: 0.92rem; color: var(--text-light); margin-bottom: 14px;">
-          執行檔產物：<code>dist/智慧控管與監控系統 - 可攜 Node 安裝工具.exe</code> (約 11.50 MB)<br>
+          執行檔產物：<code>dist/智慧控管與監控系統 - Node 沙盒監管工具.exe</code> (約 11.50 MB)<br>
           核心職責：專注於極速離線安裝綠色版 Node.js 16.20.2 與 PM2 5.3.1，採零全域污染沙盒隔離模式，建立開機自啟 WinSW 系統服務 (<code>PM2_Portable_Service</code>)，並掛載 <code>pm2-logrotate</code>。
         </p>
 
@@ -983,7 +983,7 @@ ode 等雙層</text>
 python tools/node-portable/build.py</code>
               <button class="copy-btn" onclick="copyCode(this)">複製</button>
             </div>
-            <p style="font-size: 0.8rem; color: var(--text-muted);">編譯後產出自動複製至 <code>dist/智慧控管與監控系統 - 可攜 Node 安裝工具.exe</code>。</p>
+            <p style="font-size: 0.8rem; color: var(--text-muted);">編譯後產出自動複製至 <code>dist/智慧控管與監控系統 - Node 沙盒監管工具.exe</code>。</p>
           </div>
         </div>
       </div>

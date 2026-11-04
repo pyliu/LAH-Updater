@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 r"""
-智慧控管與監控系統 - 可攜 Node 安裝工具 (node-portable)
+智慧控管與監控系統 - Node 沙盒監管工具 (node-portable)
 Rust (Tauri 2) 單一執行檔打包輔助腳本 (build.py)
 """
 import os
@@ -17,7 +17,7 @@ if sys.stderr and hasattr(sys.stderr, "reconfigure"):
 
 def main():
     print("=" * 60)
-    print("正在編譯打包「智慧控管與監控系統 - 可攜 Node 安裝工具 (node-portable)」...")
+    print("正在編譯打包「智慧控管與監控系統 - Node 沙盒監管工具 (node-portable)」...")
     print("=" * 60)
 
     script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -70,18 +70,19 @@ def main():
             dist_dir = os.path.join(root_dir, "dist")
             os.makedirs(dist_dir, exist_ok=True)
 
-            out_exe_name = "智慧控管與監控系統 - 可攜 Node 安裝工具.exe"
+            out_exe_name = "智慧控管與監控系統 - Node 沙盒監管工具.exe"
             out_exe_path = os.path.join(dist_dir, out_exe_name)
 
             shutil.copy2(built_exe, out_exe_path)
 
-            # 確保 dist 目錄僅保留中文檔名之發布執行檔，若存在舊版英文檔名則主動清除
-            legacy_std_path = os.path.join(dist_dir, "lah-node-portable.exe")
-            if os.path.isfile(legacy_std_path):
-                try:
-                    os.remove(legacy_std_path)
-                except Exception:
-                    pass
+            # 確保 dist 目錄僅保留中文檔名之發布執行檔，若存在舊版名稱則主動清除
+            for old_name in ["lah-node-portable.exe", "智慧控管與監控系統 - 可攜 Node 安裝工具.exe"]:
+                old_p = os.path.join(dist_dir, old_name)
+                if os.path.isfile(old_p):
+                    try:
+                        os.remove(old_p)
+                    except Exception:
+                        pass
 
             size_mb = os.path.getsize(out_exe_path) / (1024 * 1024)
             print(f"[OK] 編譯成功！二進位檔案大小：{size_mb:.2f} MB")
@@ -95,4 +96,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

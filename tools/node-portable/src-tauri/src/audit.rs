@@ -225,7 +225,7 @@ fn format_audit_report_text(
 ) -> String {
     let mut s = String::new();
     s.push_str("================================================================================\r\n");
-    s.push_str("智慧管控系統 - 可攜 Node.js 沙盒安全防護與邊界自檢報告\r\n");
+    s.push_str("智慧控管與監控系統 - Node 沙盒安全防護與邊界自檢報告\r\n");
     s.push_str(&format!("檢測時間: {}\r\n", timestamp));
     s.push_str(&format!("安裝根目錄: {}\r\n", root_dir));
     s.push_str("依據規範: docs/security/node-portable-sandbox-specification.md\r\n");

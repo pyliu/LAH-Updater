@@ -15,7 +15,7 @@ use std::time::{Duration, Instant};
 
 static PM2_JLIST_CACHE: OnceLock<Mutex<Option<(Instant, Vec<Pm2ProcessInfo>)>>> = OnceLock::new();
 
-fn invalidate_pm2_cache() {
+pub fn invalidate_pm2_cache() {
     if let Some(lock) = PM2_JLIST_CACHE.get() {
         if let Ok(mut guard) = lock.lock() {
             *guard = None;
