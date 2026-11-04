@@ -528,6 +528,41 @@ def verify_zip_integrity(zip_path, package_type, base_dir=None):
     return True
 
 
+def prepare_server_prod_modules(messenger_dir):
+    """於暫存目錄以 yarn 僅安裝正式環境相依 (--production)，排除 devDependencies 以精簡 node_modules。
+    better-sqlite3 原生模組 (build/) 由來源 node_modules 複製（避免打包時需連網編譯/下載）。
+    成功回傳暫存目錄路徑；任何失敗回傳 None（呼叫端會退回打包完整 node_modules）。"""
+    import tempfile
+    src_mod = os.path.join(messenger_dir, "node_modules")
+    pkg = os.path.join(messenger_dir, "package.json")
+    lock = os.path.join(messenger_dir, "yarn.lock")
+    if not (os.path.isfile(pkg) and os.path.isfile(lock)):
+        print("[WARN] 缺少 package.json 或 yarn.lock，無法精簡 node_modules，退回完整打包。")
+        return None
+    stage = os.path.join(tempfile.gettempdir(), "lah-wss-prod-modules")
+    try:
+        shutil.rmtree(stage, ignore_errors=True)
+        os.makedirs(stage, exist_ok=True)
+        shutil.copy2(pkg, stage)
+        shutil.copy2(lock, stage)
+        print("[INFO] 正在以 yarn --production 產生精簡版即時通 node_modules ...")
+        ret = subprocess.run("yarn install --production --frozen-lockfile --ignore-scripts --silent", cwd=stage, shell=True)
+        if ret.returncode != 0:
+            print(f"[WARN] yarn 安裝失敗（回傳碼 {ret.returncode}），退回完整打包。")
+            return None
+        # 複製 better-sqlite3 已編譯之原生模組
+        native_src = os.path.join(src_mod, "better-sqlite3", "build")
+        native_dst = os.path.join(stage, "node_modules", "better-sqlite3", "build")
+        if os.path.isdir(os.path.join(stage, "node_modules", "better-sqlite3")):
+            if not os.path.isfile(os.path.join(native_src, "Release", "better_sqlite3.node")):
+                print("[WARN] 來源 node_modules 缺少 better_sqlite3.node，退回完整打包。")
+                return None
+            shutil.copytree(native_src, native_dst, dirs_exist_ok=True)
+        return stage
+    except Exception as e:
+        print(f"[WARN] 產生精簡 node_modules 發生例外：{e}，退回完整打包。")
+        return None
+
 def build_zip_package(title, base_dir, zip_path, include_patterns, exclude_patterns, pre_pack_validator=None):
     """建立 ZIP 壓縮包（若目標已存在則先刪除重建）"""
     print("-" * 60)
@@ -1054,7 +1089,11 @@ def main():
             print(f"[WARN] 找不到即時通伺服器 node_modules 目錄：{server_mod_dir}，跳過打包。")
         else:
             server_mod_zip = os.path.join(node_modules_dir, "lah-messenger-server-node_modules.zip")
-            if not build_zip_package("即時通訊核心套件 (node_modules/lah-messenger-server-node_modules.zip)", messenger_dir, server_mod_zip, ["node_modules"], NODE_MODULES_EXCLUDES):
+            pack_base = prepare_server_prod_modules(messenger_dir) or messenger_dir
+            ok = build_zip_package("即時通訊核心套件 (node_modules/lah-messenger-server-node_modules.zip)", pack_base, server_mod_zip, ["node_modules"], NODE_MODULES_EXCLUDES)
+            if pack_base != messenger_dir:
+                shutil.rmtree(pack_base, ignore_errors=True)
+            if not ok:
                 sys.exit(1)
 
     # 8. 打包 可攜式 Node.js 綠色環境 -> base/node.zip
