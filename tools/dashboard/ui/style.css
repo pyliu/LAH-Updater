@@ -1189,6 +1189,7 @@ body {
   pointer-events: none;
   user-select: none;
   z-index: 1;
+  white-space: normal;
 }
 
 /* 隱藏底層捲軸視覺但保留捲軸寬度佔位，確保與 Textarea 換行寬度 100% 一致 */
@@ -1225,7 +1226,7 @@ body {
   letter-spacing: inherit;
   word-spacing: inherit;
   tab-size: inherit;
-  white-space: inherit;
+  white-space: pre-wrap;
   word-wrap: inherit;
   overflow-wrap: inherit;
   color: var(--editor-text);
@@ -1279,7 +1280,11 @@ body {
   cursor: default;
 }
 
-.code-backdrop.no-wrap,
+.code-backdrop.no-wrap {
+  overflow-x: auto;
+}
+
+.code-backdrop.no-wrap .code-highlight,
 .config-textarea.nowrap,
 .config-textarea.no-wrap {
   white-space: pre;
