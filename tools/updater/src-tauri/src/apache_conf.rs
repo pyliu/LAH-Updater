@@ -357,7 +357,7 @@ pub fn configure_apache_fcgi_proxy(apache_dir: &Path, root_dir: &Path, php85_dir
                 </If>\n\
             </FilesMatch>\n\
         </Directory>\n\
-        <Proxy \"fcgi://127.0.0.1:8085/\" enablereuse=on max=16>\n\
+        <Proxy \"fcgi://127.0.0.1:8085/\" enablereuse=off max=16>\n\
             ProxySet timeout=300\n\
         </Proxy>\n"
     );
@@ -576,7 +576,7 @@ fn build_mpm_winnt_block() -> String {
     format!(
         "{MPM_WINNT_BEGIN}\n\
 <IfModule mpm_winnt_module>\n\
-    ThreadsPerChild        150\n\
+    ThreadsPerChild        250\n\
     MaxConnectionsPerChild 10000\n\
     MaxMemFree             2048\n\
 </IfModule>\n\
