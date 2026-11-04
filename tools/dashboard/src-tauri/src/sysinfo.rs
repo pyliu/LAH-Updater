@@ -1,6 +1,7 @@
 use crate::types::{
     HostMetrics, LahMemoryMetrics, NetworkMetrics, Pm2ProcessInfo, PortStatus, ServiceMemoryItem,
 };
+use std::collections::HashSet;
 use std::ffi::c_void;
 use std::net::{SocketAddr, TcpStream};
 use std::path::Path;
@@ -117,6 +118,28 @@ struct SYSTEM_PROCESS_INFO {
     private_page_count: usize,
 }
 
+#[repr(C)]
+struct MIB_TCPROW_OWNER_PID {
+    dw_state: u32,
+    dw_local_addr: u32,
+    dw_local_port: u32,
+    dw_remote_addr: u32,
+    dw_remote_port: u32,
+    dw_owning_pid: u32,
+}
+
+#[repr(C)]
+struct MIB_TCP6ROW_OWNER_PID {
+    uc_local_addr: [u8; 16],
+    dw_local_scope_id: u32,
+    dw_local_port: u32,
+    uc_remote_addr: [u8; 16],
+    dw_remote_scope_id: u32,
+    dw_remote_port: u32,
+    dw_state: u32,
+    dw_owning_pid: u32,
+}
+
 #[link(name = "iphlpapi")]
 #[link(name = "ntdll")]
 extern "system" {
@@ -134,6 +157,14 @@ extern "system" {
     ) -> i32;
     fn GetIfTable2(Table: *mut *mut MIB_IF_TABLE2) -> u32;
     fn FreeMibTable(Memory: *mut c_void);
+    fn GetExtendedTcpTable(
+        p_tcp_table: *mut c_void,
+        pdw_size: *mut u32,
+        b_order: i32,
+        ul_af: u32,
+        table_class: u32,
+        reserved: u32,
+    ) -> u32;
     fn NtQuerySystemInformation(
         SystemInformationClass: u32,
         SystemInformation: *mut c_void,
@@ -395,6 +426,60 @@ pub fn is_port_listening(port: u16, host: &str, timeout_ms: u64) -> bool {
     false
 }
 
+pub fn get_listening_tcp_ports() -> HashSet<u16> {
+    let mut ports = HashSet::new();
+    unsafe {
+        // 1. IPv4 監聽連接埠 (AF_INET = 2, TCP_TABLE_OWNER_PID_LISTENER = 3)
+        let mut size: u32 = 0;
+        let _ = GetExtendedTcpTable(std::ptr::null_mut(), &mut size, 0, 2, 3, 0);
+        if size > 0 {
+            let mut buf: Vec<u8> = vec![0; size as usize];
+            if GetExtendedTcpTable(buf.as_mut_ptr() as *mut c_void, &mut size, 0, 2, 3, 0) == 0 {
+                let num_entries = *(buf.as_ptr() as *const u32);
+                let row_size = std::mem::size_of::<MIB_TCPROW_OWNER_PID>();
+                let mut offset = 4usize;
+                for _ in 0..num_entries {
+                    if offset + row_size <= buf.len() {
+                        let row = &*(buf.as_ptr().add(offset) as *const MIB_TCPROW_OWNER_PID);
+                        let port = u16::from_be(row.dw_local_port as u16);
+                        if port > 0 {
+                            ports.insert(port);
+                        }
+                        offset += row_size;
+                    } else {
+                        break;
+                    }
+                }
+            }
+        }
+
+        // 2. IPv6 監聽連接埠 (AF_INET6 = 23, TCP_TABLE_OWNER_PID_LISTENER = 3)
+        let mut size6: u32 = 0;
+        let _ = GetExtendedTcpTable(std::ptr::null_mut(), &mut size6, 0, 23, 3, 0);
+        if size6 > 0 {
+            let mut buf6: Vec<u8> = vec![0; size6 as usize];
+            if GetExtendedTcpTable(buf6.as_mut_ptr() as *mut c_void, &mut size6, 0, 23, 3, 0) == 0 {
+                let num_entries = *(buf6.as_ptr() as *const u32);
+                let row_size = std::mem::size_of::<MIB_TCP6ROW_OWNER_PID>();
+                let mut offset = 4usize;
+                for _ in 0..num_entries {
+                    if offset + row_size <= buf6.len() {
+                        let row = &*(buf6.as_ptr().add(offset) as *const MIB_TCP6ROW_OWNER_PID);
+                        let port = u16::from_be(row.dw_local_port as u16);
+                        if port > 0 {
+                            ports.insert(port);
+                        }
+                        offset += row_size;
+                    } else {
+                        break;
+                    }
+                }
+            }
+        }
+    }
+    ports
+}
+
 pub fn query_host_metrics(root_dir: &Path, pm2_processes: &[Pm2ProcessInfo]) -> HostMetrics {
     let cpu_usage = calculate_cpu_usage();
     let (mem_total, mem_used, mem_load_pct) = get_memory_info();
@@ -440,9 +525,15 @@ pub fn query_host_metrics(root_dir: &Path, pm2_processes: &[Pm2ProcessInfo]) -> 
         (8085, "PHP 8.5 FastCGI 核心 (Port 8085)"),
     ];
 
+    let listening_set = get_listening_tcp_ports();
     let mut ports = Vec::new();
     for (port, name) in ports_def {
-        let is_listening = is_port_listening(port, "127.0.0.1", 120);
+        let is_listening = if !listening_set.is_empty() {
+            listening_set.contains(&port)
+        } else {
+            // 安全回退：若 Windows 原生查表異常，改以 TCP 連線探測 (超時放寬至 1000ms)
+            is_port_listening(port, "127.0.0.1", 1000)
+        };
         ports.push(PortStatus {
             port,
             name: name.to_string(),
