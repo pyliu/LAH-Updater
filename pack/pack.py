@@ -528,9 +528,10 @@ def verify_zip_integrity(zip_path, package_type, base_dir=None):
     return True
 
 
-def prepare_server_prod_modules(messenger_dir):
+def prepare_server_prod_modules(messenger_dir, stage_name="lah-wss-prod-modules", label="即時通"):
     """於暫存目錄以 yarn 僅安裝正式環境相依 (--production)，排除 devDependencies 以精簡 node_modules。
-    better-sqlite3 原生模組 (build/) 由來源 node_modules 複製（避免打包時需連網編譯/下載）。
+    better-sqlite3 原生模組 (build/) 由來源 node_modules 複製（避免打包時需連網編譯/下載；專案未使用該套件時自動略過）。
+    同時供即時通伺服器與 LAH-FE 使用，以 stage_name / label 區分暫存目錄與訊息。
     成功回傳暫存目錄路徑；任何失敗回傳 None（呼叫端會退回打包完整 node_modules）。"""
     import tempfile
     src_mod = os.path.join(messenger_dir, "node_modules")
@@ -539,13 +540,13 @@ def prepare_server_prod_modules(messenger_dir):
     if not (os.path.isfile(pkg) and os.path.isfile(lock)):
         print("[WARN] 缺少 package.json 或 yarn.lock，無法精簡 node_modules，退回完整打包。")
         return None
-    stage = os.path.join(tempfile.gettempdir(), "lah-wss-prod-modules")
+    stage = os.path.join(tempfile.gettempdir(), stage_name)
     try:
         shutil.rmtree(stage, ignore_errors=True)
         os.makedirs(stage, exist_ok=True)
         shutil.copy2(pkg, stage)
         shutil.copy2(lock, stage)
-        print("[INFO] 正在以 yarn --production 產生精簡版即時通 node_modules ...")
+        print("[INFO] 正在以 yarn --production 產生精簡版{label} node_modules ...")
         ret = subprocess.run("yarn install --production --frozen-lockfile --ignore-scripts --silent", cwd=stage, shell=True)
         if ret.returncode != 0:
             print(f"[WARN] yarn 安裝失敗（回傳碼 {ret.returncode}），退回完整打包。")
@@ -1079,7 +1080,11 @@ def main():
             print(f"[WARN] 找不到前端 node_modules 目錄：{fe_mod_dir}，跳過打包。")
         else:
             fe_mod_zip = os.path.join(node_modules_dir, "LAH-NUXTJS-node_modules.zip")
-            if not build_zip_package("前端核心套件 (node_modules/LAH-NUXTJS-node_modules.zip)", fe_dir, fe_mod_zip, ["node_modules"], FE_NODE_MODULES_EXCLUDES):
+            fe_pack_base = prepare_server_prod_modules(fe_dir, "lah-fe-prod-modules", "前端") or fe_dir
+            fe_ok = build_zip_package("前端核心套件 (node_modules/LAH-NUXTJS-node_modules.zip)", fe_pack_base, fe_mod_zip, ["node_modules"], FE_NODE_MODULES_EXCLUDES)
+            if fe_pack_base != fe_dir:
+                shutil.rmtree(fe_pack_base, ignore_errors=True)
+            if not fe_ok:
                 sys.exit(1)
 
     # 7. 打包 即時通伺服器核心套件 -> node_modules/lah-messenger-server-node_modules.zip
