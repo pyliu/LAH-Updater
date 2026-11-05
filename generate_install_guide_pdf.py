@@ -314,8 +314,8 @@ HTML_CONTENT = f"""<!DOCTYPE html>
     background: #ffffff;
     border: 1px solid #e2e8f0;
     border-radius: 6px;
-    padding: 6px 10px;
-    margin-bottom: 6px;
+    padding: 4.5px 8px;
+    margin-bottom: 4px;
     box-shadow: 0 1px 2px rgba(0,0,0,0.02);
   }}
 
@@ -367,10 +367,11 @@ HTML_CONTENT = f"""<!DOCTYPE html>
   }}
 
   th, td {{
-    padding: 3.5px 7px;
+    padding: 2.2px 5.5px;
     text-align: left;
     border: 1px solid #cbd5e1;
-    line-height: 1.35;
+    line-height: 1.3;
+    font-size: 7.6pt;
   }}
 
   th {{
@@ -466,18 +467,18 @@ HTML_CONTENT = f"""<!DOCTYPE html>
       <h1 class="cover-title">桃園市各地政事務所<br>智慧控管與監控系統 (LAH)</h1>
       <div class="cover-subtitle">伺服器端安裝與版本升級標準操作手冊 (SOP)</div>
       <div class="cover-desc">
-        本手冊專為各地政事務所資訊系統管理師編寫，詳述智慧控管伺服器端於「原機版本升級 (In-place Upgrade)」與「全新伺服器安裝 (Clean Install)」兩種實務情境之標準作業程序。內容完整涵蓋事前 VM 快照防禦、關鍵 SQLite 資料庫封裝備份、Node/PM2 零全域污染沙盒隔離架構（自動附帶專屬維運終端 lah-cmd.bat）、Apache 與 PHP 組態自癒清理、安裝歷程自動留存（install.log 5MB 輪替）、五大服務連接埠自動巡檢及異常雙重還原防線。
+        本手冊專為各地政事務所資訊系統管理師編寫，詳述智慧控管伺服器端於「原機版本升級 (In-place Upgrade)」與「全新伺服器安裝 (Clean Install)」兩種實務情境之標準作業程序。內容完整涵蓋事前 VM 快照防禦、關鍵 SQLite 資料庫封裝備份、Node/PM2 零全域污染沙盒隔離架構（自動附帶專屬維運終端 lah-cmd.bat 與 Node 沙盒監管工具）、Apache mpm_winnt 雙層記憶體防護閘與 24/7 自動日誌生命週期治理、安裝歷程自動留存（install.log 5MB 輪替）、五大服務連接埠原生高速巡檢（GetExtendedTcpTable 秒級探測）及異常雙重還原防線。
       </div>
     </div>
 
     <div class="cover-highlights">
       <div class="highlight-card">
         <h4>⚡ 情境一：原機版本升級</h4>
-        <p>針對現正穩定運行之主機快速完成補丁更新、漏洞修補與 PHP 8.5 雙軌佈署，保留現有 Apache/PHP 7 核心環境。</p>
+        <p>針對現正穩定運行之主機快速完成補丁更新、漏洞修補與 PHP 8.5 雙軌佈署，保留現有 Apache/PHP 7 核心環境並自動套用 mpm_winnt 記憶體防護閘。</p>
       </div>
       <div class="highlight-card green">
         <h4>🛡️ 情境二：全新伺服器安裝</h4>
-        <p>乾淨虛擬機建置或原機環境重灌，搭配「自動移除工具」徹底清除殘留，並全選更新包與一鍵掛載還原歷史資料庫。</p>
+        <p>乾淨虛擬機建置或原機環境重灌，搭配「自動移除工具」徹底清除殘留，並全選更新包（node_modules 生產相依瘦身至 251MB）與一鍵掛載還原歷史資料庫。</p>
       </div>
       <div class="highlight-card amber">
         <h4>🔒 關鍵資料防護備份</h4>
@@ -485,16 +486,16 @@ HTML_CONTENT = f"""<!DOCTYPE html>
       </div>
       <div class="highlight-card purple">
         <h4>🩺 五大連接埠自我巡檢</h4>
-        <p>內建 Port 80、8085、8080、8081、8082 守聽巡檢表與 VM 快照回滾指引，提供全方位驗證與上線復原保障。</p>
+        <p>內建 Port 80、8085、8080、8081、8082 原生高速探測巡檢表、指標優先管理儀表板與 VM 快照回滾指引，提供全方位驗證與上線復原保障。</p>
       </div>
     </div>
 
     <div>
       <div class="cover-meta">
         <div class="meta-item"><strong>文件編號：</strong><span>LAH-OPS-SOP-202611</span></div>
-        <div class="meta-item"><strong>發布日期：</strong><span>2026 年 11 月 2 日 (自動安裝更新正名與除錯日誌增補修訂版)</span></div>
+        <div class="meta-item"><strong>發布日期：</strong><span>2026 年 11 月 5 日 (v1.9.9 全子系統效能調優、Node沙盒監管與指標優先儀表板升級修訂版)</span></div>
         <div class="meta-item"><strong>適用系統：</strong><span>智慧控管與監控系統 (LAH)</span></div>
-        <div class="meta-item"><strong>維運工具：</strong><span>LAH-Updater v1.7.0+ (Rust 核心，含自動安裝更新引擎與全功能管理儀表板)</span></div>
+        <div class="meta-item"><strong>維運工具：</strong><span>LAH-Updater v1.9.9 (Rust 核心，含自動安裝更新引擎、Node 沙盒監管工具與指標優先管理儀表板)</span></div>
         <div class="meta-item"><strong>適用單位：</strong><span>桃園市各地政事務所 資訊小組</span></div>
         <div class="meta-item"><strong>保密等級：</strong><span>內部維運限閱 (內部專用)</span></div>
       </div>
@@ -516,7 +517,7 @@ HTML_CONTENT = f"""<!DOCTYPE html>
   </div>
 
   <h2>📦 1. 更新包完整內容說明</h2>
-  <p>本更新發布包存放於 <code>LAH-Updater\\dist\\</code> 目錄，全工具採用 <strong>Tauri 2 (Rust)</strong> 核心開發，體積僅 10~11MB，啟動隨點秒開並大幅降低防毒軟體誤判。目錄各組件職責如下：</p>
+  <p>本更新發布包存放於 <code>LAH-Updater\dist\</code> 目錄，全工具採用 <strong>Tauri 2 (Rust)</strong> 核心開發，體積僅 10~11MB，隨點秒開防誤判；目錄附帶自動化管線產出之 <code>系統更新說明.txt</code> 詳列跨專案改動與現場指引。各組件職責如下：</p>
 
   <table>
     <thead>
@@ -530,7 +531,7 @@ HTML_CONTENT = f"""<!DOCTYPE html>
       <tr>
         <td><strong>智慧控管與監控系統 - 自動安裝與更新工具.exe</strong></td>
         <td><span class="badge badge-req">主安裝引擎</span></td>
-        <td>負責執行全新安裝與版本升級解壓、環境設定、開機服務註冊、資安注入防護及服務啟動，完整歷程即時留存至 install.log。</td>
+        <td>負責執行全新安裝與版本升級解壓、環境設定、開機服務註冊、資安注入防護（含 mpm_winnt 雙層記憶體防護閘）及服務啟動，完整歷程即時留存至 install.log。</td>
       </tr>
       <tr>
         <td><strong>智慧控管與監控系統 - 備份與還原工具.exe</strong></td>
@@ -540,17 +541,17 @@ HTML_CONTENT = f"""<!DOCTYPE html>
       <tr>
         <td><strong>智慧控管與監控系統 - 自動移除工具.exe</strong></td>
         <td><span class="badge badge-opt">清理工具</span></td>
-        <td>原機徹底重裝時使用。安全停止 Windows 服務、終止佔用行程並乾淨移除目錄。</td>
+        <td>原機徹底重裝時使用。安全停止 Windows 服務、終止佔用行程（含 php-cgi）並乾淨移除目錄。</td>
       </tr>
       <tr>
         <td><strong>智慧控管與監控系統 - Node 沙盒監管工具.exe</strong></td>
         <td><span class="badge badge-opt">專屬環境</span></td>
-        <td>獨立部署或修復綠色版 Node 16 與 PM2 守護服務，保證零全域污染。</td>
+        <td>雙模式定位（可攜安裝與常駐維運監管），支援大螢幕響應式工作台、雙分頁沙盒 PM2 維運控制台與資安自檢，保證零全域污染。</td>
       </tr>
       <tr>
         <td><strong>智慧控管與監控系統 - 管理儀表板.exe</strong></td>
         <td><span class="badge badge-req">專屬維運</span></td>
-        <td>專屬單一執行檔原生儀表板！更新完成自動同步至根目錄並建立桌面捷徑；整合服務監控控制、Auto-Tail 動態日誌、資源效能即時折線圖與服務記憶體排名、核心組態編輯器（含語法檢驗、自動備份與範本比對），以及 xterm.js 專業沙盒終端（含 UTF-8/CP950 編碼切換）。</td>
+        <td>專屬單一執行檔原生儀表板。指標優先（Metrics-Centric）首頁佈局、微型卡片服務就地快控（自適應均分排版）、整合 CPU/RAM 資源效能折線圖與服務記憶體排行；核心組態編輯器（多格式高亮、安全預檢、搜尋跳行、範本對照）；原生 GetExtendedTcpTable 毫秒級端口探測防偽離線；xterm.js 專業沙盒終端（UTF-8/CP950 切換）；API 核心業務日誌探測與 Apache 繁中日誌 Big5 解碼。</td>
       </tr>
       <tr>
         <td><strong>地籍異動簡訊參數設定工具.exe</strong></td>
@@ -565,18 +566,19 @@ HTML_CONTENT = f"""<!DOCTYPE html>
       <tr>
         <td><code>base\\</code> (基礎環境包)</td>
         <td>基礎組件</td>
-        <td>內含 Apache 2.4、PHP 7.4、PHP 8.5 FastCGI 及綠色可攜版 Node.js 執行期環境。</td>
+        <td>內含 Apache 2.4（已內建 mpm_winnt 雙層記憶體防護閘、FastCGI 轉發優化與敏感檔案存取阻斷）、PHP 7.4、PHP 8.5 FastCGI（雙通道橋接機制）及綠色可攜版 Node.js 16 執行期環境。</td>
       </tr>
       <tr>
         <td><code>node_modules\\</code> (核心套件包)</td>
         <td>套件相依</td>
-        <td>內含前端 (LAH-NUXTJS) 與即時通伺服器 (lah-messenger-server) 預編譯套件。</td>
+        <td>內含前端 (LAH-NUXTJS) 與即時通伺服器 (lah-messenger-server) 預編譯套件；全面精簡 devDependencies，前端解壓體積由 823MB 降至 251MB。</td>
       </tr>
       <tr>
         <td><code>patch\\</code> (程式補丁包)</td>
         <td>業務程式</td>
-        <td>收納 LAH-API (後端)、LAH-NUXTJS (前端)、即時通服務端及 www 站台更新檔。</td>
+        <td>收納 LAH-API (後端靜態圖檔快速路徑與 SQLite 解耦)、LAH-NUXTJS (離線 ExcelJS、雙軌路由代理保護)、即時通服務端及桌面端 (虛擬網卡過濾、單一公務 IP 探測、八所動態漫遊容錯)。</td>
       </tr>
+
     </tbody>
   </table>
 
@@ -586,7 +588,7 @@ HTML_CONTENT = f"""<!DOCTYPE html>
   <div class="step-box avoid-break">
     <div class="step-header">
       <span class="step-number">1</span>
-      <span class="step-title">建立虛擬機快照 (VM Snapshot) —— 第一道安全防線</span>
+      <span class="step-title">建立虛擬機快照 (VM Snapshot)，第一道安全防線</span>
     </div>
     <p>智慧控管伺服器若建置於 VMware ESXi、Hyper-V 或 Proxmox 平台，在作業前請務必於虛擬化後台拍攝快照（建議命名：<code>Pre_LAH_Update_YYYYMMDD</code>）。若升級發生非預期衝突，可在 1 分鐘內極速回滾，保障為民服務不中斷。</p>
   </div>
@@ -604,7 +606,7 @@ HTML_CONTENT = f"""<!DOCTYPE html>
       <span class="step-number">3</span>
       <span class="step-title">Node 與 PM2 零全域污染沙盒隔離架構 (免移除全域 Node)</span>
     </div>
-    <p>最新架構已全面實作沙盒隔離機制。工具不會更動系統登錄檔 <code>Path</code> 與 <code>PM2_HOME</code>，<strong>無須移除本機全域已安裝的 Node.js</strong>（如 Node 20/22）。所有維運工具皆支援多磁碟路徑動態偵測，更新完成後自動於安裝根目錄產出 <strong><code>lah-cmd.bat</code></strong> 專屬維運終端，關閉視窗即自動釋放環境變數。</p>
+    <p>最新架構已全面實作沙盒隔離機制。工具不會更動系統登錄檔 <code>Path</code> 與 <code>PM2_HOME</code>，<strong>無須移除本機全域已安裝的 Node.js</strong>（如 Node 20/22）。所有維運工具皆支援多磁碟路徑動態偵測，更新完成後自動於安裝根目錄產出 <strong><code>lah-cmd.bat</code></strong> 專屬維運終端，關閉視窗即自動釋放環境變數；亦可隨時透過「Node 沙盒監管工具」或「管理儀表板」進行常態監管。</p>
   </div>
   <div class="page-footer-note">
     <span>桃園市各地政事務所 智慧控管與監控系統維運手冊</span>
@@ -634,7 +636,7 @@ HTML_CONTENT = f"""<!DOCTYPE html>
       <li>確認「系統安裝根目錄」路徑（工具已內建動態偵測，亦可手動點擊瀏覽選取）。</li>
       <li>設定「備份輸出目錄」（請選擇具足夠容量磁區，例如 <code>D:\\DEV</code> 或專用備份槽）。</li>
       <li>點擊 <strong>「📦 立即備份重要資料」</strong> 按鈕，工具將自動高速掃描並打包重要資產。</li>
-      <li>完成後將產出如 <strong><code>D:\\DEV\\_LAH_Backup_20261028_091435.zip</code></strong> 之完整備份封裝檔。</li>
+      <li>完成後將產出如 <strong><code>D:\\DEV\\_LAH_Backup_20261105_091435.zip</code></strong> 之完整備份封裝檔。</li>
     </ol>
   </div>
 
@@ -645,7 +647,7 @@ HTML_CONTENT = f"""<!DOCTYPE html>
     </div>
   </div>
 
-  <h3>🔍 實務解析：備份檔 (如 _LAH_Backup_20261028_091435.zip) 內含重要資產清單</h3>
+  <h3>🔍 實務解析：備份檔 (如 _LAH_Backup_20261105_091435.zip) 內含重要資產清單</h3>
   <p>本系統備份工具已全面擴充保護機制，備份檔內完整收納以下 7 大關鍵系統資產：</p>
   <table>
     <thead>
@@ -673,7 +675,7 @@ HTML_CONTENT = f"""<!DOCTYPE html>
       </tr>
       <tr>
         <td><code>Apache24/conf/</code></td>
-        <td><strong>網頁伺服器設定：</strong>包含 Apache 主設定檔 <code>httpd.conf</code> 與各所專用憑證。</td>
+        <td><strong>網頁伺服器設定：</strong>包含 Apache 主設定檔 <code>httpd.conf</code>、各所專用憑證與 <code>mpm_winnt</code> 記憶體防護閘設定。</td>
       </tr>
       <tr>
         <td><code>LAH-NUXTJS/</code></td>
@@ -728,7 +730,7 @@ HTML_CONTENT = f"""<!DOCTYPE html>
     <ul>
       <li><strong style="color: #059669;">【自動精準勾選】</strong> <strong>原機升級 4 大核心包</strong>：<code>PHP 8.5 FastCGI (php85.zip)</code>、<code>VC++ 執行期相依套件</code>、<code>Node.js 綠色執行環境 (node.zip)</code> 與 <code>後端 API 補丁包 (LAH-API.zip)</code>，左下角顯示「已選取 4 個系統安裝包」。</li>
       <li><strong style="color: #dc2626;">【自動排除干擾】</strong> 取消勾選 <strong>Apache 2.4</strong>、<strong>PHP 7.4</strong> 與 <strong>node_modules</strong>，完整保留機台原有穩定 Apache 設定、PHP 7.4 環境與 OCI8 驅動。</li>
-      <li><strong style="color: #059669;">【自動服務配置】</strong> 自動保持勾選<strong>自動註冊 Web/PM2 為 Windows 服務</strong>、<strong>套用資安強化配置</strong>及<strong>更新後自動重啟</strong>。</li>
+      <li><strong style="color: #059669;">【自動服務配置】</strong> 自動保持勾選<strong>自動註冊 Web/PM2 為 Windows 服務</strong>、<strong>套用資安強化配置（含 mpm_winnt 雙層記憶體防護閘）</strong>及<strong>更新後自動重啟</strong>。</li>
     </ul>
   </div>
 
@@ -737,7 +739,7 @@ HTML_CONTENT = f"""<!DOCTYPE html>
       <span class="step-number green">3</span>
       <span class="step-title">步驟三：點擊「開始執行更新作業」並檢視即時進度</span>
     </div>
-    <p>點擊右下角 <strong>「🚀 開始執行更新作業」</strong>。系統將彈現「系統自動安裝與更新進行中...」進度視窗（對齊圖 2 彈窗），依序停止服務、解壓程式碼、注入防護規則、啟動 PHP 8.5 FastCGI 並重啟服務。完整歷程即時寫入根目錄 <code>install.log</code>（5MB 自動輪替保護），最後彈現健康巡檢報告即順利升級！</p>
+    <p>點擊右下角 <strong>「🚀 開始執行更新作業」</strong>。系統將彈現「系統自動安裝與更新進行中...」進度視窗（對齊圖 2 彈窗），依序停止服務、解壓程式碼、注入防護規則、重載 PHP 8.5 FastCGI 並以確定性冪等重建重啟 PM2 服務（杜絕行程疊加翻倍）。完整歷程即時寫入根目錄 <code>install.log</code>（5MB 自動輪替保護），最後彈現健康巡檢報告即順利升級！</p>
     <p style="margin-top:2px; font-size:8pt; color:#0369a1;">💡 <strong>管理儀表板熱部署與捷徑：</strong>更新完成自動將管理儀表板 EXE 同步至安裝根目錄並建立桌面捷徑，彈窗提供「📊 開啟管理儀表板」按鈕供即刻喚醒確認。</p>
   </div>
 
@@ -756,7 +758,7 @@ HTML_CONTENT = f"""<!DOCTYPE html>
     <span>章節 4：情境二：全新安裝 / 原機重灌 (上篇)</span>
   </div>
 
-  <h2>🧹 5. 情境二：全新安裝 / 原機重灌 —— (A) 原機清理作業</h2>
+  <h2>🧹 5. 情境二：全新安裝 / 原機重灌，(A) 原機清理作業</h2>
   <p><strong>適用時機：</strong>若欲在原有主機徹底重整混亂環境，或建置新主機。（若是全新建立的乾淨 VM 虛擬機，可直接略過清理步驟，跳至下一頁安裝）。</p>
 
   <div class="step-box avoid-break">
@@ -764,7 +766,7 @@ HTML_CONTENT = f"""<!DOCTYPE html>
       <span class="step-number red">1</span>
       <span class="step-title">步驟一：原機清理前請再次確認已完成備份 (極重要！)</span>
     </div>
-    <p>在執行移除前，請務必確認已依第 3 頁步驟利用「備份與還原工具」產出備份 ZIP 檔（如 <code>D:\\DEV\\_LAH_Backup_20261028_091435.zip</code>），並將備份檔移置安全磁區。</p>
+    <p>在執行移除前，請務必確認已依第 3 頁步驟利用「備份與還原工具」產出備份 ZIP 檔（如 <code>D:\\DEV\\_LAH_Backup_20261105_091435.zip</code>），並將備份檔移置安全磁區。</p>
   </div>
 
   <div class="screenshot-card avoid-break">
@@ -810,7 +812,7 @@ HTML_CONTENT = f"""<!DOCTYPE html>
     <span>章節 4：情境二：全新安裝 / 原機重灌 (下篇)</span>
   </div>
 
-  <h2>✨ 6. 情境二：全新安裝 / 原機重灌 —— (B) 全量安裝與掛載還原</h2>
+  <h2>✨ 6. 情境二：全新安裝 / 原機重灌，(B) 全量安裝與掛載還原</h2>
   <p><strong>適用時機：</strong>完成原機清理後，或是全新建立的乾淨 Windows Server 虛擬機，進行全系統軟體組件佈署並將歷史資料庫與設定檔自動還原歸位。</p>
 
   <div class="screenshot-card avoid-break">
@@ -827,9 +829,9 @@ HTML_CONTENT = f"""<!DOCTYPE html>
     </div>
     <p>以系統管理員身分執行 <strong><code>智慧控管與監控系統 - 自動安裝與更新工具.exe</code></strong>：</p>
     <ul>
-      <li>點擊 <strong>「全選」</strong> 按鈕，確保基礎環境包（Apache、PHP7、PHP85、Node）、核心套件包（node_modules）與程式更新補丁包<strong>全數打勾</strong>。</li>
+      <li>點擊 <strong>「🌟 全新安裝」</strong> 或 <strong>「全選」</strong> 按鈕，確保基礎環境包（Apache、PHP7、PHP85、Node）、核心套件包（node_modules 生產相依精簡版）與程式更新補丁包<strong>全數打勾</strong>。</li>
       <li><strong style="color: #0369a1;">【全新安裝核心關鍵】</strong> 勾選 <strong>「從備份檔案還原資料庫與系統設定」</strong>。</li>
-      <li>點擊其右側 <strong>「瀏覽...」</strong> 按鈕，選取步驟一所備份的 ZIP 檔（例如 <code>D:\\DEV\\_LAH_Backup_20261028_091435.zip</code>）。</li>
+      <li>點擊其右側 <strong>「瀏覽...」</strong> 按鈕，選取步驟一所備份的 ZIP 檔（例如 <code>D:\\DEV\\_LAH_Backup_20261105_091435.zip</code>）。</li>
       <li>點擊右下角 <strong>「🚀 開始執行更新作業」</strong>。</li>
     </ul>
   </div>
@@ -839,7 +841,7 @@ HTML_CONTENT = f"""<!DOCTYPE html>
       <span class="step-number green">4</span>
       <span class="step-title">步驟四：等待管線全自動佈署完成</span>
     </div>
-    <p>更新引擎將自動完成：① 解壓 Apache 與 PHP 7/8.5 ➔ ② 解壓前端與即時通依賴庫 ➔ ③ 釋放最新業務程式碼 ➔ ④ 掛載還原備份之 SQLite 資料庫與 Oracle 驅動 ➔ ⑤ 註冊 Windows 原生服務、配置開機自啟並產出 lah-cmd.bat 終端 ➔ ⑥ 自動同步部署管理儀表板至安裝根目錄並建立桌面捷徑 ➔ ⑦ 完整歷程即時寫入 <code>install.log</code> ➔ ⑧ 全系統服務啟動與健康巡檢。</p>
+    <p>更新引擎將自動完成：① 解壓 Apache 與 PHP 7/8.5 ➔ ② 解壓前端與即時通依賴庫（生產相依精簡至 251MB） ➔ ③ 釋放最新業務程式碼 ➔ ④ 掛載還原備份之 SQLite 資料庫與 Oracle 驅動 ➔ ⑤ 註冊 Windows 原生服務、套用 mpm_winnt 雙層記憶體防護閘、配置開機自啟並產出 lah-cmd.bat 終端 ➔ ⑥ 自動同步部署管理儀表板至安裝根目錄並建立桌面捷徑 ➔ ⑦ 完整歷程即時寫入 <code>install.log</code> ➔ ⑧ 全系統服務啟動與健康巡檢。</p>
   </div>
 
   <div class="page-footer-note">
@@ -874,25 +876,25 @@ HTML_CONTENT = f"""<!DOCTYPE html>
         <td><strong>Port 80</strong></td>
         <td>Apache 網頁伺服器</td>
         <td>WinSW 沙盒守護 (LAH_Web_Service)</td>
-        <td><span class="badge badge-ok">[OK] LISTENING</span> 承載舊版網頁與 PHP 7.4 業務 API 轉發。</td>
+        <td><span class="badge badge-ok">[OK] LISTENING</span> 內建 mpm_winnt 記憶體防護閘，承載舊版網頁與 PHP 7.4 業務轉發。</td>
       </tr>
       <tr>
         <td><strong>Port 8085</strong></td>
         <td>PHP 8.5 FastCGI 核心</td>
         <td>PM2 守護 (php-cgi)</td>
-        <td><span class="badge badge-ok">[OK] LISTENING</span> 雙軌高速後端核心，專責重度報表、批次統計運算。</td>
+        <td><span class="badge badge-ok">[OK] LISTENING</span> GetExtendedTcpTable 毫秒級探測防偽離線；雙軌高速後端核心。</td>
       </tr>
       <tr>
         <td><strong>Port 8080</strong></td>
         <td>LAH-FE 智慧管控前端</td>
         <td>PM2 守護 (Nuxt 2)</td>
-        <td><span class="badge badge-ok">[OK] LISTENING</span> 智慧監控管理儀表板，提供地政即時通訊功能。</td>
+        <td><span class="badge badge-ok">[OK] LISTENING</span> 智慧監控管理儀表板，支援 API 雙軌切換與離線 ExcelJS。</td>
       </tr>
       <tr>
         <td><strong>Port 8081</strong></td>
         <td>即時通 WebSocket 埠</td>
         <td>PM2 守護 (server.js)</td>
-        <td><span class="badge badge-ok">[OK] LISTENING</span> 提供全所同仁高併發雙向即時通訊與推播服務。</td>
+        <td><span class="badge badge-ok">[OK] LISTENING</span> 支援虛擬網卡雜訊過濾與多連線部門同步，高併發雙向即時通訊。</td>
       </tr>
       <tr>
         <td><strong>Port 8082</strong></td>
@@ -905,17 +907,17 @@ HTML_CONTENT = f"""<!DOCTYPE html>
 
   <h3>🖥️ 一站式維運管理儀表板與瀏覽器實機驗證</h3>
   <ol style="margin: 2px 0 4px 16px; padding: 0; line-height: 1.5; font-size: 8.5pt;">
-    <li><strong>開啟管理儀表板：</strong>點擊「📊 開啟管理儀表板」，確認服務與 PM2 進程綠燈、五大埠健康連線；儀表板已整合資源效能折線圖與記憶體排名、核心組態編輯器（含語法檢驗與範本比對），以及 xterm.js 專業沙盒終端（含 UTF-8/CP950 編碼切換）。</li>
-    <li><strong>前端首頁載入：</strong>開啟瀏覽器輸入 <code>http://127.0.0.1:8080</code>，確認管控首頁正常載入並能查詢地政統計數據。</li>
-    <li><strong>即時通訊狀態：</strong>檢視右側即時通看板，確認連線狀態圖示為<strong>綠燈（連線中）</strong>且歷史公告完整。</li>
+    <li><strong>開啟管理儀表板：</strong>點擊「📊 開啟管理儀表板」或桌面捷徑。首頁採「指標優先（Metrics-Centric）」佈局，微型卡片服務就地快控（均分排版），即時檢視 CPU/RAM 資源效能折線圖與服務記憶體排行；核心組態編輯器（Apache/PHP/PM2 多格式語法高亮、語法安全預檢、搜尋跳行、範本對照）；xterm.js 專業沙盒終端（UTF-8/CP950 切換）；日誌檢視器動態探測 LAH-API 核心業務日誌 (www\log) 與 Apache 繁中日誌 Big5 解碼。</li>
+    <li><strong>前端首頁載入：</strong>開啟瀏覽器輸入 <code>http://127.0.0.1:8080</code>，確認管控首頁正常載入，API 雙軌切換正常。</li>
+    <li><strong>即時通訊狀態：</strong>檢視右側即時通看板，確認連線狀態圖示為<strong>綠燈（連線中）</strong>，歷史公告完整且部門資訊正確。</li>
     <li><strong>安裝日誌核對：</strong>若遇異常可檢視安裝根目錄 <code>install.log</code>（如 <code>C:\\AppServ\\install.log</code>），確認所有解壓、組態注入與服務啟動紀錄（超過 5MB 自動輪替為 <code>.bak</code>）。</li>
   </ol>
 
   <div class="alert alert-success avoid-break" style="margin: 6px 0 8px 0;">
     <div class="alert-icon">💻</div>
     <div>
-      <strong>專屬沙盒維運終端 (lah-cmd.bat) 與端點相容：</strong><br>
-      若需檢視或重啟 PM2 守護行程，雙擊執行安裝根目錄 <code>lah-cmd.bat</code>（如 <code>C:\\AppServ\\lah-cmd.bat</code>），即可在隔離環境執行 <code>pm2 list</code>、<code>pm2 restart all</code> 或 <code>pm2 logs</code>，無需手動配置系統環境變數。此外，Apache 已注入串流端點向後相容 FastCGI 別名映射，前端圖片與報表輸出皆自動對齊雙軌核心。
+      <strong>專屬沙盒維運終端 (lah-cmd.bat) 與日誌生命週期治理：</strong><br>
+      若需檢視或重啟 PM2 守護行程，雙擊執行安裝根目錄 <code>lah-cmd.bat</code>，即可在隔離環境執行 <code>pm2 list</code>、<code>pm2 restart all</code> 或 <code>pm2 logs</code>。Apache 日誌已全面歸集至 <code>logs\apache</code>，由背景守護服務每小時自動執行歷史舊檔 Gzip 壓縮（<code>.log.gz</code>）與 30 天過期安全刪除，常態壓制磁碟佔用於 200MB 內。
     </div>
   </div>
 
@@ -924,7 +926,7 @@ HTML_CONTENT = f"""<!DOCTYPE html>
     <div class="alert-icon">🛡️</div>
     <div>
       <strong>第一道防線：使用「備份與還原工具」一鍵還原資料庫與組態</strong><br>
-      若更新後發現 SQLite 資料遺漏或組態有誤，啟動 <code>智慧控管與監控系統 - 備份與還原工具.exe</code>，於下方選取備份檔（如 <code>_LAH_Backup_20261028_091435.zip</code>），點擊「🚨 還原到安裝根目錄」即可安全歸位。
+      若更新後發現 SQLite 資料遺漏或組態有誤，啟動 <code>智慧控管與監控系統 - 備份與還原工具.exe</code>，於下方選取備份檔（如 <code>_LAH_Backup_20261105_091435.zip</code>），點擊「🚨 還原到安裝根目錄」即可安全歸位。
     </div>
   </div>
 
@@ -976,7 +978,7 @@ HTML_CONTENT = f"""<!DOCTYPE html>
         <td></td>
       </tr>
       <tr>
-        <td><span class="chk-box"></span> <strong>Node/PM2 沙盒確認：</strong>確認採用零全域污染架構，無須卸載全域 Node，且根目錄已自動產出 <code>lah-cmd.bat</code>。</td>
+        <td><span class="chk-box"></span> <strong>Node/PM2 沙盒確認：</strong>確認採用零全域污染架構，無須卸載全域 Node，根目錄已自動產出 <code>lah-cmd.bat</code> 且可搭配 Node 沙盒監管工具。</td>
         <td>□ 符合 □ 已確認</td>
         <td></td>
       </tr>
@@ -993,7 +995,7 @@ HTML_CONTENT = f"""<!DOCTYPE html>
       </tr>
       <tr>
         <td rowspan="2" style="font-weight:700; background:#ecfdf5; text-align:center;">執行更新</td>
-        <td><span class="chk-box"></span> <strong>情境一 (原機升級)：</strong>以「自動安裝與更新工具」執行，點選「原地升級」快選（確認精準選取 4 大升級包並保留 Apache/PHP7 既有設定）。</td>
+        <td><span class="chk-box"></span> <strong>情境一 (原機升級)：</strong>以「自動安裝與更新工具」執行，點選「原地升級」快選（確認精準選取 4 大升級包、保留 Apache/PHP7 既有設定並套用 mpm_winnt 記憶體防護閘）。</td>
         <td>□ 符合 □ 走情境二</td>
         <td></td>
       </tr>
@@ -1004,22 +1006,22 @@ HTML_CONTENT = f"""<!DOCTYPE html>
       </tr>
       <tr>
         <td rowspan="5" style="font-weight:700; background:#fdf2f8; text-align:center;">驗證上線</td>
-        <td><span class="chk-box"></span> <strong>連接埠巡檢：</strong>Port 80, 8085, 8080, 8081, 8082 經檢測全數為 [OK]。</td>
+        <td><span class="chk-box"></span> <strong>連接埠巡檢：</strong>Port 80, 8085, 8080, 8081, 8082 經 GetExtendedTcpTable 檢測全數為 [OK]。</td>
         <td>□ 全數合格</td>
         <td></td>
       </tr>
       <tr>
-        <td><span class="chk-box"></span> <strong>管理儀表板：</strong>確認桌面已建立捷徑，開啟確認 Apache 與 PM2 各服務進程全數綠燈運行。</td>
+        <td><span class="chk-box"></span> <strong>管理儀表板：</strong>確認桌面已建立捷徑，開啟確認首頁 CPU/RAM 資源折線圖、記憶體排名與 Apache/PM2 各服務進程全數綠燈。</td>
         <td>□ 測試正常</td>
         <td></td>
       </tr>
       <tr>
-        <td><span class="chk-box"></span> <strong>前端網站測試：</strong>瀏覽器開啟 <code>http://127.0.0.1:8080</code> 首頁儀表板渲染正常。</td>
+        <td><span class="chk-box"></span> <strong>前端網站測試：</strong>瀏覽器開啟 <code>http://127.0.0.1:8080</code> 首頁儀表板渲染正常，API 雙軌切換正常。</td>
         <td>□ 測試正常</td>
         <td></td>
       </tr>
       <tr>
-        <td><span class="chk-box"></span> <strong>即時通訊驗證：</strong>右側即時通狀態燈為綠燈連線中，歷史公告資料完整。</td>
+        <td><span class="chk-box"></span> <strong>即時通訊驗證：</strong>右側即時通狀態燈為綠燈連線中，歷史公告完整且部門顯示正確。</td>
         <td>□ 測試正常</td>
         <td></td>
       </tr>
