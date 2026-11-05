@@ -7,11 +7,106 @@ use std::time::Duration;
 use winreg::enums::{HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE, KEY_READ};
 use winreg::RegKey;
 
-const MONITORED_PORTS: &[(u16, &str)] = &[
-    (8080, "LAH-FE 智慧管控前端服務 (Nuxt)"),
-    (8081, "LAH-WSS 即時通訊 WebSocket 服務"),
-    (8082, "LAH-WSS 即時通訊附件 HTTP 服務"),
-];
+fn find_listening_ports_by_pid(pid: u32) -> Vec<u16> {
+    if pid == 0 {
+        return Vec::new();
+    }
+    let ps_cmd = format!(
+        "(Get-NetTCPConnection -OwningProcess {} -State Listen -ErrorAction SilentlyContinue).LocalPort",
+        pid
+    );
+    let (ok, out, _) = crate::system::run_powershell(&ps_cmd);
+    if !ok || out.trim().is_empty() {
+        return Vec::new();
+    }
+    let mut ports = Vec::new();
+    for part in out.split_whitespace() {
+        if let Ok(p) = part.parse::<u16>() {
+            if !ports.contains(&p) {
+                ports.push(p);
+            }
+        }
+    }
+    ports
+}
+
+pub fn resolve_monitored_targets(root_dir: &Path) -> (String, Vec<(u16, String)>) {
+    let processes = crate::console::query_pm2_processes(root_dir).unwrap_or_default();
+    let user_procs: Vec<_> = processes.into_iter().filter(|p| !p.is_module).collect();
+
+    // 1. 優先檢測是否有 tyland-monitoring-backend
+    let has_tyland = user_procs.iter().any(|p| {
+        let n = p.name.to_ascii_lowercase();
+        n.contains("tyland-monitoring") || n.contains("monitoring-backend")
+    }) || root_dir.join("tyland-monitoring-backend").exists()
+        || root_dir
+            .parent()
+            .map(|p| p.join("tyland-monitoring-backend").exists())
+            .unwrap_or(false);
+
+    if has_tyland {
+        let system_title = "桃園地政業務 API 監控系統".to_string();
+        let mut targets = Vec::new();
+
+        // 嘗試找出 tyland 進程監聽的實際端口
+        if let Some(proc) = user_procs.iter().find(|p| {
+            let n = p.name.to_ascii_lowercase();
+            n.contains("tyland-monitoring") || n.contains("monitoring-backend")
+        }) {
+            let listening = find_listening_ports_by_pid(proc.pid);
+            for port in listening {
+                targets.push((
+                    port,
+                    format!("地政業務 API 監測服務 ({})", proc.name),
+                ));
+            }
+        }
+
+        // 若動態未查到或進程未啟動，補入預設的 8082 埠
+        if targets.is_empty() {
+            targets.push((
+                8082,
+                "地政業務 API 監測服務 (tyland-monitoring-backend)".to_string(),
+            ));
+        }
+
+        return (system_title, targets);
+    }
+
+    // 2. 檢測是否為 LAH 智慧管控前端或即時通
+    let has_lah = user_procs.iter().any(|p| {
+        let n = p.name.to_ascii_lowercase();
+        n.contains("fe") || n.contains("lah") || n.contains("messenger")
+    });
+
+    if has_lah || user_procs.is_empty() {
+        let system_title = "智慧控管與監控系統".to_string();
+        let targets = vec![
+            (8080, "LAH-FE 智慧管控前端服務 (Nuxt)".to_string()),
+            (8081, "LAH-WSS 即時通訊 WebSocket 服務".to_string()),
+            (8082, "LAH-WSS 即時通訊附件 HTTP 服務".to_string()),
+        ];
+        return (system_title, targets);
+    }
+
+    // 3. 通用其他 Node 服務
+    let primary_name = user_procs[0].name.clone();
+    let system_title = format!("{} 系統", primary_name);
+    let mut targets = Vec::new();
+
+    for proc in &user_procs {
+        let listening = find_listening_ports_by_pid(proc.pid);
+        for port in listening {
+            targets.push((port, format!("受管 Node 服務 ({})", proc.name)));
+        }
+    }
+
+    if targets.is_empty() {
+        targets.push((8080, format!("受管 Node 服務 ({})", primary_name)));
+    }
+
+    (system_title, targets)
+}
 
 pub fn probe_http_port(port: u16, service_name: &str) -> PortAuditResult {
     let addr = SocketAddr::from(([127, 0, 0, 1], port));
@@ -133,8 +228,13 @@ pub fn execute_security_audit(
     let now = chrono_fallback_timestamp();
     let root_str = root_dir.to_string_lossy().to_string();
 
+    let (system_title, monitored_targets) = resolve_monitored_targets(root_dir);
+
     if let Some(log) = log_fn {
-        log("🛡️ 正在執行資安邊界自檢與沙盒隔離檢測...", "info");
+        log(
+            &format!("🛡️ 正在執行【{}】資安邊界自檢與沙盒隔離檢測...", system_title),
+            "info",
+        );
     }
 
     let path_clean = check_sandbox_path_isolation(root_dir);
@@ -149,7 +249,7 @@ pub fn execute_security_audit(
     let mut port_results = Vec::new();
     let mut all_ports_secure = true;
 
-    for (port, name) in MONITORED_PORTS {
+    for (port, name) in &monitored_targets {
         let res = probe_http_port(*port, name);
         if !res.is_secure {
             all_ports_secure = false;
@@ -173,6 +273,7 @@ pub fn execute_security_audit(
     };
 
     let report_content = format_audit_report_text(
+        &system_title,
         &now,
         &root_str,
         path_clean,
@@ -195,6 +296,7 @@ pub fn execute_security_audit(
     }
 
     SecurityAuditReport {
+        system_title,
         timestamp: now,
         root_dir: root_str,
         sandbox_path_clean: path_clean,
@@ -212,11 +314,12 @@ fn chrono_fallback_timestamp() -> String {
     if ok && !out.trim().is_empty() {
         out.trim().to_string()
     } else {
-        "2026-11-02 18:00:00".to_string()
+        "2026-11-05 11:00:00".to_string()
     }
 }
 
 fn format_audit_report_text(
+    system_title: &str,
     timestamp: &str,
     root_dir: &str,
     path_clean: bool,
@@ -225,7 +328,7 @@ fn format_audit_report_text(
 ) -> String {
     let mut s = String::new();
     s.push_str("================================================================================\r\n");
-    s.push_str("智慧控管與監控系統 - Node 沙盒安全防護與邊界自檢報告\r\n");
+    s.push_str(&format!("{} - Node 沙盒安全防護與邊界自檢報告\r\n", system_title));
     s.push_str(&format!("檢測時間: {}\r\n", timestamp));
     s.push_str(&format!("安裝根目錄: {}\r\n", root_dir));
     s.push_str("依據規範: docs/security/node-portable-sandbox-specification.md\r\n");
@@ -258,7 +361,7 @@ fn format_audit_report_text(
     s.push_str("[3] 資安稽核合規結論\r\n");
     s.push_str(&format!(
         "- 外部網路探測防禦: {}\r\n",
-        if overall_secure { "合規 (無任何 Node.js / Nuxt / Express 指紋洩漏)" } else { "需檢查外洩標頭" }
+        if overall_secure { "合規 (無任何 Node.js / Express 指紋洩漏)" } else { "需檢查外洩標頭" }
     ));
     s.push_str("- 主機終端指令防禦: 合規 (零全域污染沙盒架構)\r\n");
     s.push_str(&format!(

@@ -62,6 +62,7 @@ pub struct PortAuditResult {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SecurityAuditReport {
+    pub system_title: String,
     pub timestamp: String,
     pub root_dir: String,
     pub sandbox_path_clean: bool,

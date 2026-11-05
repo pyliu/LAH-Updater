@@ -142,7 +142,7 @@ async function refreshConsole(silent = false) {
 
     const svcBadge = $("con_svc_badge");
     if (ov.service_running) {
-      svcBadge.textContent = "🟢 服務執行中";
+      svcBadge.textContent = "✅ 服務執行中";
       svcBadge.className = "status-pill online";
     } else if (ov.service_installed) {
       svcBadge.textContent = "⚪ 服務已停止";
@@ -156,10 +156,10 @@ async function refreshConsole(silent = false) {
     const lrProc = (ov.processes || []).find((p) => p.name === "pm2-logrotate" || p.is_module);
     const lrBadge = $("con_lr_badge");
     if (lrProc && lrProc.status === "online") {
-      lrBadge.textContent = "🟢 運作中 (online)";
+      lrBadge.textContent = "✅ 運作中 (online)";
       lrBadge.className = "status-pill online";
     } else if (lrProc) {
-      lrBadge.textContent = `🔴 ${lrProc.status}`;
+      lrBadge.textContent = `❌ ${lrProc.status}`;
       lrBadge.className = "status-pill errored";
     } else if (ov.logrotate_configured) {
       lrBadge.textContent = "⚪ 已掛載 (待喚醒)";
@@ -231,7 +231,7 @@ async function refreshConsole(silent = false) {
     const p = (n) => String(n).padStart(2, "0");
     $("console_last_updated").textContent = `更新於 ${p(now.getHours())}:${p(now.getMinutes())}:${p(now.getSeconds())}`;
     if (!silent) {
-      setToast("🟢 沙盒狀態同步完成");
+      setToast("✅ 沙盒狀態同步完成");
     }
   } catch (err) {
     setToast(`❌ 同步沙盒狀態失敗：${err}`, "error");
@@ -493,20 +493,24 @@ $("btn_audit").onclick = async () => {
 
   try {
     const report = await invoke("run_security_audit", { rootDir });
+    const sysTitle = report.system_title || "Node 沙盒受管系統";
+    if ($("audit_modal_title")) {
+      $("audit_modal_title").textContent = `🛡️ ${sysTitle} - 資安邊界自檢報告`;
+    }
     const badge = $("audit_badge_box");
     if (report.overall_secure) {
       badge.style.background = "#dcfce7";
       badge.style.color = "#15803d";
       badge.style.border = "1px solid #bbf7d0";
-      badge.textContent = "🛡️ 資安自檢評定：【合格安全】（已達成零全域污染沙盒隔離，受管服務無執行期標頭洩漏）";
+      badge.textContent = `🛡️ 資安自檢評定：【合格安全】（${sysTitle} 已達成零全域污染沙盒隔離，受管服務無執行期標頭洩漏）`;
     } else {
       badge.style.background = "#fee2e2";
       badge.style.color = "#b91c1c";
       badge.style.border = "1px solid #fecaca";
-      badge.textContent = "⚠️ 資安自檢評定：【發現潛在風險】（請檢視下方標頭外洩項目或清理 PATH 登錄檔）";
+      badge.textContent = `⚠️ 資安自檢評定：【發現潛在風險】（${sysTitle} 請檢視下方標頭外洩項目或清理 PATH 登錄檔）`;
     }
 
-    let detail = `檢測時間：${report.timestamp}\n安裝目錄：${report.root_dir}\n`;
+    let detail = `檢測系統：${sysTitle}\n檢測時間：${report.timestamp}\n安裝目錄：${report.root_dir}\n`;
     detail += `全域 PATH 零污染沙盒：${report.sandbox_path_clean ? "✅ 合規 (HKLM/HKCU 無殘留)" : "⚠️ 未合規 (登錄檔存在可攜路徑)"}\n\n`;
     detail += "受管服務網路通訊邊界檢測：\n";
     for (const p of report.port_results) {

@@ -8,7 +8,7 @@
   body {
     font-family: "Microsoft JhengHei UI", "Microsoft JhengHei", "Segoe UI Emoji", "Segoe UI Symbol", sans-serif;
     margin: 0;
-    padding: 12px 16px;
+    padding: 8px 13px;
     background: #f8fafc;
     color: #1e293b;
     user-select: none;
@@ -20,8 +20,8 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    margin-bottom: 10px;
-    padding-bottom: 8px;
+    margin-bottom: 6px;
+    padding-bottom: 5px;
     border-bottom: 1px solid #e2e8f0;
     gap: 10px;
   }
@@ -102,16 +102,16 @@
 
   .card {
     background: #ffffff;
-    border-radius: 8px;
-    padding: 11px 14px;
-    margin-bottom: 9px;
+    border-radius: 7px;
+    padding: 8px 12px;
+    margin-bottom: 6px;
     box-shadow: 0 1px 3px rgba(0,0,0,0.04);
     border: 1px solid #e2e8f0;
   }
   .card-title {
-    font-size: 13.5px;
+    font-size: 12.5px;
     font-weight: 700;
-    margin: 0 0 8px 0;
+    margin: 0 0 5px 0;
     color: #334155;
     display: flex;
     align-items: center;
@@ -237,8 +237,8 @@
   .console-top-grid {
     display: grid;
     grid-template-columns: 1.15fr 1fr;
-    gap: 9px;
-    margin-bottom: 9px;
+    gap: 6px;
+    margin-bottom: 6px;
   }
   .console-top-grid .card {
     margin-bottom: 0;
@@ -249,11 +249,11 @@
   .kv-grid {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
-    gap: 5px 10px;
-    font-size: 12px;
-    margin-bottom: 8px;
+    gap: 3px 8px;
+    font-size: 11.5px;
+    margin-bottom: 5px;
     background: #f8fafc;
-    padding: 7px 10px;
+    padding: 4px 8px;
     border-radius: 6px;
     border: 1px solid #f1f5f9;
   }
@@ -310,7 +310,7 @@
 
   /* PM2 進程表格 */
   .table-wrap {
-    max-height: 255px;
+    max-height: 280px;
     overflow-y: auto;
     border: 1px solid #e2e8f0;
     border-radius: 6px;
@@ -325,14 +325,14 @@
     color: #475569;
     font-weight: 700;
     text-align: left;
-    padding: 7px 10px;
+    padding: 6px 10px;
     border-bottom: 1px solid #e2e8f0;
     position: sticky;
     top: 0;
     z-index: 1;
   }
   table.pm2-table td {
-    padding: 6.5px 10px;
+    padding: 5px 10px;
     border-bottom: 1px solid #f1f5f9;
     vertical-align: middle;
   }
@@ -353,10 +353,10 @@
     justify-content: space-between;
     background: #0f172a;
     color: #f8fafc;
-    padding: 6px 12px;
-    border-radius: 6px;
-    font-size: 12px;
-    margin-top: 6px;
+    padding: 4.5px 10px;
+    border-radius: 5px;
+    font-size: 11.5px;
+    margin-top: 5px;
   }
   .toast-bar.error {
     background: #7f1d1d;
@@ -439,7 +439,7 @@
     border-radius: 4px;
     accent-color: #16a34a;
   }
-  #log_box, #log_tail_box {
+  #log_box {
     flex: 1;
     min-height: 200px;
     max-height: 330px;
@@ -454,11 +454,125 @@
     border: 1px solid #333333;
     user-select: text;
   }
+  #modal_logs .modal-content {
+    max-width: 940px;
+    height: 86vh;
+    max-height: 88vh;
+  }
+  #log_tail_box {
+    flex: 1;
+    min-height: 380px;
+    height: 100%;
+    overflow-y: auto;
+    background: #1e1e1e;
+    color: #d4d4d4;
+    padding: 12px 14px;
+    font: 12px/1.55 Consolas, "Courier New", monospace;
+    white-space: pre-wrap;
+    word-break: break-all;
+    border-radius: 6px;
+    border: 1px solid #333333;
+    user-select: text;
+  }
   .log-line.info { color: #9cdcfe; }
   .log-line.success { color: #4ec9b0; font-weight: bold; }
   .log-line.warning { color: #ce9178; }
   .log-line.error { color: #f44747; font-weight: bold; }
   .log-line.time { color: #6a9955; }
+  /* 飽滿充實之維運指南卡片樣式 (無捲軸、無大片空白) */
+  .guide-card {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 7px;
+    padding: 9px 12px;
+    margin-top: 6px;
+    font-size: 11.5px;
+    color: #334155;
+    line-height: 1.45;
+  }
+  .guide-card-title {
+    font-size: 12px;
+    font-weight: bold;
+    color: #0f172a;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    margin-bottom: 6px;
+    padding-bottom: 4px;
+    border-bottom: 1px dashed #cbd5e1;
+  }
+  .guide-grid-3 {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 9px;
+  }
+  .guide-grid-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 9px;
+    margin-top: 6px;
+    margin-bottom: 2px;
+  }
+  .guide-item {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    padding: 8px 11px;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.02);
+  }
+  .guide-item-title {
+    font-weight: bold;
+    font-size: 11.5px;
+    color: #1e293b;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+  .guide-item-desc {
+    font-size: 11px;
+    color: #64748b;
+    line-height: 1.45;
+  }
+  .cheat-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 11px;
+  }
+  .cheat-table td {
+    padding: 2.5px 0;
+    vertical-align: top;
+  }
+  .cheat-code {
+    font-family: Consolas, "Courier New", monospace;
+    background: #0f172a;
+    color: #38bdf8;
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-size: 11px;
+    white-space: nowrap;
+    display: inline-block;
+  }
+  .cheat-desc {
+    color: #475569;
+    padding-left: 8px;
+    font-size: 11px;
+  }
+  .faq-list {
+    margin: 0;
+    padding-left: 15px;
+    font-size: 11px;
+    color: #475569;
+    line-height: 1.5;
+  }
+  .faq-list li {
+    margin-bottom: 3px;
+  }
+  .faq-list strong {
+    color: #1e293b;
+  }
 </style>
 </head>
 <body>
@@ -539,6 +653,33 @@
       <button id="btn_exit">關閉離開</button>
       <button id="btn_goto_console" class="btn-green" style="display:none;">🖥️ 進入沙盒控制台</button>
       <button id="btn_start" class="danger">🚀 開始安裝</button>
+    </div>
+
+    <!-- 分頁 1 底部：沙盒核心架構與維運指南 -->
+    <div class="guide-card">
+      <div class="guide-card-title">
+        <span>📖 沙盒核心架構與維運特點說明</span>
+      </div>
+      <div class="guide-grid-3">
+        <div class="guide-item">
+          <div class="guide-item-title">🛡️ 零全域環境污染與隔離</div>
+          <div class="guide-item-desc">
+            綠色 Node.js (16.20.2) 僅安裝於私有目錄，絕不登錄 HKLM/HKCU 全域環境變數。外部命令列 <code>node -v</code> 保持獨立，不怕全域升級 Node 22+ 衝擊。
+          </div>
+        </div>
+        <div class="guide-item">
+          <div class="guide-item-title">💻 專屬維運終端與駐留副本</div>
+          <div class="guide-item-desc">
+            根目錄自動產出 <code>lah-cmd.bat</code> 私有優先權命令列終端，並留存控制台執行檔副本。現場維運人員隨點隨開，直接管理受管服務。
+          </div>
+        </div>
+        <div class="guide-item">
+          <div class="guide-item-title">⚙️ 開機守護與日誌輪替治理</div>
+          <div class="guide-item-desc">
+            透過 <code>PM2_Portable_Service</code> 註冊 Windows 服務免登入自啟；內建 <code>pm2-logrotate</code> 自動啟用 Gzip 壓縮，嚴防硬碟暴滿。
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -654,9 +795,60 @@
       </div>
     </div>
 
+    <!-- 分頁 2 底部：維運常用指令速查與核心守護 SOP (飽滿充實填滿畫面) -->
+    <div class="guide-grid-2">
+      <!-- 左卡：CLI Cheat Sheet -->
+      <div class="guide-item">
+        <div class="guide-item-title">
+          <span>⌨️ 沙盒終端常用指令速查 (CLI Cheat Sheet)</span>
+        </div>
+        <div class="guide-item-desc" style="margin-bottom: 3px;">
+          點擊上方【💻 沙盒終端】開啟專屬視窗後，可隨時執行以下命令：
+        </div>
+        <table class="cheat-table">
+          <tr>
+            <td><span class="cheat-code">pm2 list</span></td>
+            <td class="cheat-desc">檢視所有受管業務進程清單、PID、記憶體與運作狀態</td>
+          </tr>
+          <tr>
+            <td><span class="cheat-code">pm2 restart &lt;name|all&gt;</span></td>
+            <td class="cheat-desc">重新啟動指定的業務進程（或輸入 <code>all</code> 全部重啟）</td>
+          </tr>
+          <tr>
+            <td><span class="cheat-code">pm2 logs &lt;name&gt; --lines 50</span></td>
+            <td class="cheat-desc">即時滾動檢視指定進程最後 50 行標準輸出與錯誤日誌</td>
+          </tr>
+          <tr>
+            <td><span class="cheat-code">pm2 save</span></td>
+            <td class="cheat-desc">固化當前運作進程快照，確保開機或重啟服務後自動復原</td>
+          </tr>
+          <tr>
+            <td><span class="cheat-code">pm2 reloadLogs</span></td>
+            <td class="cheat-desc">強制 PM2 重新打開日誌指標，即刻釋放已輪替歷史日誌</td>
+          </tr>
+        </table>
+      </div>
+
+      <!-- 右卡：維運 SOP 與常見問題 -->
+      <div class="guide-item">
+        <div class="guide-item-title">
+          <span>📋 核心守護機制與維運 SOP (Operational FAQ)</span>
+        </div>
+        <div class="guide-item-desc" style="margin-bottom: 3px;">
+          Node 可攜沙盒環境標準日常維護與狀態防護守則：
+        </div>
+        <ul class="faq-list">
+          <li><strong>改動程式後請固化狀態</strong>：更新應用程式代碼、修補參數或變更進程後，務必點擊上方【💾 儲存快照】（<code>pm2 save</code>），避免伺服器重啟時遺失變更。</li>
+          <li><strong>60 秒常駐守護與自癒</strong>：背景服務具備定期偵測機制，若偵測到 PM2 程序解譯器異常搶佔，會自動強制自癒並以沙盒可攜 Node 重啟。</li>
+          <li><strong>日誌容量定期釋放</strong>：日誌由 <code>pm2-logrotate</code> 自動以 Gzip 壓縮，若遇進程密集輸出，可隨時點擊【🗜️ 立即壓縮輪替】即刻釋放硬碟空間。</li>
+          <li><strong>資安合規佐證</strong>：右上角【🛡️ 資安自檢】已支援動態受管服務識別，檢測完成後將於 <code>logs\</code> 匯出合格佐證報告供稽核備查。</li>
+        </ul>
+      </div>
+    </div>
+
     <!-- 底部即時回饋狀態列 -->
     <div id="console_toast" class="toast-bar">
-      <span id="console_toast_msg">🟢 沙盒控制台已就緒（所有指令皆透過隔離環境 PM2_HOME 與沙盒 Node 執行）</span>
+      <span id="console_toast_msg">✅ 沙盒控制台已就緒（所有指令皆透過隔離環境 PM2_HOME 與沙盒 Node 執行）</span>
       <span id="console_last_updated" class="mono" style="font-size:11px; color:#94a3b8;">--:--:--</span>
     </div>
   </div>
@@ -695,7 +887,7 @@
     <div class="modal-content">
       <div class="modal-header">
         <h2>
-          <span>🛡️ 資安邊界自檢與沙盒隔離報告</span>
+          <span id="audit_modal_title">🛡️ 資安邊界自檢與沙盒隔離報告</span>
         </h2>
       </div>
       <div id="audit_badge_box" style="padding: 9px 13px; border-radius: 6px; font-weight: bold; margin-bottom: 9px; font-size: 13px;"></div>
