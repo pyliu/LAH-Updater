@@ -1642,10 +1642,11 @@ mark.hl-search-match.current {
 }
 
 .service-mem-carousel {
+  width: 100%;
   display: flex;
   flex-direction: row;
   flex-wrap: nowrap;
-  gap: 12px;
+  gap: 10px;
   overflow-x: auto;
   padding-bottom: 6px;
   align-items: stretch;
@@ -1666,9 +1667,17 @@ mark.hl-search-match.current {
   background: var(--text-dim);
 }
 
+/* 微型卡片狀態指示燈與就地快控 */
+.metric-tip-text {
+  font-size: calc(11px * var(--font-scale));
+  color: var(--text-dim);
+  font-weight: normal;
+  margin-left: 8px;
+}
+
 .mem-micro-card {
-  flex: 0 0 170px;
-  min-width: 155px;
+  flex: 1 1 0px;
+  min-width: 140px;
   background: var(--bg-viewport);
   border: 1px solid var(--border-color);
   border-radius: 8px;
@@ -1678,12 +1687,123 @@ mark.hl-search-match.current {
   justify-content: space-between;
   gap: 6px;
   transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+  position: relative;
 }
 
 .mem-micro-card:hover {
   transform: translateY(-2px);
   border-color: var(--primary);
-  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+}
+
+.mem-micro-card.is-stopped {
+  background: rgba(30, 41, 59, 0.4);
+  border-color: rgba(244, 63, 94, 0.3);
+}
+
+.mem-micro-card.is-stopped .mem-micro-num {
+  color: #94a3b8;
+  font-size: calc(14px * var(--font-scale));
+}
+
+.mem-micro-card.is-restarting {
+  border-color: #f59e0b;
+  box-shadow: 0 0 10px rgba(245, 158, 11, 0.35);
+  animation: pulse-glow 1s infinite alternate;
+}
+
+.mem-micro-tag-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.status-dot-mini {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+.status-dot-mini.online {
+  background-color: #10b981;
+  box-shadow: 0 0 6px rgba(16, 185, 129, 0.8);
+}
+
+.status-dot-mini.stopped {
+  background-color: #ef4444;
+  box-shadow: 0 0 4px rgba(239, 68, 68, 0.6);
+}
+
+.status-dot-mini.restarting {
+  background-color: #f59e0b;
+  box-shadow: 0 0 6px rgba(245, 158, 11, 0.8);
+}
+
+.mem-micro-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.btn-micro {
+  padding: 1px 6px;
+  font-size: calc(10px * var(--font-scale));
+  border-radius: 4px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-card);
+  color: var(--text-main);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+  line-height: 1.4;
+  min-height: 20px;
+}
+
+.btn-micro:hover {
+  background: var(--bg-hover);
+  border-color: var(--primary);
+  transform: scale(1.08);
+}
+
+.btn-micro:active {
+  transform: scale(0.95);
+}
+
+.btn-micro-restart:hover {
+  color: #fbbf24;
+  border-color: rgba(245, 158, 11, 0.5);
+  background: rgba(245, 158, 11, 0.15);
+}
+
+.btn-micro-stop:hover {
+  color: #fb7185;
+  border-color: rgba(244, 63, 94, 0.5);
+  background: rgba(244, 63, 94, 0.15);
+}
+
+.btn-micro-start {
+  background: rgba(16, 185, 129, 0.2);
+  color: #34d399;
+  border-color: rgba(16, 185, 129, 0.4);
+  font-weight: 600;
+  padding: 1px 8px;
+}
+
+.btn-micro-start:hover {
+  background: rgba(16, 185, 129, 0.35);
+  border-color: #10b981;
+  color: #fff;
+}
+
+.micro-spin-label {
+  font-size: calc(11px * var(--font-scale));
+  color: #fbbf24;
+  display: inline-flex;
+  align-items: center;
 }
 
 .mem-micro-header {

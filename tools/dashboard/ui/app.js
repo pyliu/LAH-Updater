@@ -53,7 +53,8 @@ const state = {
   isLoadingServices: false,
   isLoadingPm2: false,
   isRefreshingAll: false,
-  activeTab: 'tab-services',
+  activeTab: 'tab-metrics',
+  restartingServices: new Set(),
   pollingTimer: null,
   autoTail: true,
   currentLogPath: '',
@@ -1381,6 +1382,52 @@ window.handlePm2Action = async (action, target) => {
   }
 };
 
+window.quickControlService = async (evt, action, category, serviceKey) => {
+  if (evt) {
+    evt.stopPropagation();
+    evt.preventDefault();
+  }
+  const actionText = action === 'start' ? '啟動' : action === 'stop' ? '停止' : '重啟';
+  showToast(`正在${actionText} [${serviceKey}]...`);
+
+  if (!state.restartingServices) state.restartingServices = new Set();
+  state.restartingServices.add(serviceKey);
+
+  // 畫面微型卡片即時過渡狀態反饋
+  const card = document.querySelector(`.mem-micro-card[data-service-key="${serviceKey}"]`);
+  if (card) {
+    card.classList.add('is-restarting');
+    const actBox = card.querySelector('.mem-micro-actions');
+    if (actBox) {
+      actBox.innerHTML = '<span class="micro-spin-label"><span class="spin-icon">🔄</span></span>';
+    }
+  }
+
+  try {
+    let res;
+    if (category === 'apache') {
+      if (action === 'start') res = await invoke('start_system_service', { name: serviceKey }, 45000);
+      else if (action === 'stop') res = await invoke('stop_system_service', { name: serviceKey }, 45000);
+      else res = await invoke('restart_system_service', { name: serviceKey }, 45000);
+    } else {
+      if (action === 'start') res = await invoke('start_pm2_process', { name: serviceKey }, 45000);
+      else if (action === 'stop') res = await invoke('stop_pm2_process', { name: serviceKey }, 45000);
+      else res = await invoke('restart_pm2_process', { name: serviceKey }, 45000);
+    }
+
+    if (res && res.success) {
+      showToast(`✓ ${res.message}`);
+    } else {
+      showToast(`⚠️ ${res ? res.message : '操作完成'}`);
+    }
+  } catch (err) {
+    showToast(`❌ ${actionText}失敗: ${err}`);
+  } finally {
+    state.restartingServices.delete(serviceKey);
+    await loadHostMetrics();
+  }
+};
+
 // ==========================================================================
 // 4. 即時日誌檢視器 (分頁二)
 // ==========================================================================
@@ -1811,22 +1858,51 @@ const loadHostMetrics = async () => {
             pidStr = `PID: ${pidMatch[2]}`;
           } else if (item.category === 'apache') {
             displayName = 'Apache 2.4';
-            pidStr = item.pid > 0 ? `PID: ${item.pid}` : '主進程';
+            pidStr = item.pid > 0 ? `PID: ${item.pid}` : (item.status === 'stopped' ? '-' : '主進程');
           }
 
+          const serviceKey = item.service_key || (item.category === 'apache' ? 'LAH_Web_Service' : displayName);
+          const isOnline = item.status === 'online' || (!item.status && item.memory_bytes > 0);
+          const isRestarting = state.restartingServices && state.restartingServices.has(serviceKey);
+
+          let statusDotClass = 'online';
+          if (isRestarting) {
+            statusDotClass = 'restarting';
+          } else if (!isOnline) {
+            statusDotClass = 'stopped';
+          }
+
+          let actionHtml = '';
+          if (isRestarting) {
+            actionHtml = `<span class="micro-spin-label" title="${displayName} 處理中..."><span class="spin-icon">🔄</span></span>`;
+          } else if (!isOnline) {
+            actionHtml = `<button class="btn-micro btn-micro-start" title="立即啟動 ${displayName}" onclick="quickControlService(event, 'start', '${item.category}', '${serviceKey}')">▶ 啟動</button>`;
+          } else {
+            actionHtml = `
+              <button class="btn-micro btn-micro-restart" title="重啟 ${displayName}" onclick="quickControlService(event, 'restart', '${item.category}', '${serviceKey}')">🔄</button>
+              <button class="btn-micro btn-micro-stop" title="停止 ${displayName}" onclick="quickControlService(event, 'stop', '${item.category}', '${serviceKey}')">⏹</button>
+            `;
+          }
+
+          const cardClass = `mem-micro-card ${!isOnline ? 'is-stopped' : ''} ${isRestarting ? 'is-restarting' : ''}`;
+          const formattedMem = isOnline ? item.memory_formatted : '已停止';
+
           memHtml += `
-            <div class="mem-micro-card" title="${item.name} - ${item.memory_formatted}">
+            <div class="${cardClass}" data-service-key="${serviceKey}" title="${displayName} - ${isOnline ? item.memory_formatted : '已停止'}">
               <div class="mem-micro-header">
-                <span class="mem-item-badge ${badgeClass}">${badgeText}</span>
+                <div class="mem-micro-tag-group">
+                  <span class="status-dot-mini ${statusDotClass}"></span>
+                  <span class="mem-item-badge ${badgeClass}">${badgeText}</span>
+                </div>
                 <span class="mem-micro-name">${displayName}</span>
               </div>
               <div class="mem-micro-val">
-                <span class="mem-micro-num">${item.memory_formatted}</span>
+                <span class="mem-micro-num">${formattedMem}</span>
               </div>
               <div class="mem-micro-footer">
                 <span class="mem-micro-pid">${pidStr}</span>
-                <div class="mem-mini-bar-bg" title="佔群組最高 ${barWidth}%">
-                  <div class="mem-mini-bar-fill" style="width: ${barWidth}%;"></div>
+                <div class="mem-micro-actions">
+                  ${actionHtml}
                 </div>
               </div>
             </div>

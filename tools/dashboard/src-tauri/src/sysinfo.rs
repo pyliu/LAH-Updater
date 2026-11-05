@@ -412,6 +412,18 @@ pub fn query_apache_processes() -> Vec<ServiceMemoryItem> {
                 memory_bytes: total_httpd_bytes,
                 memory_formatted: format_bytes(total_httpd_bytes),
                 category: "apache".to_string(),
+                status: "online".to_string(),
+                service_key: "LAH_Web_Service".to_string(),
+            });
+        } else {
+            items.push(ServiceMemoryItem {
+                name: "Apache 2.4 閘道".to_string(),
+                pid: 0,
+                memory_bytes: 0,
+                memory_formatted: "已停止".to_string(),
+                category: "apache".to_string(),
+                status: "stopped".to_string(),
+                service_key: "LAH_Web_Service".to_string(),
             });
         }
     }
@@ -486,22 +498,31 @@ pub fn query_host_metrics(root_dir: &Path, pm2_processes: &[Pm2ProcessInfo]) -> 
     let (disk_total, disk_free, disk_used_pct) = get_disk_space(root_dir);
     let network = calculate_network_metrics();
 
-    // 採集 Apache 記憶體並整合 PM2 記憶體
+    // 採集 Apache 記憶體並整合 PM2 記憶體（常駐所有核心服務狀態）
     let mut memory_items = query_apache_processes();
     for p in pm2_processes {
-        if p.memory > 0 {
-            memory_items.push(ServiceMemoryItem {
-                name: format!("{} (PID: {})", p.name, p.pid),
-                pid: p.pid,
-                memory_bytes: p.memory,
-                memory_formatted: format_bytes(p.memory),
-                category: "pm2".to_string(),
-            });
-        }
+        let is_online = p.status == "online";
+        memory_items.push(ServiceMemoryItem {
+            name: p.name.clone(),
+            pid: p.pid,
+            memory_bytes: p.memory,
+            memory_formatted: if is_online { format_bytes(p.memory) } else { "已停止".to_string() },
+            category: "pm2".to_string(),
+            status: p.status.clone(),
+            service_key: p.name.clone(),
+        });
     }
 
-    // 依記憶體使用量降序排序
-    memory_items.sort_by(|a, b| b.memory_bytes.cmp(&a.memory_bytes));
+    // 依在線狀態與記憶體使用量降序排序（在線排前，停止排後）
+    memory_items.sort_by(|a, b| {
+        let a_online = a.status == "online";
+        let b_online = b.status == "online";
+        if a_online != b_online {
+            b_online.cmp(&a_online)
+        } else {
+            b.memory_bytes.cmp(&a.memory_bytes)
+        }
+    });
 
     let total_lah_bytes: u64 = memory_items.iter().map(|item| item.memory_bytes).sum();
     let lah_pct = if mem_total > 0 {
