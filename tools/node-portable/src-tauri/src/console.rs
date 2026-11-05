@@ -438,7 +438,12 @@ pub fn trigger_logrotate_now(root_dir: &Path) -> CommandActionResult {
     let now = Local::now();
     let timestamp = now.format("%Y-%m-%d_%H-%M-%S").to_string();
 
-    let search_dirs = [root_dir.join("logs"), root_dir.join(".pm2").join("logs")];
+    let search_dirs = [
+        root_dir.join("logs"),
+        root_dir.join("logs").join("apache"),
+        root_dir.join(".pm2").join("logs"),
+        root_dir.join("Apache24").join("logs"),
+    ];
 
     let min_size_bytes: u64 = 100 * 1024; // 100 KB 閥值
     let mut rotated_count = 0;

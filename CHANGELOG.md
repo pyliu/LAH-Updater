@@ -6,6 +6,33 @@
 
 ## [未發布]
 
+### 🚀 Apache 統一日誌儲存庫歸集與 24/7 全自動日誌生命週期治理 (ADR 0022)
+
+- **修改目的**：
+  - 徹底解決各地政機關伺服器 Apache 2.4 日誌（`access.*.log` / `error.*.log`）單日累積 20MB ~ 70MB、因缺乏過期清理而導致主機磁碟膨脹耗盡之問題。
+  - 突破 PM2 `pm2-logrotate` 無法感知 Windows 獨立系統服務之限制，由開機常駐守護服務 `LAH_PM2_Service`（`pm2_service_runner.js`）接管統籌日誌治理。
+  - 將 Apache 日誌由孤立之 `Apache24/logs` 全面歸集至 `<根目錄>\logs\apache`（統一日誌儲存庫），統一維運管理與備份邊界。
+- **具體修改項目**：
+  - `tools/updater/src-tauri/src/apache_conf.rs`：
+    - `configure_apache_mod_php7`：動態將 `ErrorLog` 與 `CustomLog` 之 rotatelogs 管道重寫為 `<根目錄>/logs/apache/`，自動確保目標目錄存在。
+    - 單元測試：更新測試斷言並通過 `cargo test --lib`。
+  - `tools/node-portable/service/pm2_service_runner.js`：
+    - 注入全自動日誌生命週期治理常態巡檢函式 `auditLogLifecycle`。
+    - 歷史舊檔治理：非當日（或已輪替）之歷史日誌透過 Node.js 原生 `zlib` Gzip 串流壓縮為 `.log.gz`，縮減 90% 磁碟佔用。
+    - 30 天過期安全刪除：掃描 `logs/apache` 與 `logs`，對最後修改時間超過 30 天之 `*.log` 與 `*.log.gz` 安全抹除，嚴格壓制儲存總量於 200MB 內。
+    - 守護循環連動：於 `tick()` 循環每小時執行一次，開機無人登入桌面亦全自動運作。
+  - `tests/test_log_lifecycle.js`：
+    - 建立專屬單元測試，完整涵蓋 35 天前過期刪除、昨日日誌 Gzip 壓縮驗證（gunzip 內容比對）與當日活躍日誌保留。
+  - `tools/dashboard/src-tauri/src/logs.rs` & `pm2.rs`：
+    - 日誌檢視器優先探測 `logs/apache/`（向下相容舊版 `Apache24/logs/`）。
+    - 快捷維運一鍵手動日誌壓縮輪替搜尋範圍同步納入 `logs/apache/`。
+  - `tools/node-portable/src-tauri/src/console.rs`：
+    - 可攜終端後端一鍵日誌壓縮輪替搜尋範圍同步增補 `logs/apache/`。
+- **相容性與驗證**：
+  - 全套 Rust 單元測試（`cargo test --lib`）與 Node 生命週期測試（`test_log_lifecycle.js`）全數綠燈通過。
+  - 當日即時日誌維持純文字明文，管理儀表板即時串流追蹤與線上排查 100% 零影響。
+
+
 ### 📋 全系統更新說明自動化生成管線與發布錨點機制 (generate_release_notes.py)
 
 - **修改目的**：

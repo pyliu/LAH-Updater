@@ -74,7 +74,13 @@ fn build_log_info(key: String, label: String, path_str: String, exists: bool) ->
 pub fn list_available_logs(root_dir: &Path) -> Vec<LogFileInfo> {
     let logs_dir = root_dir.join("logs");
     let pm2_logs_dir = root_dir.join(".pm2").join("logs");
-    let apache_logs_dir = root_dir.join("Apache24").join("logs");
+    let unified_apache_dir = logs_dir.join("apache");
+    let legacy_apache_dir = root_dir.join("Apache24").join("logs");
+    let apache_logs_dir = if unified_apache_dir.is_dir() {
+        unified_apache_dir
+    } else {
+        legacy_apache_dir.clone()
+    };
     let api_logs_dir = logs_dir.join("api");
 
     let before_api_targets = [
@@ -239,6 +245,9 @@ pub fn list_available_logs(root_dir: &Path) -> Vec<LogFileInfo> {
                 } else {
                     find_latest_matching_file(dir, fb_prefix, fb_suffix)
                 };
+            }
+            if file_path.is_none() && (key == "apache_error" || key == "apache_access") {
+                file_path = find_latest_matching_file(&legacy_apache_dir, prefix, suffix);
             }
         }
 

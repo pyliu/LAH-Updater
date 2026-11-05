@@ -224,6 +224,7 @@ pub fn pm2_trigger_logrotate(root_dir: &Path) -> Result<String, String> {
 
     let search_dirs = [
         root_dir.join("logs"),
+        root_dir.join("logs").join("apache"),
         root_dir.join(".pm2").join("logs"),
         root_dir.join("Apache24").join("logs"),
     ];

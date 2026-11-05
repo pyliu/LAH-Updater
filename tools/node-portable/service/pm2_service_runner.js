@@ -6,10 +6,12 @@
  * 3. 以 TCP 探測 PM2 Daemon (預設 127.0.0.1:42681)，離線時執行 pm2 resurrect 還原 dump.pm2。
  * 4. 確保 pm2-logrotate 日誌輪替模組離線安裝並啟動。
  * 5. 每 60 秒重複探測，Daemon 或 pm2-logrotate 掉線即自動喚醒。
+ * 6. 全自動日誌生命週期治理：每小時巡檢統一日誌儲存庫 (logs/apache 與 logs)，歷史舊檔自動 Gzip 壓縮，逾 30 天自動刪除。
  */
 const fs = require('fs');
 const path = require('path');
 const net = require('net');
+const zlib = require('zlib');
 const { spawnSync } = require('child_process');
 
 const NODE_DIR = path.resolve(__dirname, '..');
@@ -19,6 +21,9 @@ const PM2_CMD = path.join(NODE_DIR, 'pm2.cmd');
 const LOG_DIR = path.join(ROOT_DIR, 'logs', 'pm2-service');
 const LOG_FILE = path.join(LOG_DIR, 'pm2-service-runner.log');
 const CHECK_INTERVAL_MS = 60 * 1000;
+const LOG_AUDIT_INTERVAL_MS = 60 * 60 * 1000; // 每小時巡檢一次日誌生命週期
+
+let lastLogAuditTime = 0;
 
 delete process.env.PM2_INSTALL_DIRECTORY;
 delete process.env.PM2_SERVICE_DIRECTORY;
@@ -172,14 +177,128 @@ function resurrect() {
   }
 }
 
+/**
+ * 日誌生命週期治理巡檢
+ * 1. 涵蓋 logs/apache (Apache 日誌) 與 logs (PM2 應用輪替日誌)
+ * 2. 歷史舊檔透過原生 zlib Gzip 串流壓縮為 .log.gz
+ * 3. 超過 30 天之過期日誌與壓縮檔安全刪除
+ */
+function auditLogLifecycle(rootDir, logFn) {
+  const logger = logFn || log;
+  const now = new Date();
+  const pad = (n) => String(n).padStart(2, '0');
+  const todayApacheTag = `${now.getFullYear()}.${pad(now.getMonth() + 1)}.${pad(now.getDate())}`;
+  const todayIsoTag = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+  const MAX_RETENTION_MS = 30 * 24 * 60 * 60 * 1000; // 30 天留存
+
+  let totalCompressed = 0;
+  let totalDeleted = 0;
+
+  function processDir(dirPath, isApacheDir) {
+    if (!fs.existsSync(dirPath)) return;
+    let entries = [];
+    try {
+      entries = fs.readdirSync(dirPath);
+    } catch (e) {
+      return;
+    }
+
+    for (const file of entries) {
+      const fullPath = path.join(dirPath, file);
+      let stat;
+      try {
+        stat = fs.statSync(fullPath);
+      } catch (e) {
+        continue;
+      }
+      if (!stat.isFile()) continue;
+
+      // 1. 30 天過期安全刪除 (無論是 .log 還是 .gz)
+      const ageMs = Date.now() - stat.mtimeMs;
+      if (ageMs > MAX_RETENTION_MS) {
+        if (file.endsWith('.log') || file.endsWith('.gz')) {
+          try {
+            fs.unlinkSync(fullPath);
+            totalDeleted++;
+          } catch (e) {}
+          continue;
+        }
+      }
+
+      // 2. 歷史舊檔 Gzip 壓縮治理
+      if (!file.endsWith('.log') || file.endsWith('.gz') || file.includes('__')) {
+        continue;
+      }
+
+      let shouldCompress = false;
+      if (isApacheDir) {
+        // Apache 日誌: access.YYYY.MM.DD.log 或 error.YYYY.MM.DD.log
+        const dateMatch = /\.(\d{4}\.\d{2}\.\d{2})\.log$/.exec(file);
+        if (dateMatch && dateMatch[1] !== todayApacheTag) {
+          shouldCompress = true;
+        }
+      } else {
+        // PM2 應用輪替日誌: fe_out-2_YYYY-MM-DD_...log 等
+        const isoMatch = /_(\d{4}-\d{2}-\d{2})_/.exec(file);
+        if (isoMatch && isoMatch[1] !== todayIsoTag) {
+          shouldCompress = true;
+        }
+      }
+
+      if (shouldCompress) {
+        try {
+          const gzPath = fullPath + '.gz';
+          const tmpGzPath = gzPath + '.tmp';
+          const input = fs.readFileSync(fullPath);
+          const compressed = zlib.gzipSync(input, { level: zlib.constants.Z_BEST_COMPRESSION });
+          fs.writeFileSync(tmpGzPath, compressed);
+          fs.renameSync(tmpGzPath, gzPath);
+          fs.unlinkSync(fullPath);
+          totalCompressed++;
+        } catch (e) {
+          try {
+            if (fs.existsSync(fullPath + '.gz.tmp')) fs.unlinkSync(fullPath + '.gz.tmp');
+          } catch (_) {}
+        }
+      }
+    }
+  }
+
+  try {
+    processDir(path.join(rootDir, 'logs', 'apache'), true);
+    processDir(path.join(rootDir, 'logs'), false);
+
+    if (totalCompressed > 0 || totalDeleted > 0) {
+      logger(`日誌生命週期治理完成：已壓縮 ${totalCompressed} 個歷史日誌（.log.gz），清理 ${totalDeleted} 個過期檔案（保留 30 天）`, 'SUCCESS');
+    }
+  } catch (err) {
+    logger(`日誌生命週期治理例外: ${err.message}`, 'WARN');
+  }
+
+  return { compressed: totalCompressed, deleted: totalDeleted };
+}
+
 async function tick() {
   const runtimeOk = ensurePortableDaemonRuntime();
   if (!runtimeOk || !(await isDaemonAlive())) {
     resurrect();
   }
   ensureLogrotate();
+
+  if (Date.now() - lastLogAuditTime >= LOG_AUDIT_INTERVAL_MS) {
+    lastLogAuditTime = Date.now();
+    auditLogLifecycle(ROOT_DIR, log);
+  }
 }
 
-log('PM2_Portable_Service 啟動，根目錄 ' + ROOT_DIR + '，PM2_HOME ' + process.env.PM2_HOME);
-tick();
-setInterval(tick, CHECK_INTERVAL_MS);
+if (require.main === module) {
+  log('PM2_Portable_Service 啟動，根目錄 ' + ROOT_DIR + '，PM2_HOME ' + process.env.PM2_HOME);
+  tick();
+  setInterval(tick, CHECK_INTERVAL_MS);
+}
+
+module.exports = {
+  auditLogLifecycle,
+  wireBundledLogrotate,
+  isDaemonAlive
+};

@@ -1,11 +1,11 @@
 {
   "version": "1.9.9",
-  "released_at": "2026-11-03T22:46:15.998369+08:00",
+  "released_at": "2026-11-05T18:19:02.964201+08:00",
   "anchors": {
-    "LAH-Updater": "418d8fc929e11192fc240adee5db6eccdaa19f04",
-    "LAH-API": "0240c565bb94be8c88ca129ca52bcede3a1db130",
-    "LAH-FE": "461ad9bbe28ea390e660049e8891e6589476cf91",
-    "lah-messenger-server": "5f9c9c44a56ede24ad8949e79e61bd5ad58168f2",
-    "lah-messenger": "8b4392328127b35f31e1125cb811c1d137a21fe8"
+    "LAH-Updater": "87cf62555a110aca155abb76b7d9982ae2f67fa6",
+    "LAH-API": "935928207bf27253e90f69ddcfebccee6f1ec048",
+    "LAH-FE": "82769d623625e6c5a07de46a96344d1f4170b5c5",
+    "lah-messenger-server": "10dc82f4508bbc97c8f971835b7eb4b91e03000f",
+    "lah-messenger": "5ccb0a4bb8bff6f56df66db310c7d9201f1afade"
   }
 }

@@ -1,6 +1,6 @@
 [package]
 name = "lah-updater"
-version = "0.1.5"
+version = "0.1.6"
 description = "智慧控管與監控系統 - 自動安裝與更新工具"
 edition = "2021"
 

@@ -223,13 +223,15 @@ pub fn configure_apache_mod_php7(apache_dir: &Path, root_dir: &Path, php7_dir: O
         content = re_idx.replace(&content, "DirectoryIndex index.php index.html").to_string();
     }
 
-    // 4.1 校正日誌路徑 (ErrorLog / CustomLog rotatelogs) 避免舊環境硬編碼
-    let apache_logs_fwd = apache_dir.join("logs").to_string_lossy().replace('\\', "/");
-    let re_errlog = Regex::new(r#"(?m)^\s*ErrorLog\s+"\|bin/rotatelogs\.exe\s+-l\s+[a-zA-Z]:/[^"]*?/logs/(error\.[^"]+)""#).unwrap();
+    // 4.1 校正日誌路徑 (ErrorLog / CustomLog rotatelogs) 歸集至統一日誌儲存庫 (logs/apache)
+    let unified_apache_logs_dir = root_dir.join("logs").join("apache");
+    let _ = fs::create_dir_all(&unified_apache_logs_dir);
+    let apache_logs_fwd = unified_apache_logs_dir.to_string_lossy().replace('\\', "/");
+    let re_errlog = Regex::new(r#"(?m)^\s*ErrorLog\s+"\|bin/rotatelogs\.exe\s+-l\s+[a-zA-Z]:/[^"]*?/logs/(?:apache/)?(error\.[^"]+)""#).unwrap();
     if re_errlog.is_match(&content) {
         content = re_errlog.replace_all(&content, format!(r#"ErrorLog "|bin/rotatelogs.exe -l {}/$1""#, apache_logs_fwd)).to_string();
     }
-    let re_custlog = Regex::new(r#"(?m)^\s*CustomLog\s+"\|bin/rotatelogs\.exe\s+-l\s+[a-zA-Z]:/[^"]*?/logs/(access\.[^"]+)"\s+(.*)$"#).unwrap();
+    let re_custlog = Regex::new(r#"(?m)^\s*CustomLog\s+"\|bin/rotatelogs\.exe\s+-l\s+[a-zA-Z]:/[^"]*?/logs/(?:apache/)?(access\.[^"]+)"\s+(.*)$"#).unwrap();
     if re_custlog.is_match(&content) {
         content = re_custlog.replace_all(&content, format!(r#"CustomLog "|bin/rotatelogs.exe -l  {}/$1" $2"#, apache_logs_fwd)).to_string();
     }
@@ -707,7 +709,9 @@ mod tests {
         assert!(final_conf.contains(&format!(r#"Define SRVROOT "{}""#, apache_fwd)));
         assert!(final_conf.contains(&format!(r#"LoadModule php7_module "{}/php7apache2_4.dll""#, p7_fwd)));
         assert!(final_conf.contains(&format!(r#"PHPIniDir "{}""#, p7_fwd)));
-        assert!(final_conf.contains(&format!(r#"ErrorLog "|bin/rotatelogs.exe -l {}/logs/error.%Y.%m.%d.log 100M""#, apache_fwd)));
+        let unified_logs_fwd = temp_root.join("logs").join("apache").to_string_lossy().replace('\\', "/");
+        assert!(final_conf.contains(&format!(r#"ErrorLog "|bin/rotatelogs.exe -l {}/error.%Y.%m.%d.log 100M""#, unified_logs_fwd)));
+        assert!(final_conf.contains(&format!(r#"CustomLog "|bin/rotatelogs.exe -l  {}/access.%Y.%m.%d.log 100M" combined"#, unified_logs_fwd)));
 
         // 測試 configure_apache_fcgi_proxy: 驗證自舊根目錄 (C:/AppServ) 遷移至新目錄時的 Alias/Directory 自癒與 ProxyFCGISetEnvIf
         let api_dir = temp_root.join("LAH-API");
