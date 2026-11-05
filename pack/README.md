@@ -10,7 +10,8 @@
 
 | 分流子資料夾 | 存放安裝包 | 說明 |
 |---|---|---|
-| **`dist/patch/`** | `www.zip`<br/>`LAH-API.zip`<br/>`LAH-NUXTJS.zip`<br/>`lah-messenger-server.zip`<br/>`*更新說明*.txt` | 業務程式碼更新包與發布說明文件 |
+| **`dist/patch/`** | `www.zip`<br/>`LAH-API.zip`<br/>`LAH-NUXTJS.zip`<br/>`lah-messenger-server.zip` | 業務程式碼更新包 |
+| **`dist/`** | `系統更新說明.txt`<br/>`日期_系統更新說明_版本.txt` | 標準更新說明與歷史版本存檔 |
 | **`dist/node_modules/`** | `LAH-NUXTJS-node_modules.zip`<br/>`lah-messenger-server-node_modules.zip` | 前端與即時通伺服端之核心依賴套件包 |
 | **`dist/base/`** | `node.zip`<br/>`vcredist-x64.zip` | 可攜式 Node.js 綠色執行環境與 VC++ 2015–2022 獨立執行期依賴 |
 

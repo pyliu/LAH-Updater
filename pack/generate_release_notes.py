@@ -6,7 +6,7 @@ LAH 全系統更新說明自動化生成管線 (generate_release_notes.py)
 2. 基於發布錨點 (.release_anchor.json) 或指定天數，萃取各子專案最新 Git Commit 紀錄。
 3. 結構化過濾 Conventional Commits (白名單: feat, fix, perf, security, refactor; 忽略: chore, test, style)。
 4. 依實際異動子專案動態注入差異化維運警示標籤 (Alerts)。
-5. 雙軌落盤至 dist/ 歷史版本檔與標準覆蓋檔 (系統更新說明.txt)，並同步支援 patch/ 目錄探測。
+5. 雙軌落盤至 dist/ 歷史版本檔與標準覆蓋檔 (系統更新說明.txt)。
 6. 提供 --dry-run 唯讀終端彩色預覽模式，並實作發布成功後事務性錨點更新。
 """
 
@@ -371,7 +371,7 @@ def write_release_notes_files(
     version_str: str,
     release_date_raw: datetime.date
 ) -> List[str]:
-    """雙軌寫入更新說明檔案至 dist/ 與 dist/patch/"""
+    """將歷史版本檔與標準更新說明檔寫入 dist/"""
     os.makedirs(dist_dir, exist_ok=True)
     written_files = []
 
@@ -390,14 +390,6 @@ def write_release_notes_files(
     with open(standard_path, "w", encoding="utf-8", newline="") as f:
         f.write(content)
     written_files.append(standard_path)
-
-    # 3. patch 子資料夾同步探測檔 (若 patch/ 存在)
-    patch_dir = os.path.join(dist_dir, "patch")
-    if os.path.isdir(patch_dir):
-        patch_path = os.path.join(patch_dir, "系統更新說明.txt")
-        with open(patch_path, "w", encoding="utf-8", newline="") as f:
-            f.write(content)
-        written_files.append(patch_path)
 
     return written_files
 

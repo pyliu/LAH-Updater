@@ -128,7 +128,7 @@ class TestGenerateReleaseNotes(unittest.TestCase):
         self.assertNotIn("\r\n\r\n\n", rendered)
 
     def test_write_release_notes_files_dual_paths(self):
-        """驗證雙軌落盤：歷史版本檔、標準覆蓋檔與 patch 目錄探測檔"""
+        """驗證只產生根目錄的歷史版本檔與標準覆蓋檔"""
         dist_dir = os.path.join(self.test_dir, "dist")
         patch_dir = os.path.join(dist_dir, "patch")
         os.makedirs(patch_dir, exist_ok=True)
@@ -137,8 +137,8 @@ class TestGenerateReleaseNotes(unittest.TestCase):
         today = datetime.date(2026, 11, 3)
         written = write_release_notes_files(content, dist_dir, "1.9.9", today)
 
-        # 檢查產出檔案個數 (應為 3 個)
-        self.assertEqual(len(written), 3)
+        # 檢查產出檔案個數 (應為 2 個)
+        self.assertEqual(len(written), 2)
 
         history_path = os.path.join(dist_dir, "20261103_系統更新說明_v1.9.9.txt")
         standard_path = os.path.join(dist_dir, "系統更新說明.txt")
@@ -146,7 +146,8 @@ class TestGenerateReleaseNotes(unittest.TestCase):
 
         self.assertTrue(os.path.isfile(history_path), "缺少歷史版本存檔")
         self.assertTrue(os.path.isfile(standard_path), "缺少標準覆蓋檔")
-        self.assertTrue(os.path.isfile(patch_path), "缺少 patch/ 探測檔")
+        self.assertFalse(os.path.exists(patch_path), "不應產生 patch/ 更新說明檔")
+        self.assertEqual(set(written), {history_path, standard_path})
 
         with open(standard_path, "r", encoding="utf-8") as f:
             self.assertEqual(f.read(), content)

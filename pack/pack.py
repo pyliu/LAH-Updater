@@ -1126,7 +1126,7 @@ def main():
         if not build_vcredist_package(base_dir):
             vcredist_zip_path = None
 
-    # 9. 自動生成並同步更新說明文件至 dist/ 與 patch/ 子資料夾
+    # 9. 自動生成歷史版本與標準更新說明文件至 dist/
     if not args.no_notes:
         try:
             import generate_release_notes
