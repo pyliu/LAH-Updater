@@ -233,6 +233,16 @@ async function refreshConsole(silent = false) {
     if (!silent) {
       setToast("✅ 沙盒狀態同步完成");
     }
+    // 大螢幕工作台模式：自動同步內嵌日誌串流
+    if (ov.processes && ov.processes.length > 0) {
+      if (!currentInlineProc) {
+        currentInlineProc = ov.processes.find(p => !p.is_module) || ov.processes[0];
+      } else {
+        const found = ov.processes.find(p => p.name === currentInlineProc.name);
+        if (found) currentInlineProc = found;
+      }
+      updateInlineLog(currentInlineProc, currentInlineLogType);
+    }
   } catch (err) {
     setToast(`❌ 同步沙盒狀態失敗：${err}`, "error");
   }
@@ -240,8 +250,24 @@ async function refreshConsole(silent = false) {
 
 // 綁定受管系統表格內的動態按鈕事件
 $("pm2_apps_tbody").onclick = async (e) => {
+  const row = e.target.closest("tr");
+  if (row) {
+    document.querySelectorAll("#pm2_apps_tbody tr").forEach(r => r.classList.remove("active-row"));
+    row.classList.add("active-row");
+  }
+
   const btn = e.target.closest("button");
-  if (!btn || isBusy) return;
+  if (!btn) {
+    // 點擊非按鈕區域：自動切換下方內嵌日誌
+    const targetName = row?.querySelector("[data-pm2-target]")?.getAttribute("data-pm2-target")
+                    || row?.querySelector("[data-pm2-log]")?.getAttribute("data-pm2-log");
+    if (targetName) {
+      const proc = (lastOverview?.processes || []).find((p) => p.name === targetName);
+      if (proc) await updateInlineLog(proc, "out");
+    }
+    return;
+  }
+  if (isBusy) return;
 
   const action = btn.getAttribute("data-pm2-action");
   const target = btn.getAttribute("data-pm2-target");
@@ -251,6 +277,8 @@ $("pm2_apps_tbody").onclick = async (e) => {
     await executePm2Action(action, target, btn);
   } else if (logName) {
     const proc = (lastOverview?.processes || []).find((p) => p.name === logName);
+    // 連動內嵌日誌
+    if (proc) await updateInlineLog(proc, "out");
     await openLogModal(proc?.out_log_path || "", proc || null);
   }
 };
@@ -465,6 +493,16 @@ function appendLog(message, level = "info") {
   line.append(t, m);
   box.appendChild(line);
   box.scrollTop = box.scrollHeight;
+
+  const inlineBox = $("inline_install_log_box");
+  if (inlineBox) {
+    if (inlineBox.textContent.startsWith("準備就緒")) {
+      inlineBox.innerHTML = "";
+    }
+    const inlineLine = line.cloneNode(true);
+    inlineBox.appendChild(inlineLine);
+    inlineBox.scrollTop = inlineBox.scrollHeight;
+  }
 }
 
 listen("progress", ({ payload }) => {
@@ -605,3 +643,101 @@ $("btn_start").onclick = async () => {
 
 initAdminStatus();
 rescan(true);
+
+// ==================== 大螢幕工作台模式：內嵌即時日誌串流邏輯 ====================
+let currentInlineProc = null;
+let currentInlineLogType = "out";
+
+async function updateInlineLog(proc = null, type = null) {
+  if (proc) currentInlineProc = proc;
+  if (type) currentInlineLogType = type;
+
+  if (!currentInlineProc) {
+    const procs = (lastOverview?.processes || []).filter(p => !p.is_module);
+    if (procs.length > 0) currentInlineProc = procs[0];
+  }
+
+  const nameEl = $("inline_log_proc_name");
+  const metaEl = $("inline_log_meta");
+  const boxEl = $("inline_log_box");
+  if (!nameEl || !boxEl) return;
+
+  if (!currentInlineProc) {
+    nameEl.textContent = "尚未受管業務系統在線";
+    metaEl.textContent = "檔案路徑：-";
+    boxEl.textContent = "目前無受管系統運行，啟動服務後將自動串流最新日誌...";
+    return;
+  }
+
+  nameEl.textContent = `${currentInlineProc.name} (PID: ${currentInlineProc.pid || "-"})`;
+
+  const btnOut = $("btn_inline_out");
+  const btnErr = $("btn_inline_err");
+  if (btnOut && btnErr) {
+    if (currentInlineLogType === "out") {
+      btnOut.style.fontWeight = "bold";
+      btnOut.style.border = "2px solid #16a34a";
+      btnErr.style.fontWeight = "normal";
+      btnErr.style.border = "1px solid #fde68a";
+    } else {
+      btnErr.style.fontWeight = "bold";
+      btnErr.style.border = "2px solid #ea580c";
+      btnOut.style.fontWeight = "normal";
+      btnOut.style.border = "1px solid #86efac";
+    }
+  }
+
+  const isOut = currentInlineLogType === "out";
+  const path = isOut ? currentInlineProc.out_log_path : currentInlineProc.err_log_path;
+  metaEl.textContent = `檔案路徑：${path || "未指定"} | 串流類型：${isOut ? "標準輸出 (stdout)" : "錯誤日誌 (stderr)"}`;
+
+  if (!path) {
+    boxEl.textContent = "此進程尚未設定日誌路徑。";
+    return;
+  }
+
+  const maxLines = parseInt($("sel_inline_lines")?.value || "200", 10);
+  try {
+    const res = await invoke("get_log_tail", { path, maxLines });
+    if (!res.exists) {
+      boxEl.textContent = `日誌檔案尚未產生：${path}`;
+      return;
+    }
+    if (!res.lines || res.lines.length === 0) {
+      boxEl.textContent = `[日誌目前為空] (${path})`;
+      return;
+    }
+    boxEl.textContent = res.lines.join("\n");
+    boxEl.scrollTop = boxEl.scrollHeight;
+  } catch (err) {
+    boxEl.textContent = `讀取即時日誌失敗：${err}`;
+  }
+}
+
+if ($("btn_inline_out")) {
+  $("btn_inline_out").onclick = () => updateInlineLog(null, "out");
+  $("btn_inline_err").onclick = () => updateInlineLog(null, "err");
+  $("sel_inline_lines").onchange = () => updateInlineLog(null, null);
+  $("btn_inline_reload").onclick = () => updateInlineLog(null, null);
+
+  $("btn_inline_notepad").onclick = async () => {
+    if (!currentInlineProc) return;
+    const path = currentInlineLogType === "out" ? currentInlineProc.out_log_path : currentInlineProc.err_log_path;
+    if (path) {
+      const res = await invoke("open_log_in_notepad", { path });
+      setToast(res.message, res.success ? "success" : "error");
+    }
+  };
+
+  $("btn_inline_folder").onclick = async () => {
+    const rootDir = $("root_dir").value.trim();
+    const res = await invoke("open_logs_folder", { rootDir });
+    setToast(res.message, res.success ? "success" : "error");
+  };
+
+  $("btn_inline_modal").onclick = () => {
+    if (!currentInlineProc) return;
+    const path = currentInlineLogType === "out" ? currentInlineProc.out_log_path : currentInlineProc.err_log_path;
+    openLogModal(path || "", currentInlineProc);
+  };
+}

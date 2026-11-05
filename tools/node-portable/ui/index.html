@@ -479,6 +479,177 @@
   .log-line.warning { color: #ce9178; }
   .log-line.error { color: #f44747; font-weight: bold; }
   .log-line.time { color: #6a9955; }
+  /* 預設小螢幕視圖（<= 1059px 或高度較低時） */
+  .install-col-right,
+  .inline-log-card {
+    display: none;
+  }
+
+  /* 響應式大螢幕工作台模式（寬度 >= 1060px 且高度 >= 600px 即可平滑切換為縱向 Flex 滿版） */
+  @media (min-width: 1060px) and (min-height: 600px) {
+    body {
+      height: 100vh;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      font-size: 14px;
+    }
+    .header {
+      flex: 0 0 auto;
+      margin-bottom: 8px;
+      padding-bottom: 6px;
+    }
+    .header h1 {
+      font-size: 17.5px;
+    }
+    .tab-btn {
+      font-size: 13.5px;
+      padding: 6px 14px;
+    }
+
+    /* 分頁 1 縱向 Flex 100% 滿版無死白 */
+    #pane_install.active {
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+    }
+    .install-layout-wrap {
+      flex: 1;
+      min-height: 0;
+      display: grid;
+      grid-template-columns: 480px 1fr;
+      gap: 12px;
+      align-items: stretch;
+      margin-bottom: 10px;
+    }
+    .install-col-left {
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: 8px;
+      min-height: 0;
+    }
+    .install-col-left .card {
+      margin-bottom: 0;
+      padding: 10px 14px;
+    }
+    .install-col-left .card-title {
+      font-size: 13.5px;
+    }
+    .install-col-left input[type=text] {
+      padding: 7px 11px;
+      font-size: 13.5px;
+    }
+    .install-col-left button {
+      padding: 6.5px 13px;
+      font-size: 13.5px;
+    }
+    .install-col-left .checkbox-item {
+      font-size: 13px;
+      padding: 4px 6px;
+    }
+    .install-col-left .footer-bar {
+      margin-top: 4px;
+    }
+    .install-col-left .footer-bar button {
+      padding: 7px 16px;
+      font-size: 13.5px;
+    }
+
+    /* 右欄部署日誌終端縱向完全撐滿 */
+    .install-col-right {
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+    }
+    .install-col-right .card {
+      flex: 1;
+      min-height: 0;
+      margin-bottom: 0;
+      padding: 10px 14px;
+      display: flex;
+      flex-direction: column;
+    }
+    .install-col-right .card-title {
+      font-size: 13.5px;
+      margin-bottom: 8px;
+      flex: 0 0 auto;
+    }
+    .install-col-right .inline-log-box {
+      flex: 1;
+      min-height: 0;
+      max-height: none;
+      font-size: 12.5px;
+      line-height: 1.55;
+      padding: 12px 14px;
+    }
+
+    /* 下半部：橫貫滿版維運指引卡 */
+    .install-bottom-section {
+      flex: 0 0 auto;
+      margin-top: 0 !important;
+    }
+    .install-bottom-section .guide-card {
+      padding: 10px 14px;
+    }
+    .install-bottom-section .guide-card-title {
+      font-size: 13px;
+      margin-bottom: 8px;
+    }
+    .install-bottom-section .guide-item {
+      padding: 8px 10px;
+    }
+    .install-bottom-section .guide-item-title {
+      font-size: 12px;
+    }
+    .install-bottom-section .guide-item-desc {
+      font-size: 11.5px;
+      line-height: 1.5;
+    }
+    .install-bottom-section .cheat-table {
+      font-size: 11.5px;
+      line-height: 1.5;
+    }
+
+    /* 分頁 2 控制台滿版配置 */
+    #pane_console.active {
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      overflow-y: auto;
+    }
+    .inline-log-card {
+      display: flex;
+      flex-direction: column;
+      margin-top: 6px;
+      margin-bottom: 6px;
+      padding: 8px 12px;
+      background: #ffffff;
+      border: 1px solid #e2e8f0;
+      border-radius: 7px;
+    }
+    .inline-log-box {
+      flex: 1;
+      min-height: 180px;
+      max-height: 35vh;
+      overflow-y: auto;
+      background: #1e1e1e;
+      color: #d4d4d4;
+      padding: 9px 12px;
+      font: 12px/1.5 Consolas, "Courier New", monospace;
+      white-space: pre-wrap;
+      word-break: break-all;
+      border-radius: 6px;
+      border: 1px solid #333333;
+      user-select: text;
+    }
+    table.pm2-table tr.active-row td {
+      background: #f0fdf4 !important;
+    }
+  }
+
   /* 飽滿充實之維運指南卡片樣式 (無捲軸、無大片空白) */
   .guide-card {
     background: #f8fafc;
@@ -619,66 +790,99 @@
 
   <!-- ==================== 分頁 1：沙盒安裝與部署 ==================== -->
   <div id="pane_install" class="tab-pane active">
-    <div class="card">
-      <div class="card-title">📁 安裝根目錄（Node 將安裝於其下 node 資料夾，並自動駐留控制台執行檔）</div>
-      <div class="row">
-        <input id="root_dir" type="text" value="" placeholder="自動偵測中...">
-        <button id="browse_btn">瀏覽...</button>
-      </div>
-    </div>
-
-    <div class="card">
-      <div class="card-title">
-        <span>🔎 環境狀態</span>
-        <div style="display: flex; gap: 6px;">
-          <button id="btn_rescan">重新偵測</button>
-        </div>
-      </div>
-      <div id="scan_box" style="line-height:1.75; font-size:12px;">偵測中...</div>
-    </div>
-
-    <div class="card">
-      <div class="card-title">⚙️ 系統服務與執行選項</div>
-      <div style="background:#f0fdf4; border:1px solid #bbf7d0; border-radius:6px; padding:6px 11px; margin-bottom:7px; font-size:12px; color:#166534; line-height:1.45;">
-        🛡️ <b>零全域污染沙盒架構</b>：安裝時自動自系統與使用者環境變數（HKLM/HKCU）清理舊可攜殘留，並於根目錄建立專屬維運終端 <code>lah-cmd.bat</code> 與駐留本控制台執行檔。綠色 Node 與 PM2 僅於服務與專屬沙盒內自給自足，絕不干擾本機全域 Node 開發環境。
-      </div>
-      <div class="options-grid">
-        <label class="checkbox-item"><input type="checkbox" id="chk_service" checked><span>⚙️ 註冊開機自啟服務 PM2_Portable_Service（守護程序並隨開機自動啟動）</span></label>
-        <label class="checkbox-item"><input type="checkbox" id="chk_logrotate" checked><span>📦 直接由便攜版 node_modules 掛載並啟動 pm2-logrotate 日誌輪替模組（自動啟用日誌壓縮）</span></label>
-        <label class="checkbox-item"><input type="checkbox" id="chk_resurrect" checked><span>🔄 立即執行 pm2 resurrect 還原既有程式 dump</span></label>
-      </div>
-    </div>
-
-    <div class="footer-bar">
-      <button id="btn_exit">關閉離開</button>
-      <button id="btn_goto_console" class="btn-green" style="display:none;">🖥️ 進入沙盒控制台</button>
-      <button id="btn_start" class="danger">🚀 開始安裝</button>
-    </div>
-
-    <!-- 分頁 1 底部：沙盒核心架構與維運指南 -->
-    <div class="guide-card">
-      <div class="guide-card-title">
-        <span>📖 沙盒核心架構與維運特點說明</span>
-      </div>
-      <div class="guide-grid-3">
-        <div class="guide-item">
-          <div class="guide-item-title">🛡️ 零全域環境污染與隔離</div>
-          <div class="guide-item-desc">
-            綠色 Node.js (16.20.2) 僅安裝於私有目錄，絕不登錄 HKLM/HKCU 全域環境變數。外部命令列 <code>node -v</code> 保持獨立，不怕全域升級 Node 22+ 衝擊。
+    <!-- 上半部：配置與即時部署日誌工作台 (平齊對稱) -->
+    <div class="install-layout-wrap">
+      <!-- 左欄：配置與執行選項 -->
+      <div class="install-col-left">
+        <div class="card">
+          <div class="card-title">📁 安裝根目錄（Node 將安裝於其下 node 資料夾，並自動駐留控制台執行檔）</div>
+          <div class="row">
+            <input id="root_dir" type="text" value="" placeholder="自動偵測中...">
+            <button id="browse_btn">瀏覽...</button>
           </div>
         </div>
-        <div class="guide-item">
-          <div class="guide-item-title">💻 專屬維運終端與駐留副本</div>
-          <div class="guide-item-desc">
-            根目錄自動產出 <code>lah-cmd.bat</code> 私有優先權命令列終端，並留存控制台執行檔副本。現場維運人員隨點隨開，直接管理受管服務。
+
+        <div class="card">
+          <div class="card-title">
+            <span>🔎 環境狀態</span>
+            <div style="display: flex; gap: 6px;">
+              <button id="btn_rescan">重新偵測</button>
+            </div>
+          </div>
+          <div id="scan_box" style="line-height:1.75; font-size:12px;">偵測中...</div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">⚙️ 系統服務與執行選項</div>
+          <div style="background:#f0fdf4; border:1px solid #bbf7d0; border-radius:6px; padding:6px 11px; margin-bottom:7px; font-size:12px; color:#166534; line-height:1.45;">
+            🛡️ <b>零全域污染沙盒架構</b>：安裝時自動自環境變數清理舊可攜殘留，並建立專屬維運終端 <code>lah-cmd.bat</code> 與駐留控制台。沙盒內自給自足，絕不干擾全域 Node 環境。
+          </div>
+          <div class="options-grid">
+            <label class="checkbox-item"><input type="checkbox" id="chk_service" checked><span>⚙️ 註冊開機自啟服務 PM2_Portable_Service（守護程序並隨開機自動啟動）</span></label>
+            <label class="checkbox-item"><input type="checkbox" id="chk_logrotate" checked><span>📦 直接由便攜版 node_modules 掛載並啟動 pm2-logrotate 日誌輪替模組（自動啟用日誌壓縮）</span></label>
+            <label class="checkbox-item"><input type="checkbox" id="chk_resurrect" checked><span>🔄 立即執行 pm2 resurrect 還原既有程式 dump</span></label>
           </div>
         </div>
-        <div class="guide-item">
-          <div class="guide-item-title">⚙️ 開機守護與日誌輪替治理</div>
-          <div class="guide-item-desc">
-            透過 <code>PM2_Portable_Service</code> 註冊 Windows 服務免登入自啟；內建 <code>pm2-logrotate</code> 自動啟用 Gzip 壓縮，嚴防硬碟暴滿。
+
+        <div class="footer-bar">
+          <button id="btn_exit">關閉離開</button>
+          <button id="btn_goto_console" class="btn-green" style="display:none;">🖥️ 進入沙盒控制台</button>
+          <button id="btn_start" class="danger">🚀 開始安裝</button>
+        </div>
+      </div>
+
+      <!-- 右欄：大螢幕工作台模式展開之即時日誌 (高度自動隨左欄等高撐滿) -->
+      <div class="install-col-right">
+        <div class="card">
+          <div class="card-title">
+            <span>📝 部署與配置即時日誌 (Deployment Output)</span>
+            <span class="status-pill online" style="font-size:11px;">實時連線中</span>
+          </div>
+          <div id="inline_install_log_box" class="inline-log-box">準備就緒。點擊左側【🚀 開始安裝】後，此處將同步串流解壓、服務註冊與 PM2 初始化細節...</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 下半部：橫貫滿版之沙盒架構特點與部署檢核 SOP (大螢幕與小螢幕均勻填滿畫面，消弭底部空白) -->
+    <div class="guide-grid-2 install-bottom-section" style="margin-top: 8px;">
+      <!-- 左卡：沙盒核心架構與資安邊界規格 -->
+      <div class="guide-card" style="margin-top:0;">
+        <div class="guide-card-title">
+          <span>🛡️ 沙盒核心架構與資安邊界規格</span>
+        </div>
+        <div class="guide-grid-3">
+          <div class="guide-item">
+            <div class="guide-item-title">🛡️ 零全域環境污染與隔離</div>
+            <div class="guide-item-desc">
+              私有目錄隔離，絕不登錄 HKLM/HKCU。外部全域 Node 22+ 升級完全零干擾。
+            </div>
+          </div>
+          <div class="guide-item">
+            <div class="guide-item-title">💻 專屬維運終端與駐留副本</div>
+            <div class="guide-item-desc">
+              根目錄產出 <code>lah-cmd.bat</code> 與控制台執行檔，現場維運隨點隨開。
+            </div>
+          </div>
+          <div class="guide-item">
+            <div class="guide-item-title">⚙️ 開機守護與日誌輪替治理</div>
+            <div class="guide-item-desc">
+              WinSW 服務免登入自啟，logrotate 自動 Gzip 壓縮防硬碟爆滿。
+            </div>
           </div>
         </div>
+      </div>
+
+      <!-- 右卡：自動化部署初始化與維運流程 -->
+      <div class="guide-card" style="margin-top:0;">
+        <div class="guide-card-title">
+          <span>📋 自動化部署檢核與初始化流程</span>
+        </div>
+        <table class="cheat-table">
+          <tr><td style="width:115px; font-weight:bold; color:#166534;">1. 解壓私有沙盒</td><td>解壓 <code>node.zip</code> 至根目錄 <code>node\</code>，建立私有 Runtime。</td></tr>
+          <tr><td style="font-weight:bold; color:#166534;">2. 清理環境殘留</td><td>主動移除使用者/系統環境變數中舊版殘留，杜絕路徑污染。</td></tr>
+          <tr><td style="font-weight:bold; color:#166534;">3. 註冊背景守護</td><td>安裝 <code>PM2_Portable_Service</code> 為 Windows 服務，達成免登入自啟。</td></tr>
+          <tr><td style="font-weight:bold; color:#166534;">4. 模組與快照復原</td><td>自動掛載 <code>pm2-logrotate</code> (Gzip 啟用) 並復原既有程序快照。</td></tr>
+        </table>
       </div>
     </div>
   </div>
@@ -793,6 +997,33 @@
           </tbody>
         </table>
       </div>
+    </div>
+
+    <!-- 大螢幕工作台模式：內嵌即時日誌串流面板 (Inline Live Log Stream) -->
+    <div id="inline_log_card" class="inline-log-card">
+      <div class="card-title" style="margin-bottom: 5px;">
+        <div style="display:flex; align-items:center; gap:8px;">
+          <span>📄 即時日誌串流 (Live Stream)：<b id="inline_log_proc_name" style="color:#0284c7;">尚未選取進程</b></span>
+          <span id="inline_log_badge" class="status-pill online" style="font-size:11px;">串流中</span>
+        </div>
+        <div class="btn-group" style="gap:4px;">
+          <button id="btn_inline_out" class="btn-sm btn-green" style="font-weight:bold;">標準輸出 (out)</button>
+          <button id="btn_inline_err" class="btn-sm btn-warn">錯誤日誌 (err)</button>
+          <select id="sel_inline_lines" style="padding: 2px 6px; font-size:11.5px; height: 26px;">
+            <option value="100">最後 100 行</option>
+            <option value="200" selected>最後 200 行</option>
+            <option value="500">最後 500 行</option>
+          </select>
+          <button id="btn_inline_reload" class="btn-sm primary">🔄 重新載入</button>
+          <button id="btn_inline_notepad" class="btn-sm">📝 記事本</button>
+          <button id="btn_inline_folder" class="btn-sm">📂 日誌夾</button>
+          <button id="btn_inline_modal" class="btn-sm" title="以獨立視窗全螢幕放大預覽">🔍 彈窗放大</button>
+        </div>
+      </div>
+      <div id="inline_log_meta" style="font-size: 11px; color: #64748b; margin-bottom: 4px; font-family: Consolas, monospace;">
+        檔案路徑：-
+      </div>
+      <div id="inline_log_box" class="inline-log-box">載入即時日誌中...</div>
     </div>
 
     <!-- 分頁 2 底部：維運常用指令速查與核心守護 SOP (飽滿充實填滿畫面) -->
