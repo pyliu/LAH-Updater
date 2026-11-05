@@ -248,6 +248,20 @@ pub fn list_available_logs(root_dir: &Path) -> Vec<LogFileInfo> {
             }
             if file_path.is_none() && (key == "apache_error" || key == "apache_access") {
                 file_path = find_latest_matching_file(&legacy_apache_dir, prefix, suffix);
+                if file_path.is_none() {
+                    if let Some((fb_prefix, fb_suffix)) = fallback {
+                        file_path = if fb_suffix.is_empty() {
+                            let p = legacy_apache_dir.join(fb_prefix);
+                            if p.is_file() {
+                                Some(p)
+                            } else {
+                                None
+                            }
+                        } else {
+                            find_latest_matching_file(&legacy_apache_dir, fb_prefix, fb_suffix)
+                        };
+                    }
+                }
             }
         }
 
@@ -440,4 +454,47 @@ pub fn list_api_log_files(root_dir: &Path) -> Vec<LogFileInfo> {
     }
 
     result
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_list_available_logs_falls_back_to_legacy_apache_plain_logs_when_unified_dir_is_empty() {
+        let temp_root = std::env::temp_dir().join(format!(
+            "lah_test_dashboard_logs_{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let unified_apache_dir = temp_root.join("logs").join("apache");
+        let legacy_apache_dir = temp_root.join("Apache24").join("logs");
+        fs::create_dir_all(&unified_apache_dir).unwrap();
+        fs::create_dir_all(&legacy_apache_dir).unwrap();
+
+        fs::write(legacy_apache_dir.join("error_log"), b"legacy error\n").unwrap();
+        fs::write(legacy_apache_dir.join("access_log"), b"legacy access\n").unwrap();
+
+        let logs = list_available_logs(&temp_root);
+        let apache_err = logs.iter().find(|l| l.key == "apache_error").unwrap();
+        let apache_acc = logs.iter().find(|l| l.key == "apache_access").unwrap();
+        assert!(apache_err.exists);
+        assert!(apache_err.path.ends_with("error_log"));
+        assert!(apache_acc.exists);
+        assert!(apache_acc.path.ends_with("access_log"));
+
+        fs::write(unified_apache_dir.join("error.2026.11.05.log"), b"unified error\n").unwrap();
+        fs::write(unified_apache_dir.join("access.2026.11.05.log"), b"unified access\n").unwrap();
+        let logs2 = list_available_logs(&temp_root);
+        let apache_err2 = logs2.iter().find(|l| l.key == "apache_error").unwrap();
+        let apache_acc2 = logs2.iter().find(|l| l.key == "apache_access").unwrap();
+        assert!(apache_err2.exists);
+        assert!(apache_err2.path.ends_with("error.2026.11.05.log"));
+        assert!(apache_acc2.exists);
+        assert!(apache_acc2.path.ends_with("access.2026.11.05.log"));
+
+        let _ = fs::remove_dir_all(&temp_root);
+    }
 }

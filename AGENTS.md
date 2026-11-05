@@ -84,7 +84,7 @@ LAH-Updater/
 - **Web 伺服器 WinSW 沙盒化 (`LAH_Web_Service`)**：捨棄 `httpd.exe -k install` 全域侵入方式，改由 WinSW (`lah-web-service.exe` / `lah-web-service.xml`) 封裝為 `LAH_Web_Service`，於服務私有環境變數內注入 `Apache24\bin`、`instantclient_11_2` 與 `php7`，並自動偵測與卸載舊版 `Apache2.4` 服務。
 - **VC++ 執行期依賴獨立封裝與同步 (`vcredist-x64.zip`)**：保持官方 `httpd-*.zip` 原貌不重壓，由 `pack.py` 打包獨立 `vcredist-x64.zip`，解壓時自動補齊至 `Apache24\bin`、`php7` 與 `php85`。
 - **服務管理員 (`services.msc`) 資安脫敏**：服務顯示名稱與描述全面脫敏為公務系統中性用語（「LAH 智慧管控：應用系統入口與 API 閘道服務」、「LAH 智慧管控：背景服務總線與健康管理系統」），避免出現 Apache、PHP、node、PM2 等字眼引發弱掃誤判。
-- **日誌路徑正規化與 FastCGI 校準**：動態將 `httpd.conf` 中 `rotatelogs.exe` 目錄重寫為當前 `<apache_dir>/logs/`；確保 `ProxyFCGISetEnvIf` 使用正確 `$1` 捕獲組轉發至 `127.0.0.1:8085`；自動清除散落之舊版 AppServ 指令並去重 `php.ini` 之 `extension_dir`。
+- **日誌路徑正規化與 FastCGI 校準**：動態將 `httpd.conf` 中 `rotatelogs.exe` 目錄重寫為當前 `<root_dir>/logs/apache/`；確保 `ProxyFCGISetEnvIf` 使用正確 `$1` 捕獲組轉發至 `127.0.0.1:8085`；自動清除散落之舊版 AppServ 指令並去重 `php.ini` 之 `extension_dir`。
 
 ### 3.6 行程鎖定釋放與雙層目錄自癒
 - **行程安全釋放**：解壓覆蓋前依序停止 Windows 服務、終止 PM2 Daemon，並確認 `node.exe` 檔案鎖已釋放（防止 `os error 5` 拒絕存取）。

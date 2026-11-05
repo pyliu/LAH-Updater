@@ -13,9 +13,13 @@
   - 突破 PM2 `pm2-logrotate` 無法感知 Windows 獨立系統服務之限制，由開機常駐守護服務 `LAH_PM2_Service`（`pm2_service_runner.js`）接管統籌日誌治理。
   - 將 Apache 日誌由孤立之 `Apache24/logs` 全面歸集至 `<根目錄>\logs\apache`（統一日誌儲存庫），統一維運管理與備份邊界。
 - **具體修改項目**：
-  - `tools/updater/src-tauri/src/apache_conf.rs`：
+  - `tools/updater/src-tauri/src/apache_conf.rs` & `pipeline.rs`：
     - `configure_apache_mod_php7`：動態將 `ErrorLog` 與 `CustomLog` 之 rotatelogs 管道重寫為 `<根目錄>/logs/apache/`，自動確保目標目錄存在。
-    - 單元測試：更新測試斷言並通過 `cargo test --lib`。
+    - 補齊常規與補丁更新時對預設純文字日誌指示詞（`ErrorLog "logs/error_log"` 與 `CustomLog "logs/access_log" common` 等）之全自動正則升級為 `rotatelogs` 管道。
+    - 新增 `migrate_legacy_apache_logs`，於更新與配置時自動將 `Apache24/logs` 之歷史日誌（含 `access_log`、`error_log` 及已輪替舊檔）平移至 `logs/apache`，徹底清空孤立目錄並保留 `httpd.pid`。
+    - 單元測試：新增純文字升級與日誌平移測試，斷言皆通過 `cargo test --lib`。
+  - `tools/backuper/src-tauri/src/restore.rs`：
+    - 還原校準常式（`calibrate_httpd_conf`）日誌路徑對齊至 `logs/apache`，同時支援純文字與 rotatelogs 舊路徑自癒。
   - `tools/node-portable/service/pm2_service_runner.js`：
     - 注入全自動日誌生命週期治理常態巡檢函式 `auditLogLifecycle`。
     - 歷史舊檔治理：非當日（或已輪替）之歷史日誌透過 Node.js 原生 `zlib` Gzip 串流壓縮為 `.log.gz`，縮減 90% 磁碟佔用。
