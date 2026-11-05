@@ -107,7 +107,6 @@ FE_INCLUDES = [
     "content",
     "scheduler",
     "scripts",
-    "server-middleware",
     "static",
     ".env.example",
     "ecosystem.config.js",

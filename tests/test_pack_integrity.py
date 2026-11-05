@@ -35,43 +35,62 @@ class TestPackIntegrity(unittest.TestCase):
         cls.messenger_dir = dirs[3]
 
     def test_dynamic_detection_of_server_middleware(self):
-        """驗證能從 nuxt.config.js 自動動態偵測 serverMiddleware 與中介軟體目錄（單一真相來源）"""
+        """驗證能動態識別 inline 與檔案型 serverMiddleware 與中介軟體目錄（單一真相來源）"""
+        # 1. 驗證現行專案內聯 serverMiddleware 不產生無效檔案依賴，並能偵測 scheduler/server.js
         required_deps, dynamic_includes = extract_nuxt_runtime_dependencies(self.fe_dir)
         norm_required = [d.replace("\\", "/").lower() for d in required_deps]
-        
-        # 必須偵測到 security-headers.js
-        self.assertTrue(
-            any("server-middleware/security-headers.js" in d for d in norm_required),
-            f"未偵測到 serverMiddleware 宣告：{norm_required}"
-        )
-        # 動態包含目錄必須納入 server-middleware
-        self.assertIn("server-middleware", dynamic_includes)
-        # 必須偵測到 scheduler/server.js
         self.assertTrue(
             any("scheduler/server.js" in d for d in norm_required),
             f"未偵測到 scheduler/server.js：{norm_required}"
         )
+
+        # 2. 驗證宣告外部檔案路徑型 serverMiddleware 時，能精準動態解析出該中介軟體檔案與頂層目錄
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cfg_file = os.path.join(tmpdir, "nuxt.config.js")
+            with open(cfg_file, "w", encoding="utf-8") as f:
+                f.write("""
+                export default {
+                    serverMiddleware: [
+                        "~/server-middleware/security-headers.js"
+                    ]
+                }
+                """)
+            mock_deps, mock_dynamic = extract_nuxt_runtime_dependencies(tmpdir)
+            mock_norm = [d.replace("\\", "/").lower() for d in mock_deps]
+            self.assertTrue(
+                any("server-middleware/security-headers.js" in d for d in mock_norm),
+                f"未動態解析出外部 serverMiddleware 宣告：{mock_norm}"
+            )
+            self.assertIn("server-middleware", mock_dynamic)
 
     def test_regression_server_middleware_omission_triggers_failure(self):
         """
         【真實歷史事故回歸測試】
         模擬過去未加入 server-middleware 之打包清單，證明此檢查必定能觸發攔截失敗！
         """
-        # 建立一份故意漏掉 server-middleware 的待打包檔案清單（重現本次線上事故）
-        mock_files = [
-            (os.path.join(self.fe_dir, ".nuxt", "App.js"), ".nuxt/App.js"),
-            (os.path.join(self.fe_dir, "nuxt.config.js"), "nuxt.config.js"),
-            (os.path.join(self.fe_dir, "ecosystem.config.js"), "ecosystem.config.js"),
-            (os.path.join(self.fe_dir, "scheduler", "server.js"), "scheduler/server.js"),
-            # 故意不放 server-middleware/security-headers.js
-        ]
-        
-        with self.assertRaises(PackIntegrityError) as ctx:
-            verify_fe_pack_integrity(self.fe_dir, mock_files)
-        
-        err_msg = str(ctx.exception)
-        self.assertIn("server-middleware", err_msg)
-        self.assertIn("前端打包完整性守門員攔截到缺失的執行期程式碼", err_msg)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cfg_file = os.path.join(tmpdir, "nuxt.config.js")
+            with open(cfg_file, "w", encoding="utf-8") as f:
+                f.write("""
+                export default {
+                    serverMiddleware: [
+                        "~/server-middleware/security-headers.js"
+                    ]
+                }
+                """)
+            # 建立一份故意漏掉 server-middleware 的待打包檔案清單（重現歷史線上事故）
+            mock_files = [
+                (os.path.join(tmpdir, ".nuxt", "App.js"), ".nuxt/App.js"),
+                (os.path.join(tmpdir, "nuxt.config.js"), "nuxt.config.js"),
+                (os.path.join(tmpdir, "ecosystem.config.js"), "ecosystem.config.js"),
+            ]
+            
+            with self.assertRaises(PackIntegrityError) as ctx:
+                verify_fe_pack_integrity(tmpdir, mock_files)
+            
+            err_msg = str(ctx.exception)
+            self.assertIn("server-middleware", err_msg)
+            self.assertIn("前端打包完整性守門員攔截到缺失的執行期程式碼", err_msg)
 
     def test_pre_pack_integrity_passes_with_effective_includes(self):
         """驗證搭配動態偵測後，現有 LAH-FE 專案打包清單能 100% 通過事前校驗"""
