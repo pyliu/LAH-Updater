@@ -214,9 +214,10 @@ fn get_pm2_processes() -> Result<Vec<Pm2ProcessInfo>, String> {
 }
 
 #[tauri::command]
-fn restart_pm2_process(target: String) -> CommandActionResult {
+fn restart_pm2_process(target: Option<String>, name: Option<String>) -> CommandActionResult {
+    let proc_target = target.or(name).unwrap_or_default();
     let root = get_current_root_dir();
-    match pm2::pm2_restart(&root, &target) {
+    match pm2::pm2_restart(&root, &proc_target) {
         Ok(msg) => CommandActionResult {
             success: true,
             message: msg,
@@ -229,9 +230,10 @@ fn restart_pm2_process(target: String) -> CommandActionResult {
 }
 
 #[tauri::command]
-fn stop_pm2_process(target: String) -> CommandActionResult {
+fn stop_pm2_process(target: Option<String>, name: Option<String>) -> CommandActionResult {
+    let proc_target = target.or(name).unwrap_or_default();
     let root = get_current_root_dir();
-    match pm2::pm2_stop(&root, &target) {
+    match pm2::pm2_stop(&root, &proc_target) {
         Ok(msg) => CommandActionResult {
             success: true,
             message: msg,
@@ -244,9 +246,10 @@ fn stop_pm2_process(target: String) -> CommandActionResult {
 }
 
 #[tauri::command]
-fn start_pm2_process(target: String) -> CommandActionResult {
+fn start_pm2_process(target: Option<String>, name: Option<String>) -> CommandActionResult {
+    let proc_target = target.or(name).unwrap_or_default();
     let root = get_current_root_dir();
-    match pm2::pm2_start(&root, &target) {
+    match pm2::pm2_start(&root, &proc_target) {
         Ok(msg) => CommandActionResult {
             success: true,
             message: msg,

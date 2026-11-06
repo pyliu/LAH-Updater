@@ -1382,19 +1382,23 @@ window.handlePm2Action = async (action, target) => {
   }
 };
 
-window.quickControlService = async (evt, action, category, serviceKey) => {
+window.quickControlService = async (evt, action, category, serviceKey, displayName = '') => {
   if (evt) {
     evt.stopPropagation();
     evt.preventDefault();
   }
+  const showName = displayName || serviceKey;
   const actionText = action === 'start' ? '啟動' : action === 'stop' ? '停止' : '重啟';
-  showToast(`正在${actionText} [${serviceKey}]...`);
+  showToast(`正在${actionText} [${showName}]...`);
 
   if (!state.restartingServices) state.restartingServices = new Set();
   state.restartingServices.add(serviceKey);
 
-  // 畫面微型卡片即時過渡狀態反饋
-  const card = document.querySelector(`.mem-micro-card[data-service-key="${serviceKey}"]`);
+  // 畫面微型卡片即時過渡狀態反饋：優先使用觸發按鈕所在的卡片，若無則依 data-service-key 查詢
+  const card = (evt && evt.currentTarget)
+    ? evt.currentTarget.closest('.mem-micro-card')
+    : document.querySelector(`.mem-micro-card[data-service-key="${serviceKey}"]`);
+
   if (card) {
     card.classList.add('is-restarting');
     const actBox = card.querySelector('.mem-micro-actions');
@@ -1410,15 +1414,20 @@ window.quickControlService = async (evt, action, category, serviceKey) => {
       else if (action === 'stop') res = await invoke('stop_system_service', { name: serviceKey }, 45000);
       else res = await invoke('restart_system_service', { name: serviceKey }, 45000);
     } else {
-      if (action === 'start') res = await invoke('start_pm2_process', { name: serviceKey }, 45000);
-      else if (action === 'stop') res = await invoke('stop_pm2_process', { name: serviceKey }, 45000);
-      else res = await invoke('restart_pm2_process', { name: serviceKey }, 45000);
+      if (action === 'start') res = await invoke('start_pm2_process', { target: serviceKey }, 45000);
+      else if (action === 'stop') res = await invoke('stop_pm2_process', { target: serviceKey }, 45000);
+      else res = await invoke('restart_pm2_process', { target: serviceKey }, 45000);
     }
 
     if (res && res.success) {
       showToast(`✓ ${res.message}`);
     } else {
       showToast(`⚠️ ${res ? res.message : '操作完成'}`);
+    }
+
+    // 若為重啟或啟動，觸發密集輪詢追蹤進程與 PID 變化
+    if (action === 'restart' || action === 'start') {
+      triggerBurstPolling(8000, 1500);
     }
   } catch (err) {
     showToast(`❌ ${actionText}失敗: ${err}`);
@@ -1873,14 +1882,15 @@ const loadHostMetrics = async () => {
           }
 
           let actionHtml = '';
+          const escapedDisplayName = displayName.replace(/'/g, "\\'");
           if (isRestarting) {
             actionHtml = `<span class="micro-spin-label" title="${displayName} 處理中..."><span class="spin-icon">🔄</span></span>`;
           } else if (!isOnline) {
-            actionHtml = `<button class="btn-micro btn-micro-start" title="立即啟動 ${displayName}" onclick="quickControlService(event, 'start', '${item.category}', '${serviceKey}')">▶ 啟動</button>`;
+            actionHtml = `<button class="btn-micro btn-micro-start" title="立即啟動 ${displayName}" onclick="quickControlService(event, 'start', '${item.category}', '${serviceKey}', '${escapedDisplayName}')">▶ 啟動</button>`;
           } else {
             actionHtml = `
-              <button class="btn-micro btn-micro-restart" title="重啟 ${displayName}" onclick="quickControlService(event, 'restart', '${item.category}', '${serviceKey}')">🔄</button>
-              <button class="btn-micro btn-micro-stop" title="停止 ${displayName}" onclick="quickControlService(event, 'stop', '${item.category}', '${serviceKey}')">⏹</button>
+              <button class="btn-micro btn-micro-restart" title="重啟 ${displayName}" onclick="quickControlService(event, 'restart', '${item.category}', '${serviceKey}', '${escapedDisplayName}')">🔄</button>
+              <button class="btn-micro btn-micro-stop" title="停止 ${displayName}" onclick="quickControlService(event, 'stop', '${item.category}', '${serviceKey}', '${escapedDisplayName}')">⏹</button>
             `;
           }
 

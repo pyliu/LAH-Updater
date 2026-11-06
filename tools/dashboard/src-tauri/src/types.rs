@@ -50,6 +50,8 @@ pub struct ServiceMemoryItem {
     pub memory_formatted: String,
     pub category: String, // "apache", "pm2"
     #[serde(default)]
+    pub pm_id: Option<u32>,
+    #[serde(default)]
     pub status: String, // "online", "stopped", "launching", etc.
     #[serde(default)]
     pub service_key: String, // 控制用的名稱，如 "LAH_Web_Service" 或 PM2 進程名稱

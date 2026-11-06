@@ -412,6 +412,7 @@ pub fn query_apache_processes() -> Vec<ServiceMemoryItem> {
                 memory_bytes: total_httpd_bytes,
                 memory_formatted: format_bytes(total_httpd_bytes),
                 category: "apache".to_string(),
+                pm_id: None,
                 status: "online".to_string(),
                 service_key: "LAH_Web_Service".to_string(),
             });
@@ -422,6 +423,7 @@ pub fn query_apache_processes() -> Vec<ServiceMemoryItem> {
                 memory_bytes: 0,
                 memory_formatted: "已停止".to_string(),
                 category: "apache".to_string(),
+                pm_id: None,
                 status: "stopped".to_string(),
                 service_key: "LAH_Web_Service".to_string(),
             });
@@ -500,16 +502,28 @@ pub fn query_host_metrics(root_dir: &Path, pm2_processes: &[Pm2ProcessInfo]) -> 
 
     // 採集 Apache 記憶體並整合 PM2 記憶體（常駐所有核心服務狀態）
     let mut memory_items = query_apache_processes();
+    let mut name_counts = std::collections::HashMap::new();
+    for p in pm2_processes {
+        *name_counts.entry(&p.name).or_insert(0) += 1;
+    }
+
     for p in pm2_processes {
         let is_online = p.status == "online";
+        let is_multi = name_counts.get(&p.name).copied().unwrap_or(0) > 1;
+        let display_name = if is_multi {
+            format!("{} #{}", p.name, p.pm_id)
+        } else {
+            p.name.clone()
+        };
         memory_items.push(ServiceMemoryItem {
-            name: p.name.clone(),
+            name: display_name,
             pid: p.pid,
             memory_bytes: p.memory,
             memory_formatted: if is_online { format_bytes(p.memory) } else { "已停止".to_string() },
             category: "pm2".to_string(),
+            pm_id: Some(p.pm_id),
             status: p.status.clone(),
-            service_key: p.name.clone(),
+            service_key: p.pm_id.to_string(),
         });
     }
 
