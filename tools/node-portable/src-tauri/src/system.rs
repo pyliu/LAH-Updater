@@ -212,9 +212,9 @@ echo ============================================================\r\n\
 cmd /k\r\n";
 
     if let Err(e) = fs::write(&bat_path, content) {
-        log_fn(&format!("⚠️ 建立 lah-cmd.bat 失敗: {e}"), "warning");
+        log_fn(&format!("警告：建立 lah-cmd.bat 失敗: {e}"), "warning");
     } else {
-        log_fn("  ✓ 已就緒專屬沙盒維運終端批次檔 (lah-cmd.bat)", "success");
+        log_fn("  已就緒專屬沙盒維運終端批次檔 (lah-cmd.bat)", "success");
     }
 }
 
@@ -237,7 +237,7 @@ pub fn purge_portable_from_registry(target_dir: &Path, log_fn: &dyn Fn(&str, &st
                     let _ = sys_key.set_value("Path", &new_sys);
                     changed_any = true;
                     log_fn(
-                        &format!("  ✓ 已自系統 PATH (HKLM) 移除可攜路徑 [{target_norm}]，確保全域 Node 獨立性"),
+                        &format!("  已自系統 PATH (HKLM) 移除可攜路徑 [{target_norm}]，確保全域 Node 獨立性"),
                         "info",
                     );
                 }
@@ -245,7 +245,7 @@ pub fn purge_portable_from_registry(target_dir: &Path, log_fn: &dyn Fn(&str, &st
             if sys_key.get_value::<String, _>("PM2_HOME").is_ok() {
                 let _ = sys_key.delete_value("PM2_HOME");
                 changed_any = true;
-                log_fn("  ✓ 已自系統環境變數 (HKLM) 清理 PM2_HOME，避免污染一般終端", "info");
+                log_fn("  已自系統環境變數 (HKLM) 清理 PM2_HOME，避免污染一般終端", "info");
             }
         }
     }
@@ -259,7 +259,7 @@ pub fn purge_portable_from_registry(target_dir: &Path, log_fn: &dyn Fn(&str, &st
                 let _ = usr_key.set_value("Path", &new_usr);
                 changed_any = true;
                 log_fn(
-                    &format!("  ✓ 已自使用者 PATH (HKCU) 移除可攜路徑 [{target_norm}]，確保全域 Node 獨立性"),
+                    &format!("  已自使用者 PATH (HKCU) 移除可攜路徑 [{target_norm}]，確保全域 Node 獨立性"),
                     "info",
                 );
             }
@@ -267,7 +267,7 @@ pub fn purge_portable_from_registry(target_dir: &Path, log_fn: &dyn Fn(&str, &st
         if usr_key.get_value::<String, _>("PM2_HOME").is_ok() {
             let _ = usr_key.delete_value("PM2_HOME");
             changed_any = true;
-            log_fn("  ✓ 已自使用者環境變數 (HKCU) 清理 PM2_HOME，避免污染一般終端", "info");
+            log_fn("  已自使用者環境變數 (HKCU) 清理 PM2_HOME，避免污染一般終端", "info");
         }
     }
 
@@ -282,7 +282,7 @@ pub fn purge_portable_from_registry(target_dir: &Path, log_fn: &dyn Fn(&str, &st
 /// 3. 自動生成專屬沙盒維運終端 lah-cmd.bat。
 pub fn register_path_to_user_environment(target_dir: &Path, log_fn: &dyn Fn(&str, &str)) -> bool {
     if !target_dir.is_dir() {
-        log_fn(&format!("⚠️ 目錄不存在，略過設定 PATH: {}", target_dir.display()), "warning");
+        log_fn(&format!("警告：目錄不存在，略過設定 PATH: {}", target_dir.display()), "warning");
         return false;
     }
 
@@ -296,7 +296,7 @@ pub fn register_path_to_user_environment(target_dir: &Path, log_fn: &dyn Fn(&str
     let (new_proc, _) = clean_and_prepend_path_string(&cur_proc, &target_norm);
     env::set_var("PATH", new_proc);
     log_fn(
-        &format!("✅ [零全域污染] 已將可攜環境限縮於當前行程與專屬沙盒 ({target_norm})"),
+        &format!("[零全域污染] 已將可攜環境限縮於當前行程與專屬沙盒 ({target_norm})"),
         "success",
     );
 
@@ -319,7 +319,7 @@ pub fn register_pm2_home_and_clean_legacy_env(pm2_home: &Path, log_fn: &dyn Fn(&
     }
     env::set_var("PM2_HOME", &val);
     log_fn(
-        &format!("✅ [零全域污染] 已設定當前行程 PM2_HOME={val}"),
+        &format!("[零全域污染] 已設定當前行程 PM2_HOME={val}"),
         "success",
     );
     true

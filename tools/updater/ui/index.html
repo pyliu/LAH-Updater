@@ -491,24 +491,25 @@
   .guide-btn.primary:hover {
     background: #0369a1;
   }
+  .ui-svg-icon { width: 1em; height: 1em; vertical-align: -0.125em; }
 </style>
 </head>
 <body>
 
   <!-- 頂部標題列 -->
   <div class="header">
-    <h1>🔄 智慧控管與監控系統 - 自動安裝與更新工具</h1>
+    <h1><svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5M5 9a7 7 0 0112-2l3 5M19 15a7 7 0 01-12 2l-3-5"/></svg> 智慧控管與監控系統 - 自動安裝與更新工具</h1>
     <div class="header-actions">
-      <span id="admin_badge" class="admin-badge">👑 權限檢查中</span>
-      <button id="btn_release_notes" class="secondary" title="檢視更新說明文件">📖 更新說明</button>
-      <button id="btn_rescan" class="secondary" title="重新掃描所有安裝包與服務狀態">🔄 重新整理</button>
+      <span id="admin_badge" class="admin-badge"><svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2l8 3v6c0 5-3 8-8 11-5-3-8-6-8-11V5zM8 12l3 3 5-6"/></svg> 權限檢查中</span>
+      <button id="btn_release_notes" class="secondary" title="檢視更新說明文件"><svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 5c4-2 7-1 9 1 2-2 5-3 9-1v13c-4-2-7-1-9 1-2-2-5-3-9-1zM12 6v13"/></svg> 更新說明</button>
+      <button id="btn_rescan" class="secondary" title="重新掃描所有安裝包與服務狀態"><svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5M5 9a7 7 0 0112-2l3 5M19 15a7 7 0 01-12 2l-3-5"/></svg> 重新整理</button>
     </div>
   </div>
 
   <!-- 系統安裝根目錄卡片 -->
   <div class="card">
     <div class="card-title">
-      <span>📁 系統安裝根目錄</span>
+      <span><svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h7l2 2h9v10H3z"/></svg> 系統安裝根目錄</span>
       <span id="root_status_badge" style="font-size:12px; font-weight:normal; color:#64748b;">檢查中...</span>
     </div>
     <div class="row">
@@ -521,16 +522,16 @@
   <div class="card" style="padding: 6px 12px; margin-bottom: 7px;">
     <div class="quick-toolbar">
       <div class="quick-group">
-        <span class="quick-label">⚡ 情境快選：</span>
-        <button id="btn_preset_clean_install" class="quick-btn" title="全新伺服器全量安裝：全選所有已就緒更新包，並自動配置 Web/PM2 服務與資安強化">🌟 全新安裝</button>
-        <button id="btn_preset_inplace_upgrade" class="quick-btn" title="原機原地升級：選取 PHP8.5、VC++、Node 與 LAH-API，保留既有 Apache/PHP7 核心環境">🔄 原地升級</button>
-        <button id="btn_deselect_all" class="quick-btn" title="一鍵取消所有更新包選取">⬜ 全部取消</button>
+        <span class="quick-label"><svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 2L4 14h7l-1 8 10-12h-7z"/></svg> 情境快選：</span>
+        <button id="btn_preset_clean_install" class="quick-btn" title="全新伺服器全量安裝：全選所有已就緒更新包，並自動配置 Web/PM2 服務與資安強化"><svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12l5 5L20 5"/></svg> 全新安裝</button>
+        <button id="btn_preset_inplace_upgrade" class="quick-btn" title="原機原地升級：選取 PHP8.5、VC++、Node 與 LAH-API，保留既有 Apache/PHP7 核心環境"><svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5M5 9a7 7 0 0112-2l3 5M19 15a7 7 0 01-12 2l-3-5"/></svg> 原地升級</button>
+        <button id="btn_deselect_all" class="quick-btn" title="一鍵取消所有更新包選取"><svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="5" width="14" height="14" rx="2"/></svg> 全部取消</button>
       </div>
       <div class="quick-divider"></div>
       <div class="quick-group">
-        <span class="quick-label">📂 分類快選：</span>
-        <button id="btn_select_patch" class="quick-btn category" title="僅選取程式修補 (patch)，並取消其他分類勾選（再次點擊取消全選）">📦 程式修補 (patch)</button>
-        <button id="btn_select_modules" class="quick-btn category" title="僅選取核心套件 (node_modules)，並取消其他分類勾選（再次點擊取消全選）">📚 核心套件 (node_modules)</button>
+        <span class="quick-label"><svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h7l2 2h9v10H3z"/></svg> 分類快選：</span>
+        <button id="btn_select_patch" class="quick-btn category" title="僅選取程式修補 (patch)，並取消其他分類勾選（再次點擊取消全選）"><svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7l9-4 9 4v10l-9 4-9-4zM3 7l9 4 9-4M12 11v10"/></svg> 程式修補 (patch)</button>
+        <button id="btn_select_modules" class="quick-btn category" title="僅選取核心套件 (node_modules)，並取消其他分類勾選（再次點擊取消全選）"><svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 5c4-2 7-1 9 1 2-2 5-3 9-1v13c-4-2-7-1-9 1-2-2-5-3-9-1zM12 6v13"/></svg> 核心套件 (node_modules)</button>
       </div>
     </div>
   </div>
@@ -542,9 +543,9 @@
     <div class="left-col">
       <div class="card">
         <div class="card-title">
-          <span>⚙️ 系統服務與自動化配置</span>
+          <span><svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3m0 14v3M2 12h3m14 0h3M5 5l2 2m10 10 2 2M19 5l-2 2M7 17l-2 2"/></svg> 系統服務與自動化配置</span>
           <button id="btn_apply_config_now" class="secondary" style="padding: 2.5px 8px; font-size: 11px; font-weight: 600; color: #0369a1; border-color: #bae6fd; background: #f0f9ff; display: inline-flex; align-items: center; gap: 4px;">
-            ⚡ 立即套用配置與註冊服務
+            <svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 2L4 14h7l-1 8 10-12h-7z"/></svg> 立即套用配置與註冊服務
           </button>
         </div>
         <div class="options-list">
@@ -582,7 +583,7 @@
       <!-- 基礎環境安裝包 -->
       <div class="card">
         <div class="card-title">
-          <span>🏛️ 基礎環境安裝包</span>
+          <span><svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 21V5l8-3 8 3v16M2 21h20M8 8h2m4 0h2m-8 4h2m4 0h2m-8 4h2m4 0h2"/></svg> 基礎環境安裝包</span>
           <span style="font-size:11px; color:#64748b;">Apache / PHP / Node.js</span>
         </div>
         <div id="base_pkg_list"></div>
@@ -593,7 +594,7 @@
     <div class="right-col">
       <div class="card">
         <div class="card-title">
-          <span>📦 應用模組更新包</span>
+          <span><svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7l9-4 9 4v10l-9 4-9-4zM3 7l9 4 9-4M12 11v10"/></svg> 應用模組更新包</span>
           <span style="font-size:11px; color:#64748b;">PHP / 前端 / 即時通</span>
         </div>
         <div id="app_pkg_list"></div>
@@ -602,48 +603,48 @@
       <!-- 系統架構端點與維運叮嚀 -->
       <div class="card" style="padding: 7px 11px; margin-bottom: 0;">
         <div class="card-title" style="margin-bottom: 5px;">
-          <span>🌐 系統服務端點與維運指引</span>
+          <span><svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c5 5 5 13 0 18M12 3c-5 5-5 13 0 18"/></svg> 系統服務端點與維運指引</span>
           <span style="font-size:11px; font-weight:600; color:#0369a1; background:#e0f2fe; padding:1px 6px; border-radius:3px;">
             綠色隔離沙盒
           </span>
         </div>
         <div class="endpoint-grid">
           <div class="endpoint-item" title="Web 系統入口與 API 反向代理">
-            <span class="endpoint-name">🌐 系統入口 (Web / LAH_Web_Service)</span>
+            <span class="endpoint-name"><svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c5 5 5 13 0 18M12 3c-5 5-5 13 0 18"/></svg> 系統入口 (Web / LAH_Web_Service)</span>
             <span class="endpoint-port">:80</span>
           </div>
           <div class="endpoint-item" title="Nuxt.js Vue 前端智慧管控服務">
-            <span class="endpoint-name">🖥️ 智慧管控網頁 (Nuxt)</span>
+            <span class="endpoint-name"><svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M6 8l4 4-4 4m6 0h5"/></svg> 智慧管控網頁 (Nuxt)</span>
             <span class="endpoint-port">:8080</span>
           </div>
           <div class="endpoint-item" title="PHP 8.5 業務核心 RESTful API 服務">
-            <span class="endpoint-name">⚡ 業務核心 API (PHP 8.5)</span>
+            <span class="endpoint-name"><svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 2L4 14h7l-1 8 10-12h-7z"/></svg> 業務核心 API (PHP 8.5)</span>
             <span class="endpoint-port">:8085</span>
           </div>
           <div class="endpoint-item" title="PM2 背景健康檢查與自動排程常駐守護服務">
-            <span class="endpoint-name">🛡️ 背景健康排程 (PM2)</span>
+            <span class="endpoint-name"><svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2l8 3v6c0 5-3 8-8 11-5-3-8-6-8-11V5zM8 12l3 3 5-6"/></svg> 背景健康排程 (PM2)</span>
             <span class="endpoint-port">常駐守護</span>
           </div>
           <div class="endpoint-item" title="Node.js WebSocket 即時通訊廣播服務">
-            <span class="endpoint-name">💬 即時通訊長連線 (WS)</span>
+            <span class="endpoint-name"><svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 4h18v13H9l-6 4z"/></svg> 即時通訊長連線 (WS)</span>
             <span class="endpoint-port">:8081</span>
           </div>
           <div class="endpoint-item" title="Node.js Express HTTP 附件與檔案上傳服務">
-            <span class="endpoint-name">📎 即時通附件服務 (HTTP)</span>
+            <span class="endpoint-name"><svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 2h8l4 4v16H6zM14 2v5h4M9 11h6M9 15h6"/></svg> 即時通附件服務 (HTTP)</span>
             <span class="endpoint-port">:8082</span>
           </div>
         </div>
         <div class="maint-tip-box">
           <div class="maint-tip-item">
-            <span>💡</span>
-            <span><b>常規程式修補</b>：日常更新僅需勾選「<code>📦 程式修補 (patch)</code>」，無須重複解壓龐大核心套件。</span>
+            <span><svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18h6m-6 3h6M8 15a7 7 0 118 0l-1 1H9z"/></svg></span>
+            <span><b>常規程式修補</b>：日常更新僅需勾選「<code> 程式修補 (patch)</code>」，無須重複解壓龐大核心套件。</span>
           </div>
           <div class="maint-tip-item">
-            <span>🛡️</span>
+            <span><svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2l8 3v6c0 5-3 8-8 11-5-3-8-6-8-11V5zM8 12l3 3 5-6"/></svg></span>
             <span><b>專屬隔離沙盒</b>：安裝根目錄附帶 <code>lah-cmd.bat</code>，雙擊可開啟專屬終端且絕不干擾主機全域環境。</span>
           </div>
           <div class="maint-tip-item">
-            <span>📝</span>
+            <span><svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 16L16 4l4 4L8 20H4zM13 7l4 4"/></svg></span>
             <span><b>安裝除錯日誌</b>：每次執行歷程均自動寫入安裝根目錄 <code>install.log</code>（含 5MB 自動輪替保護），便於現場排查。</span>
           </div>
         </div>
@@ -657,7 +658,7 @@
     <div id="status_summary" class="status-text">準備就緒，請確認更新項目後點選「開始更新」</div>
     <div class="footer-actions">
       <button id="btn_exit" class="secondary">關閉離開</button>
-      <button id="btn_start_update" class="primary">🚀 開始執行更新作業</button>
+      <button id="btn_start_update" class="primary"><svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4l13 8-13 8z"/></svg> 開始執行更新作業</button>
     </div>
   </div>
 
@@ -665,7 +666,7 @@
   <div id="modal_root_missing" class="modal-overlay">
     <div class="modal-content" style="max-width: 580px;">
       <div class="modal-header">
-        <h2 style="color:#0284c7;">⚠️ 系統安裝目錄提示</h2>
+        <h2 style="color:#0284c7;"><svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3L2 21h20L12 3zM12 9v5m0 3v1"/></svg> 系統安裝目錄提示</h2>
       </div>
       <div class="guide-box">
         <strong>偵測到預設安裝目錄不存在：</strong><br>
@@ -674,15 +675,15 @@
       </div>
       <div class="guide-actions">
         <button id="btn_create_root" class="guide-btn primary">
-          📁 <strong>立即建立此預設目錄</strong>
+          <svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h7l2 2h9v10H3z"/></svg> <strong>立即建立此預設目錄</strong>
           <span style="font-size:11px; opacity:0.9;">（一鍵自動建立並取得存取權限）</span>
         </button>
         <button id="btn_modal_browse_root" class="guide-btn">
-          🔍 <strong>瀏覽選取其他磁碟／目錄</strong>
+          <svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="10" cy="10" r="6"/><path d="M15 15l5 5"/></svg> <strong>瀏覽選取其他磁碟／目錄</strong>
           <span style="font-size:11px; color:#64748b;">（例如 D:\AppServ 或其他自訂路徑）</span>
         </button>
         <button id="btn_modal_skip_root" class="guide-btn">
-          ✏️ <strong>稍後於介面手動設定</strong>
+          <svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 16L16 4l4 4L8 20H4zM13 7l4 4"/></svg> <strong>稍後於介面手動設定</strong>
           <span style="font-size:11px; color:#64748b;">（關閉對話框，留在主畫面輸入）</span>
         </button>
       </div>
@@ -708,7 +709,7 @@
       <div id="log_box" class="log-box"></div>
       <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:12px;">
         <button id="btn_modal_back" class="secondary" style="display:none;">返回主畫面</button>
-        <button id="btn_launch_dashboard" class="secondary" style="display:none; color:#0284c7; border-color:#38bdf8; font-weight:600;">📊 開啟管理儀表板</button>
+        <button id="btn_launch_dashboard" class="secondary" style="display:none; color:#0284c7; border-color:#38bdf8; font-weight:600;"><svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20V10h4v10m4 0V4h4v16m4 0v-7h2"/></svg> 開啟管理儀表板</button>
         <button id="btn_close_modal" class="primary" style="display:none;">完成並關閉程式</button>
       </div>
     </div>
@@ -718,7 +719,7 @@
   <div id="modal_cleanup" class="modal-overlay">
     <div class="modal-content" style="max-width: 620px;">
       <div class="modal-header">
-        <h2 style="color:#16a34a;">🎉 系統更新與服務驗證完成</h2>
+        <h2 style="color:#16a34a;"><svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12l5 5L20 5"/></svg> 系統更新與服務驗證完成</h2>
       </div>
       <div style="margin:10px 0; font-size:13px; line-height:1.6;">
         <div id="health_report_box" style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:6px; padding:10px 14px; margin-bottom:12px; font-size:12.5px;"></div>
@@ -733,7 +734,7 @@
       </div>
       <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:14px;">
         <button id="btn_cleanup_keep" class="secondary">保留壓縮包</button>
-        <button id="btn_cleanup_delete" class="primary">🗑️ 刪除安裝包並釋放空間</button>
+        <button id="btn_cleanup_delete" class="primary"><svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h16M9 6V3h6v3m-9 0 1 15h10l1-15M10 10v7m4-7v7"/></svg> 刪除安裝包並釋放空間</button>
       </div>
     </div>
   </div>
@@ -742,8 +743,8 @@
   <div id="modal_release_notes" class="modal-overlay">
     <div class="modal-content" style="width: 92%; max-width: 940px;">
       <div class="modal-header">
-        <h2>📖 系統更新說明文件</h2>
-        <button id="btn_close_notes" class="secondary" style="padding:3px 10px;">✕</button>
+        <h2><svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 5c4-2 7-1 9 1 2-2 5-3 9-1v13c-4-2-7-1-9 1-2-2-5-3-9-1zM12 6v13"/></svg> 系統更新說明文件</h2>
+        <button id="btn_close_notes" aria-label="關閉更新說明" class="secondary" style="padding:3px 10px;"><svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 5l14 14M19 5L5 19"/></svg></button>
       </div>
       <div id="release_notes_content" style="font-family:Consolas, 'Microsoft JhengHei UI', monospace; font-size:12.5px; line-height:1.6; white-space:pre-wrap; background:#f8fafc; border:1px solid #e2e8f0; padding:14px; border-radius:6px; max-height:520px; overflow-y:auto; user-select:text;"></div>
     </div>

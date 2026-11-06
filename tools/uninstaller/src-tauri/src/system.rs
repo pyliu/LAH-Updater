@@ -179,7 +179,7 @@ pub fn robust_rmtree(target_path: &Path, log_fn: &dyn Fn(&str, &str)) -> (bool, 
             Err(e) => {
                 if attempt == 2 {
                     let msg = format!("刪除失敗 [{}]: {}", target_path.display(), e);
-                    log_fn(&format!("  ❌ {}", msg), "error");
+                    log_fn(&format!("  錯誤：{}", msg), "error");
                     return (false, msg);
                 }
                 sleep(Duration::from_millis(800));

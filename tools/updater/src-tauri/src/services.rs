@@ -64,12 +64,12 @@ pub fn is_pm2_service_running() -> bool {
 }
 
 pub fn stop_service(svc_name: &str, log_fn: &dyn Fn(&str, &str)) -> bool {
-    log_fn(&format!("⏳ 正在停止服務 [{}]...", svc_name), "info");
+    log_fn(&format!("正在停止服務 [{}]...", svc_name), "info");
     let _ = run_cmd_hidden("net.exe", &["stop", svc_name]);
 
     for _ in 0..15 {
         if !is_service_running(svc_name) {
-            log_fn(&format!("  ✓ 服務 [{}] 已成功停止", svc_name), "success");
+            log_fn(&format!("  服務 [{}] 已成功停止", svc_name), "success");
             return true;
         }
         sleep(Duration::from_millis(500));
@@ -83,25 +83,25 @@ pub fn stop_service(svc_name: &str, log_fn: &dyn Fn(&str, &str)) -> bool {
 }
 
 pub fn start_service(svc_name: &str, log_fn: &dyn Fn(&str, &str)) -> bool {
-    log_fn(&format!("🚀 正在啟動服務 [{}]...", svc_name), "info");
+    log_fn(&format!("正在啟動服務 [{}]...", svc_name), "info");
     let (_ok, _, stderr) = run_cmd_hidden("net.exe", &["start", svc_name]);
 
     for _ in 0..15 {
         if is_service_running(svc_name) {
-            log_fn(&format!("  ✓ 服務 [{}] 已成功啟動運行！", svc_name), "success");
+            log_fn(&format!("  服務 [{}] 已成功啟動運行！", svc_name), "success");
             return true;
         }
         sleep(Duration::from_millis(500));
     }
 
-    log_fn(&format!("⚠️ 啟動服務 [{}] 逾時或回傳警告: {}", svc_name, stderr), "warning");
+    log_fn(&format!("警告：啟動服務 [{}] 逾時或回傳警告: {}", svc_name, stderr), "warning");
     false
 }
 
 pub fn install_apache_service(apache_dir: &Path, svc_name: &str, log_fn: &dyn Fn(&str, &str)) -> bool {
     let httpd_exe = apache_dir.join("bin").join("httpd.exe");
     if !httpd_exe.is_file() {
-        log_fn(&format!("⚠️ 找不到 httpd.exe: {}", httpd_exe.display()), "warning");
+        log_fn(&format!("警告：找不到 httpd.exe: {}", httpd_exe.display()), "warning");
         return false;
     }
 
@@ -112,31 +112,31 @@ pub fn install_apache_service(apache_dir: &Path, svc_name: &str, log_fn: &dyn Fn
     for legacy in legacy_candidates {
         if legacy != svc_name && is_service_installed(legacy) {
             log_fn(
-                &format!("⏳ 偵測到舊版 Apache 服務 [{legacy}]，正在停止並解除安裝以無縫升級為 [{svc_name}]..."),
+                &format!("偵測到舊版 Apache 服務 [{legacy}]，正在停止並解除安裝以無縫升級為 [{svc_name}]..."),
                 "info",
             );
             let _ = stop_service(legacy, log_fn);
             let httpd_str = httpd_exe.to_string_lossy();
             let _ = run_cmd_hidden(&httpd_str, &["-k", "uninstall", "-n", legacy]);
             let _ = run_cmd_hidden("sc.exe", &["delete", legacy]);
-            log_fn(&format!("  ✓ 已自 Windows SCM 清理舊版 Apache 服務 [{legacy}]"), "success");
+            log_fn(&format!("  已自 Windows SCM 清理舊版 Apache 服務 [{legacy}]"), "success");
         }
     }
 
     // 2. 釋出專屬 WinSW 服務檔案至 <apache_dir>\service\
     let service_dir = apache_dir.join("service");
     if let Err(e) = fs::create_dir_all(&service_dir) {
-        log_fn(&format!("⚠️ 建立 service 目錄失敗: {e}"), "warning");
+        log_fn(&format!("警告：建立 service 目錄失敗: {e}"), "warning");
         return false;
     }
 
     let winsw_exe = service_dir.join("lah-web-service.exe");
     if !winsw_exe.is_file() || fs::metadata(&winsw_exe).map_or(0, |m| m.len()) == 0 {
         if let Err(e) = fs::write(&winsw_exe, LAH_SERVICE_EXE) {
-            log_fn(&format!("⚠️ 釋出 lah-web-service.exe 失敗: {e}"), "warning");
+            log_fn(&format!("警告：釋出 lah-web-service.exe 失敗: {e}"), "warning");
             return false;
         }
-        log_fn("  ✓ 已釋出專屬 WinSW 服務核心 (lah-web-service.exe)", "success");
+        log_fn("  已釋出專屬 WinSW 服務核心 (lah-web-service.exe)", "success");
     }
 
     let xml_path = service_dir.join("lah-web-service.xml");
@@ -147,7 +147,7 @@ pub fn install_apache_service(apache_dir: &Path, svc_name: &str, log_fn: &dyn Fn
         .replace("C:\\AppServ\\Apache24", &apache_str)
         .replace("C:\\AppServ", &root_str);
     if let Err(e) = fs::write(&xml_path, customized_xml) {
-        log_fn(&format!("⚠️ 釋出 lah-web-service.xml 失敗: {e}"), "warning");
+        log_fn(&format!("警告：釋出 lah-web-service.xml 失敗: {e}"), "warning");
         return false;
     }
 
@@ -161,28 +161,28 @@ pub fn install_apache_service(apache_dir: &Path, svc_name: &str, log_fn: &dyn Fn
         sleep(Duration::from_millis(500));
     }
 
-    log_fn(&format!("🔧 正在將 Web 伺服器註冊為 Windows 沙盒服務 [{svc_name}]..."), "info");
+    log_fn(&format!("正在將 Web 伺服器註冊為 Windows 沙盒服務 [{svc_name}]..."), "info");
     let (ok_inst, stdout_inst, stderr_inst) = run_cmd_hidden(&winsw_str, &["install"]);
 
     if ok_inst || stdout_inst.contains("successfully") || stdout_inst.contains("already exists") {
-        log_fn(&format!("  ✓ Web 系統服務 [{svc_name}] 註冊成功 (WinSW 沙盒守護)！"), "success");
+        log_fn(&format!("  Web 系統服務 [{svc_name}] 註冊成功 (WinSW 沙盒守護)！"), "success");
     } else {
-        log_fn(&format!("  ⚠️ 註冊 Web 服務回傳警告: {stdout_inst} {stderr_inst}"), "warning");
+        log_fn(&format!("  警告：註冊 Web 服務回傳警告: {stdout_inst} {stderr_inst}"), "warning");
     }
 
     // 4. 啟動服務
     let (ok_start, stdout_start, stderr_start) = run_cmd_hidden(&winsw_str, &["start"]);
     if ok_start || stdout_start.contains("Started") {
-        log_fn(&format!("  ✓ Web 系統服務 [{svc_name}] 已成功啟動運行！"), "success");
+        log_fn(&format!("  Web 系統服務 [{svc_name}] 已成功啟動運行！"), "success");
         true
     } else {
-        log_fn(&format!("  ⚠️ 啟動 Web 服務回傳: {stdout_start} {stderr_start}"), "warning");
+        log_fn(&format!("  警告：啟動 Web 服務回傳: {stdout_start} {stderr_start}"), "warning");
         start_service(svc_name, log_fn)
     }
 }
 
 pub fn grant_service_account_acls(root_dir: &Path, log_fn: &dyn Fn(&str, &str)) {
-    log_fn("🔒 正在為 NT AUTHORITY\\LocalService 配置沙盒目錄最小權限 ACL...", "info");
+    log_fn("正在為 NT AUTHORITY\\LocalService 配置沙盒目錄最小權限 ACL...", "info");
     let target_subdirs = ["node", ".pm2", "logs", "LAH-NUXTJS"];
     for sub in &target_subdirs {
         let dir = root_dir.join(sub);
@@ -196,9 +196,9 @@ pub fn grant_service_account_acls(root_dir: &Path, log_fn: &dyn Fn(&str, &str)) 
                 &[&dir_str, "/grant", "NT AUTHORITY\\LocalService:(OI)(CI)M", "/T", "/Q"],
             );
             if ok {
-                log_fn(&format!("  ✓ 已授予 LocalService 沙盒權限: {}", dir_str), "info");
+                log_fn(&format!("  已授予 LocalService 沙盒權限: {}", dir_str), "info");
             } else {
-                log_fn(&format!("  ⚠️ 配置 LocalService 權限警告 ({}): {}", dir_str, err), "warning");
+                log_fn(&format!("  警告：配置 LocalService 權限警告 ({}): {}", dir_str, err), "warning");
             }
         }
     }

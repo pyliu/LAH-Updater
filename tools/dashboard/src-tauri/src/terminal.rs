@@ -274,7 +274,7 @@ pub fn set_terminal_encoding(encoding: &str) -> CommandActionResult {
 
     CommandActionResult {
         success: true,
-        message: format!("✓ 已切換終端編碼為：{}", label),
+        message: format!("已切換終端編碼為：{}", label),
     }
 }
 
@@ -301,7 +301,7 @@ pub fn reset_session(root_dir: &Path) -> CommandActionResult {
     match ensure_terminal_started(root_dir) {
         Ok(_) => CommandActionResult {
             success: true,
-            message: "✓ 沙盒終端 Session 已成功重設".to_string(),
+            message: "沙盒終端 Session 已成功重設".to_string(),
         },
         Err(e) => CommandActionResult {
             success: false,

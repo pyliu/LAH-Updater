@@ -312,13 +312,13 @@ pub fn pm2_process_action(root_dir: &Path, action: &str, target: &str) -> Comman
     if ok {
         CommandActionResult {
             success: true,
-            message: format!("✅ 已完成：{}", action_label),
+            message: format!("已完成：{}", action_label),
         }
     } else {
         CommandActionResult {
             success: false,
             message: format!(
-                "⚠️ {} 執行失敗：{}\n{}",
+                "警告：{} 執行失敗：{}\n{}",
                 action_label,
                 stderr.trim(),
                 stdout.trim()
@@ -338,9 +338,9 @@ pub fn pm2_service_action(root_dir: &Path, action: &str) -> CommandActionResult 
             CommandActionResult {
                 success: ok,
                 message: if ok {
-                    format!("✅ {} 服務已註冊並啟動", SERVICE_ID)
+                    format!("{} 服務已註冊並啟動", SERVICE_ID)
                 } else {
-                    format!("⚠️ 註冊服務失敗：\n{}", logs.into_inner().join("\n"))
+                    format!("警告：註冊服務失敗：\n{}", logs.into_inner().join("\n"))
                 },
             }
         }
@@ -352,10 +352,10 @@ pub fn pm2_service_action(root_dir: &Path, action: &str) -> CommandActionResult 
                 return CommandActionResult {
                     success: ok,
                     message: if ok {
-                        format!("✅ 已自動註冊並啟動服務 {}", SERVICE_ID)
+                        format!("已自動註冊並啟動服務 {}", SERVICE_ID)
                     } else {
                         format!(
-                            "⚠️ 啟動服務失敗（請確認是否以系統管理員身分執行）：\n{}",
+                            "警告：啟動服務失敗（請確認是否以系統管理員身分執行）：\n{}",
                             logs.into_inner().join("\n")
                         )
                     },
@@ -371,9 +371,9 @@ pub fn pm2_service_action(root_dir: &Path, action: &str) -> CommandActionResult 
             CommandActionResult {
                 success: ok || running,
                 message: if ok || running {
-                    format!("✅ 服務 {} 已啟動", SERVICE_ID)
+                    format!("服務 {} 已啟動", SERVICE_ID)
                 } else {
-                    format!("⚠️ 啟動服務失敗：{} {}", err.trim(), out.trim())
+                    format!("警告：啟動服務失敗：{} {}", err.trim(), out.trim())
                 },
             }
         }
@@ -394,9 +394,9 @@ pub fn pm2_service_action(root_dir: &Path, action: &str) -> CommandActionResult 
             CommandActionResult {
                 success: ok || stopped,
                 message: if ok || stopped {
-                    format!("✅ 服務 {} 已停止", SERVICE_ID)
+                    format!("服務 {} 已停止", SERVICE_ID)
                 } else {
-                    format!("⚠️ 停止服務失敗：{} {}", err.trim(), out.trim())
+                    format!("警告：停止服務失敗：{} {}", err.trim(), out.trim())
                 },
             }
         }
@@ -407,7 +407,7 @@ pub fn pm2_service_action(root_dir: &Path, action: &str) -> CommandActionResult 
             CommandActionResult {
                 success: res.success,
                 message: if res.success {
-                    format!("✅ 服務 {} 已重新啟動", SERVICE_ID)
+                    format!("服務 {} 已重新啟動", SERVICE_ID)
                 } else {
                     res.message
                 },
@@ -427,9 +427,9 @@ pub fn repair_or_restart_logrotate(root_dir: &Path) -> CommandActionResult {
     CommandActionResult {
         success: ok,
         message: if ok {
-            "✅ 已完成沙盒內建 pm2-logrotate 模組掛載與喚醒（已啟用 compress: true）".to_string()
+            "已完成沙盒內建 pm2-logrotate 模組掛載與喚醒（已啟用 compress: true）".to_string()
         } else {
-            format!("⚠️ 啟動 pm2-logrotate 異常：\n{}", logs.into_inner().join("\n"))
+            format!("警告：啟動 pm2-logrotate 異常：\n{}", logs.into_inner().join("\n"))
         },
     }
 }
@@ -514,14 +514,14 @@ pub fn trigger_logrotate_now(root_dir: &Path) -> CommandActionResult {
         CommandActionResult {
             success: true,
             message: format!(
-                "✅ 已成功 Gzip 壓縮輪替 {} 個日誌檔案（釋放 {:.2} MB），並已執行 pm2 reloadLogs！",
+                "已成功 Gzip 壓縮輪替 {} 個日誌檔案（釋放 {:.2} MB），並已執行 pm2 reloadLogs！",
                 rotated_count, freed_mb
             ),
         }
     } else {
         CommandActionResult {
             success: true,
-            message: "✅ 目前活躍日誌皆小於 100 KB，已執行 pm2 reloadLogs 重新整理日誌句柄。"
+            message: "目前活躍日誌皆小於 100 KB，已執行 pm2 reloadLogs 重新整理日誌句柄。"
                 .to_string(),
         }
     }

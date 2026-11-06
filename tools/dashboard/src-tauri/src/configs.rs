@@ -367,7 +367,7 @@ pub fn write_config_file(root_dir: &Path, path_str: &str, content: &str) -> Conf
 
         return ConfigSaveResult {
             success: true,
-            message: "✓ 組態已成功儲存，且通過 Apache 語法檢查 (Syntax OK)！".to_string(),
+            message: "組態已成功儲存，且通過 Apache 語法檢查 (Syntax OK)！".to_string(),
             backup_path: backup_saved,
             syntax_checked: true,
             syntax_error: false,
@@ -393,7 +393,7 @@ pub fn write_config_file(root_dir: &Path, path_str: &str, content: &str) -> Conf
 
         return ConfigSaveResult {
             success: true,
-            message: "✓ 組態已成功儲存，且通過 Node.js 語法檢查 (Syntax OK)！".to_string(),
+            message: "組態已成功儲存，且通過 Node.js 語法檢查 (Syntax OK)！".to_string(),
             backup_path: backup_saved,
             syntax_checked: true,
             syntax_error: false,
@@ -404,7 +404,7 @@ pub fn write_config_file(root_dir: &Path, path_str: &str, content: &str) -> Conf
 
     ConfigSaveResult {
         success: true,
-        message: "✓ 組態檔案已成功儲存！".to_string(),
+        message: "組態檔案已成功儲存！".to_string(),
         backup_path: backup_saved,
         syntax_checked: false,
         syntax_error: false,
@@ -512,7 +512,7 @@ pub fn restore_config_backup(target_path_str: &str, backup_path_str: &str) -> Co
     match fs::copy(backup, target) {
         Ok(_) => CommandActionResult {
             success: true,
-            message: format!("✓ 已成功從備份還原：{}", backup_path_str),
+            message: format!("已成功從備份還原：{}", backup_path_str),
         },
         Err(e) => CommandActionResult {
             success: false,

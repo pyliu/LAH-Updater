@@ -134,9 +134,9 @@
       </div>
 
       <!-- Collapsible 進階參數 -->
-      <button type="button" id="btnToggleAdvanced" class="collapsible-trigger">
-        <span>⚙️ 進階排程時段與底層參數 (輪詢週期、發送起訖時分)</span>
-        <span id="advancedArrow">▼</span>
+      <button type="button" id="btnToggleAdvanced" aria-expanded="false" class="collapsible-trigger">
+        <span><svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3m0 14v3M2 12h3m14 0h3M5 5l2 2m10 10 2 2M19 5l-2 2M7 17l-2 2"/></svg> 進階排程時段與底層參數 (輪詢週期、發送起訖時分)</span>
+        <span id="advancedArrow"><svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 9l7 7 7-7"/></svg></span>
       </button>
       <div id="advancedContent" class="collapsible-content">
         <div class="form-grid">
@@ -217,7 +217,7 @@
           </tbody>
         </table>
         <div style="margin-top: 14px; padding: 10px; background: #f0fdf4; border-radius: 6px; border: 1px solid #bbf7d0; font-size: 11.5px; color: #166534;">
-          <strong>🛡️ 自動備份防護：</strong>確認儲存後，系統將於同目錄自動建立 <code>env.properties.YYYYMMDD_HHMMSS.bak</code>，並以標準 BASE64 與 Big-5 編碼寫入新設定。
+          <strong><svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2l8 3v6c0 5-3 8-8 11-5-3-8-6-8-11V5zM8 12l3 3 5-6"/></svg> 自動備份防護：</strong>確認儲存後，系統將於同目錄自動建立 <code>env.properties.YYYYMMDD_HHMMSS.bak</code>，並以標準 BASE64 與 Big-5 編碼寫入新設定。
         </div>
       </div>
       <div class="modal-footer">

@@ -7,13 +7,13 @@ use winreg::enums::{HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE, KEY_READ, KEY_WRITE};
 use winreg::RegKey;
 
 pub fn clean_autostart_and_scheduler(root_dir: &Path, log_fn: &dyn Fn(&str, &str)) -> bool {
-    log_fn("⏳ 正在清除開機自啟動腳本、工作排程器與註冊表...", "info");
+    log_fn("正在清除開機自啟動腳本、工作排程器與註冊表...", "info");
 
     // 1. 清除工作排程 (涵蓋 LAH_PM2_Autostart, PM2_Autostart, LAH_Autostart)
     for tn in &["LAH_PM2_Autostart", "PM2_Autostart", "LAH_Autostart"] {
         let (ok, _, _) = run_cmd_hidden("schtasks.exe", &["/Delete", "/TN", tn, "/F"]);
         if ok {
-            log_fn(&format!("  ✓ 已自 Windows 工作排程器刪除: {tn}"), "success");
+            log_fn(&format!("  已自 Windows 工作排程器刪除: {tn}"), "success");
         }
     }
 
@@ -50,7 +50,7 @@ pub fn clean_autostart_and_scheduler(root_dir: &Path, log_fn: &dyn Fn(&str, &str
                     let path = entry.path();
                     let _ = crate::system::remove_readonly(&path);
                     if fs::remove_file(&path).is_ok() {
-                        log_fn(&format!("  ✓ 已清理啟動資料夾腳本/捷徑: {}", path.display()), "success");
+                        log_fn(&format!("  已清理啟動資料夾腳本/捷徑: {}", path.display()), "success");
                     }
                 }
             }
@@ -69,7 +69,7 @@ pub fn clean_autostart_and_scheduler(root_dir: &Path, log_fn: &dyn Fn(&str, &str
         if sp.is_file() {
             let _ = crate::system::remove_readonly(&sp);
             if fs::remove_file(&sp).is_ok() {
-                log_fn(&format!("  ✓ 已清理獨立喚醒腳本: {}", sp.display()), "success");
+                log_fn(&format!("  已清理獨立喚醒腳本: {}", sp.display()), "success");
             }
         }
     }
@@ -101,7 +101,7 @@ fn clean_registry_run(hkey: winreg::HKEY, subkey: &str, root_dir: &Path, log_fn:
 
         for name in to_delete {
             if run_key.delete_value(&name).is_ok() {
-                log_fn(&format!("  ✓ 已清理註冊表 Run 自啟動項目: [{name}]"), "success");
+                log_fn(&format!("  已清理註冊表 Run 自啟動項目: [{name}]"), "success");
             }
         }
     }
@@ -127,7 +127,7 @@ pub fn remove_paths_from_environment(paths_to_remove: &[PathBuf], log_fn: &dyn F
                     let p_norm = p.trim().trim_end_matches(['\\', '/']).to_lowercase();
                     if norm_targets.contains(&p_norm) {
                         removed_any = true;
-                        log_fn(&format!("  ✓ 自使用者 PATH 環境變數剔除: [{p}]"), "info");
+                        log_fn(&format!("  自使用者 PATH 環境變數剔除: [{p}]"), "info");
                     } else {
                         new_parts.push(p.trim());
                     }
@@ -145,7 +145,7 @@ pub fn remove_paths_from_environment(paths_to_remove: &[PathBuf], log_fn: &dyn F
             if env_key.get_value::<String, _>(var_name).is_ok() {
                 let _ = env_key.delete_value(var_name);
                 removed_any = true;
-                log_fn(&format!("  ✓ 自使用者環境變數 (HKCU) 清理殘留變數: [{var_name}]"), "info");
+                log_fn(&format!("  自使用者環境變數 (HKCU) 清理殘留變數: [{var_name}]"), "info");
             }
         }
     }
@@ -166,7 +166,7 @@ pub fn remove_paths_from_environment(paths_to_remove: &[PathBuf], log_fn: &dyn F
                         if norm_targets.contains(&p_norm) {
                             sys_removed = true;
                             removed_any = true;
-                            log_fn(&format!("  ✓ 自系統 PATH 環境變數剔除: [{p}]"), "info");
+                            log_fn(&format!("  自系統 PATH 環境變數剔除: [{p}]"), "info");
                         } else {
                             new_parts.push(p.trim());
                         }
@@ -184,7 +184,7 @@ pub fn remove_paths_from_environment(paths_to_remove: &[PathBuf], log_fn: &dyn F
                 if env_key.get_value::<String, _>(var_name).is_ok() {
                     let _ = env_key.delete_value(var_name);
                     removed_any = true;
-                    log_fn(&format!("  ✓ 自系統環境變數 (HKLM) 清理殘留變數: [{var_name}]"), "info");
+                    log_fn(&format!("  自系統環境變數 (HKLM) 清理殘留變數: [{var_name}]"), "info");
                 }
             }
         }
@@ -193,7 +193,7 @@ pub fn remove_paths_from_environment(paths_to_remove: &[PathBuf], log_fn: &dyn F
     // 3. 廣播系統環境變數更新通知
     if removed_any {
         broadcast_setting_change();
-        log_fn("  ✅ 已廣播通知 Windows 系統環境變數更新完成！", "success");
+        log_fn("  已廣播通知 Windows 系統環境變數更新完成！", "success");
     }
 
     true

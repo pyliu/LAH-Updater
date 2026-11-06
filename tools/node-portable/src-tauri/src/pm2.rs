@@ -183,7 +183,7 @@ pub fn wire_bundled_pm2_logrotate(root_dir: &Path, log_fn: &dyn Fn(&str, &str)) 
         if let Ok(pretty) = serde_json::to_string_pretty(&conf_val) {
             if fs::write(&conf_path, pretty).is_ok() {
                 log_fn(
-                    &format!("  ✓ 已掛載便攜版內建模組 ({})", bundled_dir.display()),
+                    &format!("  已掛載便攜版內建模組 ({})", bundled_dir.display()),
                     "success",
                 );
             }
@@ -292,7 +292,7 @@ pub fn sanitize_pm2_dump(dump_path: &Path, root_dir: &Path, log_fn: &dyn Fn(&str
     if modified {
         if let Ok(pretty) = serde_json::to_string_pretty(&parsed) {
             if fs::write(dump_path, pretty).is_ok() {
-                log_fn("  ✓ 已清理 dump.pm2 內殘留之舊全域 Node/PM2 路徑設定", "success");
+                log_fn("  已清理 dump.pm2 內殘留之舊全域 Node/PM2 路徑設定", "success");
             }
         }
     }
@@ -304,7 +304,7 @@ pub fn ensure_portable_pm2_patched(root_dir: &Path, log_fn: &dyn Fn(&str, &str))
         return false;
     }
 
-    log_fn("🟢 正在配置綠色版 Node.js 與 PM2 執行期環境...", "info");
+    log_fn("正在配置綠色版 Node.js 與 PM2 執行期環境...", "info");
     let mut patched_any = false;
 
     // 0. 確保統一的 <root_dir>\.pm2 目錄存在，若尚無 dump.pm2 則自動自既有全域/使用者 .pm2 遷移
@@ -318,7 +318,7 @@ pub fn ensure_portable_pm2_patched(root_dir: &Path, log_fn: &dyn Fn(&str, &str))
                 let src_f = legacy_dir.join(fname);
                 let dst_f = unified_pm2_home.join(fname);
                 if src_f.is_file() && !dst_f.is_file() && fs::copy(&src_f, &dst_f).is_ok() {
-                    log_fn(&format!("  ✓ 已自 {} 遷移 {fname}", legacy_dir.display()), "success");
+                    log_fn(&format!("  已自 {} 遷移 {fname}", legacy_dir.display()), "success");
                 }
             }
         }
@@ -354,7 +354,7 @@ endLocal & goto #_undefined_# 2>NUL || title %COMSPEC% & SET \"PATH=%dp0%;%PATH%
     };
     if need_write_cmd && fs::write(&pm2_cmd_path, pm2_cmd_content).is_ok() {
         patched_any = true;
-        log_fn("  ✓ 已建立可攜式 pm2.cmd 執行捷徑", "success");
+        log_fn("  已建立可攜式 pm2.cmd 執行捷徑", "success");
     }
 
     // 2. 修補 paths.js (主 pm2 與 pm2-logrotate 內嵌之 pm2)
@@ -488,7 +488,7 @@ endLocal & goto #_undefined_# 2>NUL || title %COMSPEC% & SET \"PATH=%dp0%;%PATH%
     wire_bundled_pm2_logrotate(root_dir, log_fn);
 
     if patched_any {
-        log_fn("  ✓ PM2 綠色環境、Loopback TCP IPC (Port 42681) 與離線日誌輪替模組修補完成", "success");
+        log_fn("  PM2 綠色環境、Loopback TCP IPC (Port 42681) 與離線日誌輪替模組修補完成", "success");
     }
 
     true
@@ -497,13 +497,13 @@ endLocal & goto #_undefined_# 2>NUL || title %COMSPEC% & SET \"PATH=%dp0%;%PATH%
 pub fn stop_and_remove_legacy_pm2_services(log_fn: &dyn Fn(&str, &str)) {
     for svc in LEGACY_PM2_SERVICES {
         if run_sc(&["query", svc]).0 {
-            log_fn(&format!("🛑 偵測到舊全域 PM2 服務 [{svc}]，正在停止並移除..."), "info");
+            log_fn(&format!("偵測到舊全域 PM2 服務 [{svc}]，正在停止並移除..."), "info");
             let _ = run_cmd_hidden("net.exe", &["stop", svc]);
             let _ = run_sc(&["stop", svc]);
             std::thread::sleep(std::time::Duration::from_millis(800));
             let (ok_del, _, _) = run_sc(&["delete", svc]);
             if ok_del {
-                log_fn(&format!("  ✓ 已移除舊全域服務 [{svc}]"), "success");
+                log_fn(&format!("  已移除舊全域服務 [{svc}]"), "success");
             }
         }
     }
@@ -512,13 +512,13 @@ pub fn stop_and_remove_legacy_pm2_services(log_fn: &dyn Fn(&str, &str)) {
 pub fn kill_pm2_daemon(root_dir: &Path, log_fn: &dyn Fn(&str, &str)) -> (bool, String) {
     stop_and_remove_legacy_pm2_services(log_fn);
 
-    log_fn("🛑 正在執行 pm2 kill 並釋放 Node.js / PM2 行程鎖定...", "info");
+    log_fn("正在執行 pm2 kill 並釋放 Node.js / PM2 行程鎖定...", "info");
     if let Some(pm2) = resolve_pm2_command(root_dir) {
         let (ok, stdout, stderr) = run_cmd_hidden(&pm2.to_string_lossy(), &["kill"]);
         if ok || stdout.contains("daemon stopped") {
-            log_fn("  ✓ PM2 守護進程已終止", "success");
+            log_fn("  PM2 守護進程已終止", "success");
         } else {
-            log_fn(&format!("  ℹ️ PM2 kill 輸出: {} {}", stdout, stderr), "info");
+            log_fn(&format!("  PM2 kill 輸出: {} {}", stdout, stderr), "info");
         }
     }
 
@@ -533,7 +533,7 @@ pub fn kill_pm2_daemon(root_dir: &Path, log_fn: &dyn Fn(&str, &str)) -> (bool, S
     );
     let (ok_ps, _, _) = run_powershell(&ps_kill);
     if ok_ps {
-        log_fn("  ✓ 本機相關 Node 與舊全域 PM2 殘留進程已清理完畢", "success");
+        log_fn("  本機相關 Node 與舊全域 PM2 殘留進程已清理完畢", "success");
     }
 
     (true, "PM2 與背景守護行程已終止".to_string())
@@ -541,13 +541,13 @@ pub fn kill_pm2_daemon(root_dir: &Path, log_fn: &dyn Fn(&str, &str)) -> (bool, S
 
 pub fn resurrect_pm2_services(root_dir: &Path, log_fn: &dyn Fn(&str, &str)) -> (bool, String) {
     if let Some(pm2) = resolve_pm2_command(root_dir) {
-        log_fn("🚀 正在執行 pm2 resurrect 喚醒已註冊之受管服務...", "info");
+        log_fn("正在執行 pm2 resurrect 喚醒已註冊之受管服務...", "info");
         let (ok, stdout, stderr) = run_cmd_hidden(&pm2.to_string_lossy(), &["resurrect", "--no-color"]);
         if ok || stdout.contains("Restoring") {
-            log_fn("  ✓ PM2 服務已成功喚醒！", "success");
+            log_fn("  PM2 服務已成功喚醒！", "success");
             return (true, "PM2 已喚醒".to_string());
         } else {
-            log_fn(&format!("  ⚠️ pm2 resurrect 回傳: {} {}", stdout, stderr), "warning");
+            log_fn(&format!("  警告：pm2 resurrect 回傳: {} {}", stdout, stderr), "warning");
         }
     }
     (false, "無法執行 pm2 resurrect".to_string())
@@ -570,7 +570,7 @@ pub fn ensure_pm2_logrotate(root_dir: &Path, log_fn: &dyn Fn(&str, &str)) -> boo
     wire_bundled_pm2_logrotate(root_dir, log_fn);
 
     let Some(pm2) = resolve_pm2_command(root_dir) else {
-        log_fn("⚠️ 找不到 pm2.cmd，略過 pm2-logrotate 啟動", "warning");
+        log_fn("警告：找不到 pm2.cmd，略過 pm2-logrotate 啟動", "warning");
         return false;
     };
     let pm2_str = pm2.to_string_lossy().to_string();
@@ -579,21 +579,21 @@ pub fn ensure_pm2_logrotate(root_dir: &Path, log_fn: &dyn Fn(&str, &str)) -> boo
     if is_logrotate_online(&pm2_str) {
         let _ = run_cmd_hidden(&pm2_str, &["set", "pm2-logrotate:compress", "true", "--no-color"]);
         log_fn(
-            &format!("  ✓ 便攜版內建 [pm2-logrotate] 已在線運作 ({})", local_mod.display()),
+            &format!("  便攜版內建 [pm2-logrotate] 已在線運作 ({})", local_mod.display()),
             "success",
         );
         return true;
     }
 
     log_fn(
-        &format!("📦 正在由便攜版目錄啟動日誌輪替模組 ({})...", local_mod.display()),
+        &format!("正在由便攜版目錄啟動日誌輪替模組 ({})...", local_mod.display()),
         "info",
     );
     let (restart_ok, _, _) = run_cmd_hidden(&pm2_str, &["restart", "pm2-logrotate", "--no-color"]);
     if restart_ok && is_logrotate_online(&pm2_str) {
         let _ = run_cmd_hidden(&pm2_str, &["set", "pm2-logrotate:compress", "true", "--no-color"]);
         let _ = run_cmd_hidden(&pm2_str, &["save", "--force", "--no-color"]);
-        log_fn("  ✓ 已喚醒便攜版內建 [pm2-logrotate] 模組（已啟用日誌壓縮）", "success");
+        log_fn("  已喚醒便攜版內建 [pm2-logrotate] 模組（已啟用日誌壓縮）", "success");
         return true;
     }
 
@@ -607,10 +607,10 @@ pub fn ensure_pm2_logrotate(root_dir: &Path, log_fn: &dyn Fn(&str, &str)) -> boo
     if inst_ok || is_logrotate_online(&pm2_str) {
         let _ = run_cmd_hidden(&pm2_str, &["set", "pm2-logrotate:compress", "true", "--no-color"]);
         let _ = run_cmd_hidden(&pm2_str, &["save", "--force", "--no-color"]);
-        log_fn("  ✓ 成功由便攜版目錄掛載並啟動 [pm2-logrotate] 模組（已啟用日誌壓縮）", "success");
+        log_fn("  成功由便攜版目錄掛載並啟動 [pm2-logrotate] 模組（已啟用日誌壓縮）", "success");
         true
     } else {
-        log_fn(&format!("  ⚠️ 啟動 [pm2-logrotate] 回傳警示: {} {}", stdout, stderr), "warning");
+        log_fn(&format!("  警告：啟動 [pm2-logrotate] 回傳警示: {} {}", stdout, stderr), "warning");
         false
     }
 }
@@ -632,16 +632,16 @@ pub fn stop_pm2_service(log_fn: &dyn Fn(&str, &str)) {
     if !is_pm2_service_running() {
         return;
     }
-    log_fn(&format!("⏳ 正在停止服務 [{}] 以釋放 node.exe 鎖定...", SERVICE_ID), "info");
+    log_fn(&format!("正在停止服務 [{}] 以釋放 node.exe 鎖定...", SERVICE_ID), "info");
     let _ = run_cmd_hidden("net.exe", &["stop", SERVICE_ID]);
     for _ in 0..20 {
         if !is_pm2_service_running() {
-            log_fn("  ✓ 服務已停止", "success");
+            log_fn("  服務已停止", "success");
             return;
         }
         std::thread::sleep(std::time::Duration::from_millis(500));
     }
-    log_fn("  ⚠️ 服務停止逾時，將繼續嘗試清理行程", "warning");
+    log_fn("  警告：服務停止逾時，將繼續嘗試清理行程", "warning");
 }
 
 fn xml_escape(s: &str) -> String {
@@ -678,7 +678,7 @@ fn build_service_xml(root_dir: &Path) -> String {
 }
 
 pub fn grant_service_account_acls(root_dir: &Path, log_fn: &dyn Fn(&str, &str)) {
-    log_fn("🔒 正在為 NT AUTHORITY\\LocalService 配置沙盒目錄最小權限 ACL...", "info");
+    log_fn("正在為 NT AUTHORITY\\LocalService 配置沙盒目錄最小權限 ACL...", "info");
     let target_subdirs = ["node", ".pm2", "logs", "LAH-NUXTJS"];
     for sub in &target_subdirs {
         let dir = root_dir.join(sub);
@@ -692,9 +692,9 @@ pub fn grant_service_account_acls(root_dir: &Path, log_fn: &dyn Fn(&str, &str)) 
                 &[&dir_str, "/grant", "NT AUTHORITY\\LocalService:(OI)(CI)M", "/T", "/Q"],
             );
             if ok {
-                log_fn(&format!("  ✓ 已授予 LocalService 沙盒權限: {}", dir_str), "info");
+                log_fn(&format!("  已授予 LocalService 沙盒權限: {}", dir_str), "info");
             } else {
-                log_fn(&format!("  ⚠️ 配置 LocalService 權限警告 ({}): {}", dir_str, err), "warning");
+                log_fn(&format!("  警告：配置 LocalService 權限警告 ({}): {}", dir_str, err), "warning");
             }
         }
     }
@@ -702,10 +702,10 @@ pub fn grant_service_account_acls(root_dir: &Path, log_fn: &dyn Fn(&str, &str)) 
 
 pub fn setup_pm2_service(root_dir: &Path, log_fn: &dyn Fn(&str, &str)) -> bool {
     grant_service_account_acls(root_dir, log_fn);
-    log_fn(&format!("⚙️ 正在註冊開機自啟動服務 ({})...", SERVICE_ID), "info");
+    log_fn(&format!("正在註冊開機自啟動服務 ({})...", SERVICE_ID), "info");
     let service_dir = root_dir.join("node").join("service");
     if let Err(e) = fs::create_dir_all(&service_dir) {
-        log_fn(&format!("  ❌ 建立 service 目錄失敗: {}", e), "error");
+        log_fn(&format!("  錯誤：建立 service 目錄失敗: {}", e), "error");
         return false;
     }
     let exe_path = service_dir.join("pm2-service.exe");
@@ -716,7 +716,7 @@ pub fn setup_pm2_service(root_dir: &Path, log_fn: &dyn Fn(&str, &str)) -> bool {
     ];
     for (p, bytes) in &writes {
         if let Err(e) = fs::write(p, bytes) {
-            log_fn(&format!("  ❌ 釋出 {} 失敗: {}", p.display(), e), "error");
+            log_fn(&format!("  錯誤：釋出 {} 失敗: {}", p.display(), e), "error");
             return false;
         }
     }
@@ -727,16 +727,16 @@ pub fn setup_pm2_service(root_dir: &Path, log_fn: &dyn Fn(&str, &str)) -> bool {
     }
     let (ok_inst, out_inst, err_inst) = run_cmd_hidden(&exe_str, &["install"]);
     if !ok_inst {
-        log_fn(&format!("  ❌ 服務註冊失敗: {} {}", out_inst, err_inst), "error");
+        log_fn(&format!("  錯誤：服務註冊失敗: {} {}", out_inst, err_inst), "error");
         return false;
     }
-    log_fn(&format!("  ✓ {} 系統服務註冊完成", SERVICE_ID), "success");
+    log_fn(&format!("  {} 系統服務註冊完成", SERVICE_ID), "success");
 
     let (ok_start, out_start, err_start) = run_cmd_hidden(&exe_str, &["start"]);
     if ok_start || is_pm2_service_running() {
-        log_fn("  ✓ 服務已啟動", "success");
+        log_fn("  服務已啟動", "success");
     } else {
-        log_fn(&format!("  ⚠️ 服務啟動回傳: {} {}", out_start, err_start), "warning");
+        log_fn(&format!("  警告：服務啟動回傳: {} {}", out_start, err_start), "warning");
     }
     true
 }

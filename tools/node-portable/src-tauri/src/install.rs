@@ -89,7 +89,7 @@ pub fn deploy_self_to_root(root_dir: &Path, log_fn: &dyn Fn(&str, &str)) -> Opti
     if same_file {
         let p_str = dest_exe.to_string_lossy().to_string();
         log_fn(
-            &format!("  ✓ 當前已直接於安裝根目錄執行控制台 ({})", p_str),
+            &format!("  當前已直接於安裝根目錄執行控制台 ({})", p_str),
             "success",
         );
         return Some(p_str);
@@ -99,7 +99,7 @@ pub fn deploy_self_to_root(root_dir: &Path, log_fn: &dyn Fn(&str, &str)) -> Opti
         Ok(_) => {
             let p_str = dest_exe.to_string_lossy().to_string();
             log_fn(
-                &format!("  ✓ 已於安裝根目錄自動駐留沙盒控制台執行檔: {}", p_str),
+                &format!("  已於安裝根目錄自動駐留沙盒控制台執行檔: {}", p_str),
                 "success",
             );
             Some(p_str)
@@ -107,7 +107,7 @@ pub fn deploy_self_to_root(root_dir: &Path, log_fn: &dyn Fn(&str, &str)) -> Opti
         Err(e) => {
             log_fn(
                 &format!(
-                    "  ⚠️ 駐留控制台執行檔至 {} 略過 (可能正在執行中): {}",
+                    "  警告：駐留控制台執行檔至 {} 略過 (可能正在執行中): {}",
                     dest_exe.display(),
                     e
                 ),
@@ -205,7 +205,7 @@ pub fn execute_install(
 ) -> InstallReport {
     let started = Instant::now();
     let fail = |msg: String| -> InstallReport {
-        log_fn(&format!("❌ {}", msg), "error");
+        log_fn(&format!("錯誤：{}", msg), "error");
         InstallReport {
             success: false,
             message: msg,
@@ -230,7 +230,7 @@ pub fn execute_install(
             "找不到 node.zip，請放置於工具旁的 base 資料夾、工具同層或 C:\\Temp。".to_string(),
         );
     };
-    log_fn(&format!("📦 使用安裝包: {}", zip_path.display()), "info");
+    log_fn(&format!("使用安裝包: {}", zip_path.display()), "info");
 
     let node_dir = root.join("node");
     progress_fn(6.0, "停止既有 PM2 與舊全域服務...");
@@ -240,7 +240,7 @@ pub fn execute_install(
     progress_fn(15.0, "正在解壓 Node.js 與 PM2...");
     match extract_node_zip(&zip_path, &node_dir, progress_fn) {
         Ok(n) => log_fn(
-            &format!("  ✓ 已解壓 {} 個檔案至 {}", n, node_dir.display()),
+            &format!("  已解壓 {} 個檔案至 {}", n, node_dir.display()),
             "success",
         ),
         Err(e) => return fail(e),
@@ -251,7 +251,7 @@ pub fn execute_install(
         return fail("PM2 修補失敗，node 目錄不存在".to_string());
     }
 
-    progress_fn(80.0, "🛡️ 套用零全域污染沙盒隔離與建立維運終端...");
+    progress_fn(80.0, "套用零全域污染沙盒隔離與建立維運終端...");
     register_path_to_user_environment(&node_dir, log_fn);
     register_pm2_home_and_clean_legacy_env(&root.join(".pm2"), log_fn);
 
@@ -259,12 +259,12 @@ pub fn execute_install(
     let Some(nv) = node_version(&root) else {
         return fail("node.exe 無法執行，請確認 node.zip 內容正確".to_string());
     };
-    log_fn(&format!("  ✓ Node.js 版本 {}", nv), "success");
+    log_fn(&format!("  Node.js 版本 {}", nv), "success");
     if let Some(pm2) = resolve_pm2_command(&root) {
         let (ok, out, err) = run_cmd_hidden(&pm2.to_string_lossy(), &["-v"]);
         if ok {
             log_fn(
-                &format!("  ✓ PM2 版本 {}", out.lines().last().unwrap_or("").trim()),
+                &format!("  PM2 版本 {}", out.lines().last().unwrap_or("").trim()),
                 "success",
             );
         } else {
@@ -290,14 +290,14 @@ pub fn execute_install(
     progress_fn(97.0, "駐留沙盒控制台執行檔至安裝根目錄...");
     let deployed_exe_path = deploy_self_to_root(&root, log_fn);
 
-    progress_fn(98.0, "🛡️ 執行資安邊界自檢與沙盒隔離檢測...");
+    progress_fn(98.0, "執行資安邊界自檢與沙盒隔離檢測...");
     let _ = crate::audit::execute_security_audit(&root, Some(log_fn));
 
     crate::console::invalidate_pm2_cache();
 
     progress_fn(100.0, "安裝完成");
     log_fn(
-        "🎉 可攜 Node.js 與 PM2 安裝完成！您可以直接切換至「沙盒 PM2 控制台」進行即時監控與維運。",
+        "可攜 Node.js 與 PM2 安裝完成！您可以直接切換至「沙盒 PM2 控制台」進行即時監控與維運。",
         "success",
     );
     InstallReport {

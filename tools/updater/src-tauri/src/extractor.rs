@@ -464,14 +464,14 @@ pub fn find_latest_backup_zip(search_dirs: &[PathBuf]) -> Option<PathBuf> {
 }
 
 pub fn restore_from_backup_zip(zip_path: &Path, root_dir: &Path, log_fn: &dyn Fn(&str, &str)) -> (bool, String) {
-    log_fn(&format!("📦 正在從備份檔案還原配置與資料: {}", zip_path.display()), "info");
+    log_fn(&format!("正在從備份檔案還原配置與資料: {}", zip_path.display()), "info");
     match extract_zip(zip_path, root_dir, None, &|_, _, _| {}) {
         Ok(n) => {
-            log_fn(&format!("  ✓ 備份還原完成，共覆蓋還原 {} 個重要設定檔與資料項目", n), "success");
+            log_fn(&format!("  備份還原完成，共覆蓋還原 {} 個重要設定檔與資料項目", n), "success");
             (true, format!("已還原 {} 個檔案", n))
         }
         Err(e) => {
-            log_fn(&format!("  ❌ 備份還原失敗: {}", e), "error");
+            log_fn(&format!("  錯誤：備份還原失敗: {}", e), "error");
             (false, e)
         }
     }
@@ -521,11 +521,11 @@ pub fn auto_flatten_nested_dirs(root_dir: &Path, log_fn: &dyn Fn(&str, &str)) {
     let inner_apache = apache_dir.join("Apache24");
     if inner_apache.is_dir() && !apache_dir.join("bin").join("httpd.exe").is_file() {
         if inner_apache.join("bin").join("httpd.exe").is_file() {
-            log_fn("🛠️ 偵測到 Apache24 雙層巢狀目錄，正在自動攤平校正至目標目錄...", "warning");
+            log_fn("偵測到 Apache24 雙層巢狀目錄，正在自動攤平校正至目標目錄...", "warning");
             if let Err(e) = flatten_directory(&inner_apache, &apache_dir) {
-                log_fn(&format!("  ⚠️ 攤平 Apache24 目錄警示: {}", e), "warning");
+                log_fn(&format!("  警告：攤平 Apache24 目錄警示: {}", e), "warning");
             } else {
-                log_fn("  ✓ 已成功將雙層 Apache24 目錄攤平校正完畢！", "success");
+                log_fn("  已成功將雙層 Apache24 目錄攤平校正完畢！", "success");
             }
         }
     }
@@ -534,11 +534,11 @@ pub fn auto_flatten_nested_dirs(root_dir: &Path, log_fn: &dyn Fn(&str, &str)) {
     let fe_nm = root_dir.join("LAH-NUXTJS").join("node_modules");
     let inner_fe_nm = fe_nm.join("node_modules");
     if inner_fe_nm.is_dir() {
-        log_fn("🛠️ 偵測到 LAH-NUXTJS node_modules 雙層巢狀目錄，正在自動攤平校正...", "warning");
+        log_fn("偵測到 LAH-NUXTJS node_modules 雙層巢狀目錄，正在自動攤平校正...", "warning");
         if let Err(e) = flatten_directory(&inner_fe_nm, &fe_nm) {
-            log_fn(&format!("  ⚠️ 攤平 LAH-NUXTJS node_modules 警示: {}", e), "warning");
+            log_fn(&format!("  警告：攤平 LAH-NUXTJS node_modules 警示: {}", e), "warning");
         } else {
-            log_fn("  ✓ 已成功將 LAH-NUXTJS node_modules 雙層目錄攤平校正完畢！", "success");
+            log_fn("  已成功將 LAH-NUXTJS node_modules 雙層目錄攤平校正完畢！", "success");
         }
     }
 
@@ -546,11 +546,11 @@ pub fn auto_flatten_nested_dirs(root_dir: &Path, log_fn: &dyn Fn(&str, &str)) {
     let wss_nm = root_dir.join("lah-messenger-server").join("node_modules");
     let inner_wss_nm = wss_nm.join("node_modules");
     if inner_wss_nm.is_dir() {
-        log_fn("🛠️ 偵測到 lah-messenger-server node_modules 雙層巢狀目錄，正在自動攤平校正...", "warning");
+        log_fn("偵測到 lah-messenger-server node_modules 雙層巢狀目錄，正在自動攤平校正...", "warning");
         if let Err(e) = flatten_directory(&inner_wss_nm, &wss_nm) {
-            log_fn(&format!("  ⚠️ 攤平 lah-messenger-server node_modules 警示: {}", e), "warning");
+            log_fn(&format!("  警告：攤平 lah-messenger-server node_modules 警示: {}", e), "warning");
         } else {
-            log_fn("  ✓ 已成功將 lah-messenger-server node_modules 雙層目錄攤平校正完畢！", "success");
+            log_fn("  已成功將 lah-messenger-server node_modules 雙層目錄攤平校正完畢！", "success");
         }
     }
 }
@@ -561,7 +561,7 @@ pub fn ensure_default_env_files(root_dir: &Path, log_fn: &dyn Fn(&str, &str)) {
     let fe_example = root_dir.join("LAH-NUXTJS").join(".env.example");
     if !fe_env.is_file() && fe_example.is_file() {
         if fs::copy(&fe_example, &fe_env).is_ok() {
-            log_fn("  ✓ 已依據 .env.example 初始化建立 LAH-NUXTJS/.env (Port 8080)", "success");
+            log_fn("  已依據 .env.example 初始化建立 LAH-NUXTJS/.env (Port 8080)", "success");
         }
     }
 
@@ -572,7 +572,7 @@ pub fn ensure_default_env_files(root_dir: &Path, log_fn: &dyn Fn(&str, &str)) {
         if let Ok(content) = fs::read_to_string(&wss_example) {
             let patched = content.replace("WEBSOCKET_HOST=XXX.XXX.XXX.XXX", "WEBSOCKET_HOST=0.0.0.0");
             if fs::write(&wss_env, patched).is_ok() {
-                log_fn("  ✓ 已依據 .env.example 初始化建立 lah-messenger-server/.env (Port 8081/8082)", "success");
+                log_fn("  已依據 .env.example 初始化建立 lah-messenger-server/.env (Port 8081/8082)", "success");
             }
         }
     }
@@ -582,7 +582,7 @@ pub fn ensure_default_env_files(root_dir: &Path, log_fn: &dyn Fn(&str, &str)) {
     let www_example = root_dir.join("www").join(".env.example");
     if !www_env.is_file() && www_example.is_file() {
         if fs::copy(&www_example, &www_env).is_ok() {
-            log_fn("  ✓ 已依據 .env.example 初始化建立 www/.env", "success");
+            log_fn("  已依據 .env.example 初始化建立 www/.env", "success");
         }
     }
 
@@ -591,7 +591,7 @@ pub fn ensure_default_env_files(root_dir: &Path, log_fn: &dyn Fn(&str, &str)) {
     let api_example = root_dir.join("LAH-API").join(".env.example");
     if !api_env.is_file() && api_example.is_file() {
         if fs::copy(&api_example, &api_env).is_ok() {
-            log_fn("  ✓ 已依據 .env.example 初始化建立 LAH-API/.env", "success");
+            log_fn("  已依據 .env.example 初始化建立 LAH-API/.env", "success");
         }
     }
 }
@@ -711,7 +711,7 @@ pub fn sync_vcredist_dlls_to_php(root_dir: &Path, log_fn: &dyn Fn(&str, &str)) {
 
     if copied_count > 0 {
         log_fn(
-            &format!("  ✓ 已將 {copied_count} 個 VC++ 核心執行期程式庫同步補齊至 php7/ 與 php85/ 目錄"),
+            &format!("  已將 {copied_count} 個 VC++ 核心執行期程式庫同步補齊至 php7/ 與 php85/ 目錄"),
             "success",
         );
     }

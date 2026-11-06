@@ -329,11 +329,11 @@ const applyTheme = (theme) => {
   document.documentElement.style.colorScheme = theme;
   localStorage.setItem('lah_dashboard_theme', theme);
   if (theme === 'light') {
-    el.themeIcon.textContent = '🌙';
+    el.themeIcon.innerHTML = `<svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 14A8 8 0 0110 4a8 8 0 1010 10z"/></svg>`;
     el.themeText.textContent = '深色';
     el.btnToggleTheme.title = '切換至深邃主題';
   } else {
-    el.themeIcon.textContent = '☀️';
+    el.themeIcon.innerHTML = `<svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l2 2m10 10 2 2M19 5l-2 2M7 17l-2 2"/></svg>`;
     el.themeText.textContent = '明亮';
     el.btnToggleTheme.title = '切換至明亮主題';
   }
@@ -364,7 +364,7 @@ const initApp = async () => {
     if (!isInitialLoadingDismissed) {
       console.warn('[Init] 初始探測超過 8 秒，觸發安全淡出遮罩');
       hideInitialLoadingOverlay();
-      showToast('⚠️ 首次服務探測較久，已轉為背景探測模式');
+      showToast('警告：首次服務探測較久，已轉為背景探測模式');
     }
   }, 8000);
 
@@ -379,7 +379,7 @@ const initApp = async () => {
       localStorage.setItem('lah_dashboard_user_font_scale', scale);
       localStorage.setItem('lah_dashboard_font_scale', scale);
       const label = scale === '1' ? '一般 (100%)' : scale === '1.15' ? '中 (+15%)' : '大 (+25%)';
-      showToast(`✓ 已套用字體大小：${label} (基礎放大 20%)`);
+      showToast(`已套用字體大小：${label} (基礎放大 20%)`);
       scheduleConfigEditorSync();
     });
   }
@@ -390,7 +390,7 @@ const initApp = async () => {
       const currentTheme = document.documentElement.getAttribute('data-theme') || 'dark';
       const newTheme = currentTheme === 'light' ? 'dark' : 'light';
       applyTheme(newTheme);
-      showToast(newTheme === 'light' ? '✓ 已切換為明亮主題' : '✓ 已切換為深色主題');
+      showToast(newTheme === 'light' ? '已切換為明亮主題' : '已切換為深色主題');
     });
   }
 
@@ -404,7 +404,7 @@ const initApp = async () => {
       if (state.isPolling) {
         startPollingScheduler();
       }
-      showToast(`✓ 已調整自動輪詢週期為 ${val / 1000} 秒`);
+      showToast(`已調整自動輪詢週期為 ${val / 1000} 秒`);
     });
   }
 
@@ -514,19 +514,19 @@ const initApp = async () => {
   el.btnLaunchSandboxCmd.addEventListener('click', async () => {
     try {
       const res = await invoke('open_lah_cmd');
-      if (res && res.success) showToast('✓ ' + res.message);
-      else showToast('⚠️ ' + (res ? res.message : '無法開啟終端'));
+      if (res && res.success) showToast(res.message);
+      else showToast('警告：' + (res ? res.message : '無法開啟終端'));
     } catch (e) {
-      showToast('❌ 開啟失敗：' + e);
+      showToast('開啟失敗：' + e);
     }
   });
 
   el.btnOpenFrontendWeb.addEventListener('click', async () => {
     try {
       const res = await invoke('open_web_frontend');
-      if (res && res.success) showToast('✓ ' + res.message);
+      if (res && res.success) showToast(res.message);
     } catch (e) {
-      showToast('❌ 開啟瀏覽器失敗：' + e);
+      showToast('開啟瀏覽器失敗：' + e);
     }
   });
 
@@ -534,12 +534,12 @@ const initApp = async () => {
     try {
       const res = await invoke('check_apache_syntax');
       if (res && res.success) {
-        showToast('✓ ' + res.message);
+        showToast(res.message);
       } else {
         showConfirmModal('Apache 組態語法警告', res ? res.message : '語法異常', () => {});
       }
     } catch (e) {
-      showToast('❌ 檢查失敗：' + e);
+      showToast('檢查失敗：' + e);
     }
   });
 
@@ -548,23 +548,23 @@ const initApp = async () => {
       showToast('正在執行日誌壓縮輪替與空間釋放...');
       const res = await invoke('trigger_logrotate');
       if (res && res.success) {
-        showToast('✓ ' + res.message);
+        showToast(res.message);
         // 即時刷新主機指標與磁碟空間
         await loadHostMetrics();
       } else {
-        showToast('⚠️ ' + (res ? res.message : '觸發失敗'));
+        showToast('警告：' + (res ? res.message : '觸發失敗'));
       }
     } catch (e) {
-      showToast('❌ 觸發失敗：' + e);
+      showToast('觸發失敗：' + e);
     }
   });
 
   el.btnOpenLogsFolder.addEventListener('click', async () => {
     try {
       const res = await invoke('open_logs_folder');
-      if (res && res.success) showToast('✓ ' + res.message);
+      if (res && res.success) showToast(res.message);
     } catch (e) {
-      showToast('❌ 開啟失敗：' + e);
+      showToast('開啟失敗：' + e);
     }
   });
 
@@ -603,15 +603,15 @@ const initApp = async () => {
 
   el.btnOpenNotepad.addEventListener('click', async () => {
     if (!state.currentLogPath) {
-      showToast('⚠️ 尚未選擇日誌檔案');
+      showToast('警告：尚未選擇日誌檔案');
       return;
     }
     try {
       const res = await invoke('open_log_in_notepad', { path: state.currentLogPath });
-      if (res && res.success) showToast('✓ 已啟動記事本開啟日誌');
-      else showToast('⚠️ ' + (res ? res.message : '無法開啟'));
+      if (res && res.success) showToast('已啟動記事本開啟日誌');
+      else showToast('警告：' + (res ? res.message : '無法開啟'));
     } catch (e) {
-      showToast('❌ 開啟失敗：' + e);
+      showToast('開啟失敗：' + e);
     }
   });
 
@@ -621,14 +621,14 @@ const initApp = async () => {
         ? state.filteredLogLines.join('\n')
         : el.logContent.textContent;
     if (!text) {
-      showToast('⚠️ 無日誌內容可複製');
+      showToast('警告：無日誌內容可複製');
       return;
     }
     try {
       await navigator.clipboard.writeText(text);
-      showToast('✓ 日誌已複製到剪貼簿！');
+      showToast('日誌已複製到剪貼簿！');
     } catch (err) {
-      showToast('❌ 複製失敗');
+      showToast('複製失敗');
     }
   });
 
@@ -661,15 +661,15 @@ const initApp = async () => {
 
   el.btnOpenConfigNotepad.addEventListener('click', async () => {
     if (!state.currentConfigPath) {
-      showToast('⚠️ 尚未選擇組態檔案');
+      showToast('警告：尚未選擇組態檔案');
       return;
     }
     try {
       const res = await invoke('open_log_in_notepad', { path: state.currentConfigPath });
-      if (res && res.success) showToast('✓ 已使用記事本開啟組態');
-      else showToast('⚠️ ' + (res ? res.message : '無法開啟'));
+      if (res && res.success) showToast('已使用記事本開啟組態');
+      else showToast('警告：' + (res ? res.message : '無法開啟'));
     } catch (e) {
-      showToast('❌ 開啟失敗：' + e);
+      showToast('開啟失敗：' + e);
     }
   });
 
@@ -684,20 +684,20 @@ const initApp = async () => {
   el.btnCopyExample.addEventListener('click', async () => {
     const text = el.txtExampleViewer.value;
     if (!text) {
-      showToast('⚠️ 無範本內容可複製');
+      showToast('警告：無範本內容可複製');
       return;
     }
     try {
       await navigator.clipboard.writeText(text);
-      showToast('✓ 已複製範本內容到剪貼簿！');
+      showToast('已複製範本內容到剪貼簿！');
     } catch (err) {
-      showToast('❌ 複製失敗');
+      showToast('複製失敗');
     }
   });
 
   el.btnApplyExample.addEventListener('click', () => {
     if (!state.currentExampleContent) {
-      showToast('⚠️ 目前無可套用的範本內容');
+      showToast('警告：目前無可套用的範本內容');
       return;
     }
 
@@ -709,13 +709,13 @@ const initApp = async () => {
         () => {
           el.txtConfigEditor.value = state.currentExampleContent;
           el.txtConfigEditor.dispatchEvent(new Event('input'));
-          showToast('✓ 已成功將範本內容套入編輯區！');
+          showToast('已成功將範本內容套入編輯區！');
         }
       );
     } else {
       el.txtConfigEditor.value = state.currentExampleContent;
       el.txtConfigEditor.dispatchEvent(new Event('input'));
-      showToast('✓ 已成功將範本內容套入編輯區！');
+      showToast('已成功將範本內容套入編輯區！');
     }
   });
 
@@ -853,7 +853,7 @@ const initApp = async () => {
           }
         }
       } catch (err) {
-        showToast(`❌ 切換編碼失敗: ${err}`);
+        showToast(`切換編碼失敗: ${err}`);
       }
     });
   }
@@ -903,13 +903,13 @@ const initApp = async () => {
               if (state.xtermInstance) {
                 state.xtermInstance.clear();
               }
-              showToast('✓ ' + res.message);
+              showToast(res.message);
               pollTerminalOutput();
             } else {
-              showToast('⚠️ ' + (res ? res.message : '重設失敗'));
+              showToast('警告：' + (res ? res.message : '重設失敗'));
             }
           } catch (err) {
-            showToast(`❌ 重設失敗: ${err}`);
+            showToast(`重設失敗: ${err}`);
           }
         }
       );
@@ -921,7 +921,7 @@ const initApp = async () => {
       if (state.xtermInstance) {
         state.xtermInstance.clear();
       }
-      showToast('✓ 終端機螢幕畫面已清空');
+      showToast('終端機螢幕畫面已清空');
     });
   }
 
@@ -929,10 +929,10 @@ const initApp = async () => {
     el.btnLaunchExternalCmd.addEventListener('click', async () => {
       try {
         const res = await invoke('open_lah_cmd');
-        if (res && res.success) showToast('✓ ' + res.message);
-        else showToast('⚠️ ' + (res ? res.message : '無法開啟終端'));
+        if (res && res.success) showToast(res.message);
+        else showToast('警告：' + (res ? res.message : '無法開啟終端'));
       } catch (e) {
-        showToast('❌ 開啟失敗：' + e);
+        showToast('開啟失敗：' + e);
       }
     });
   }
@@ -1024,7 +1024,7 @@ const renderQuickRoots = () => {
     const btn = document.createElement('div');
     btn.className = `root-candidate-btn ${isActive ? 'active' : ''}`;
     btn.innerHTML = `
-      <span>📁 ${cand}</span>
+      <span><svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h7l2 2h9v10H3z"/></svg> ${cand}</span>
       ${isActive ? '<span style="font-size: 11px; color: var(--primary);">目前監控中</span>' : ''}
     `;
     btn.addEventListener('click', () => {
@@ -1165,7 +1165,7 @@ const renderSystemServicesList = (list) => {
     const statusPill = isRun
       ? '<span class="status-pill running"><span class="status-dot"></span>正在執行</span>'
       : isTransitioning || state.isRestarting
-      ? `<span class="status-pill restarting"><span class="spin-icon">🔄</span>${s.status === 'STOPPING' ? '停止中...' : '啟動中...'}</span>`
+      ? `<span class="status-pill restarting"><span class="spin-icon"><svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5M5 9a7 7 0 0112-2l3 5M19 15a7 7 0 01-12 2l-3-5"/></svg></span>${s.status === 'STOPPING' ? '停止中...' : '啟動中...'}</span>`
       : s.is_installed
       ? '<span class="status-pill stopped"><span class="status-dot"></span>已停止</span>'
       : '<span class="status-pill unknown"><span class="status-dot"></span>未註冊</span>';
@@ -1183,7 +1183,7 @@ const renderSystemServicesList = (list) => {
       const normBin = s.binary_path.toLowerCase().replace(/\\/g, '/');
       const normRoot = state.rootDir.toLowerCase().replace(/\\/g, '/');
       if (!normBin.includes(normRoot)) {
-        pathWarning = `<div style="font-size: 11px; color: var(--warning); margin-top: 2px;" title="此 Windows 服務註冊路徑為：${s.binary_path}，與當前儀表板監控目錄 (${state.rootDir}) 不同">⚠️ 服務註冊於其他目錄</div>`;
+        pathWarning = `<div style="font-size: 11px; color: var(--warning); margin-top: 2px;" title="此 Windows 服務註冊路徑為：${s.binary_path}，與當前儀表板監控目錄 (${state.rootDir}) 不同">警告：服務註冊於其他目錄</div>`;
       }
     }
 
@@ -1217,9 +1217,9 @@ const loadSystemServices = async () => {
   } catch (err) {
     console.error('讀取系統服務失敗：', err);
     if (!state.isRestarting) {
-      el.systemServicesTableBody.innerHTML = `<tr><td colspan="4" class="text-center loading-row text-danger" style="padding: 1.25rem;">⚠️ 探測後端系統服務逾時或失敗 <button class="btn btn-primary btn-sm" style="margin-left: 0.75rem; padding: 2px 10px;" onclick="loadSystemServices()">立即重試</button></td></tr>`;
+      el.systemServicesTableBody.innerHTML = `<tr><td colspan="4" class="text-center loading-row text-danger" style="padding: 1.25rem;">警告：探測後端系統服務逾時或失敗 <button class="btn btn-primary btn-sm" style="margin-left: 0.75rem; padding: 2px 10px;" onclick="loadSystemServices()">立即重試</button></td></tr>`;
       if (el.footerStatusText) {
-        el.footerStatusText.textContent = '⚠️ 探測系統服務逾時';
+        el.footerStatusText.textContent = '警告：探測系統服務逾時';
       }
     }
   } finally {
@@ -1239,7 +1239,7 @@ window.handleServiceAction = async (action, svcName) => {
         const pill = r.querySelector('.status-pill');
         if (pill) {
           pill.className = 'status-pill restarting';
-          pill.innerHTML = `<span class="spin-icon">🔄</span>${actionText}中...`;
+          pill.innerHTML = `<span class="spin-icon"><svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5M5 9a7 7 0 0112-2l3 5M19 15a7 7 0 01-12 2l-3-5"/></svg></span>${actionText}中...`;
         }
       }
     });
@@ -1252,9 +1252,9 @@ window.handleServiceAction = async (action, svcName) => {
     else res = await invoke('restart_system_service', { name: svcName }, 45000);
 
     if (res && res.success) {
-      showToast(`✓ ${res.message}`);
+      showToast(`${res.message}`);
     } else {
-      showToast(`⚠️ ${res ? res.message : '操作未完成'}`);
+      showToast(`警告：${res ? res.message : '操作未完成'}`);
     }
     if (action === 'restart' || action === 'start') {
       triggerBurstPolling(8000, 1500);
@@ -1263,7 +1263,7 @@ window.handleServiceAction = async (action, svcName) => {
       if (state.isPolling) startPollingScheduler();
     }
   } catch (e) {
-    showToast(`❌ ${actionText}失敗: ${e}`);
+    showToast(`${actionText}失敗: ${e}`);
     await loadSystemServices();
     if (state.isPolling) startPollingScheduler();
   }
@@ -1283,7 +1283,7 @@ const renderPm2ProcessesList = (list) => {
     const statusPill = isOnline
       ? '<span class="status-pill online"><span class="status-dot"></span>在線</span>'
       : state.isRestarting || p.status === 'launching'
-      ? '<span class="status-pill restarting"><span class="spin-icon">🔄</span>啟動中...</span>'
+      ? '<span class="status-pill restarting"><span class="spin-icon"><svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5M5 9a7 7 0 0112-2l3 5M19 15a7 7 0 01-12 2l-3-5"/></svg></span>啟動中...</span>'
       : `<span class="status-pill stopped"><span class="status-dot"></span>${p.status}</span>`;
 
     const memFormatted = formatBytes(p.memory);
@@ -1330,9 +1330,9 @@ const loadPm2Processes = async () => {
   } catch (err) {
     console.error('讀取 PM2 進程失敗：', err);
     if (!state.isRestarting) {
-      el.pm2TableBody.innerHTML = `<tr><td colspan="8" class="text-center loading-row text-danger" style="padding: 1.25rem;">⚠️ 探測後端 PM2 進程逾時或失敗 <button class="btn btn-primary btn-sm" style="margin-left: 0.75rem; padding: 2px 10px;" onclick="loadPm2Processes()">立即重試</button></td></tr>`;
+      el.pm2TableBody.innerHTML = `<tr><td colspan="8" class="text-center loading-row text-danger" style="padding: 1.25rem;">警告：探測後端 PM2 進程逾時或失敗 <button class="btn btn-primary btn-sm" style="margin-left: 0.75rem; padding: 2px 10px;" onclick="loadPm2Processes()">立即重試</button></td></tr>`;
       if (el.footerStatusText) {
-        el.footerStatusText.textContent = '⚠️ 探測 PM2 進程逾時';
+        el.footerStatusText.textContent = '警告：探測 PM2 進程逾時';
       }
     }
   } finally {
@@ -1352,7 +1352,7 @@ window.handlePm2Action = async (action, target) => {
         const pill = r.querySelector('.status-pill');
         if (pill) {
           pill.className = 'status-pill restarting';
-          pill.innerHTML = `<span class="spin-icon">🔄</span>${actionText}中...`;
+          pill.innerHTML = `<span class="spin-icon"><svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5M5 9a7 7 0 0112-2l3 5M19 15a7 7 0 01-12 2l-3-5"/></svg></span>${actionText}中...`;
         }
       }
     });
@@ -1365,9 +1365,9 @@ window.handlePm2Action = async (action, target) => {
     else res = await invoke('restart_pm2_process', { target }, 30000);
 
     if (res && res.success) {
-      showToast(`✓ ${res.message}`);
+      showToast(`${res.message}`);
     } else {
-      showToast(`⚠️ ${res ? res.message : '操作失敗'}`);
+      showToast(`警告：${res ? res.message : '操作失敗'}`);
     }
     if (action === 'restart' || action === 'start') {
       triggerBurstPolling(8000, 1500);
@@ -1376,7 +1376,7 @@ window.handlePm2Action = async (action, target) => {
       if (state.isPolling) startPollingScheduler();
     }
   } catch (e) {
-    showToast(`❌ ${actionText}失敗: ${e}`);
+    showToast(`${actionText}失敗: ${e}`);
     await loadPm2Processes();
     if (state.isPolling) startPollingScheduler();
   }
@@ -1403,7 +1403,7 @@ window.quickControlService = async (evt, action, category, serviceKey, displayNa
     card.classList.add('is-restarting');
     const actBox = card.querySelector('.mem-micro-actions');
     if (actBox) {
-      actBox.innerHTML = '<span class="micro-spin-label"><span class="spin-icon">🔄</span></span>';
+      actBox.innerHTML = '<span class="micro-spin-label"><span class="spin-icon"><svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5M5 9a7 7 0 0112-2l3 5M19 15a7 7 0 01-12 2l-3-5"/></svg></span></span>';
     }
   }
 
@@ -1420,9 +1420,9 @@ window.quickControlService = async (evt, action, category, serviceKey, displayNa
     }
 
     if (res && res.success) {
-      showToast(`✓ ${res.message}`);
+      showToast(`${res.message}`);
     } else {
-      showToast(`⚠️ ${res ? res.message : '操作完成'}`);
+      showToast(`警告：${res ? res.message : '操作完成'}`);
     }
 
     // 若為重啟或啟動，觸發密集輪詢追蹤進程與 PID 變化
@@ -1430,7 +1430,7 @@ window.quickControlService = async (evt, action, category, serviceKey, displayNa
       triggerBurstPolling(8000, 1500);
     }
   } catch (err) {
-    showToast(`❌ ${actionText}失敗: ${err}`);
+    showToast(`${actionText}失敗: ${err}`);
   } finally {
     state.restartingServices.delete(serviceKey);
     await loadHostMetrics();
@@ -1813,7 +1813,7 @@ const loadHostMetrics = async () => {
       if (el.valNetTotal) el.valNetTotal.textContent = totalSpeed.val;
       if (el.unitNetTotal) el.unitNetTotal.textContent = totalSpeed.unit;
       if (el.textNetDetails) {
-        el.textNetDetails.innerHTML = `↓ <span class="net-detail-badge rx">${m.network.rx_formatted}</span>　↑ <span class="net-detail-badge tx">${m.network.tx_formatted}</span>`;
+        el.textNetDetails.innerHTML = `下載 <span class="net-detail-badge rx">${m.network.rx_formatted}</span>　上傳 <span class="net-detail-badge tx">${m.network.tx_formatted}</span>`;
       }
 
       state.netRxHistory.push(rxBytes);
@@ -1884,13 +1884,13 @@ const loadHostMetrics = async () => {
           let actionHtml = '';
           const escapedDisplayName = displayName.replace(/'/g, "\\'");
           if (isRestarting) {
-            actionHtml = `<span class="micro-spin-label" title="${displayName} 處理中..."><span class="spin-icon">🔄</span></span>`;
+            actionHtml = `<span class="micro-spin-label" title="${displayName} 處理中..."><span class="spin-icon"><svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5M5 9a7 7 0 0112-2l3 5M19 15a7 7 0 01-12 2l-3-5"/></svg></span></span>`;
           } else if (!isOnline) {
-            actionHtml = `<button class="btn-micro btn-micro-start" title="立即啟動 ${displayName}" onclick="quickControlService(event, 'start', '${item.category}', '${serviceKey}', '${escapedDisplayName}')">▶ 啟動</button>`;
+            actionHtml = `<button class="btn-micro btn-micro-start" title="立即啟動 ${displayName}" onclick="quickControlService(event, 'start', '${item.category}', '${serviceKey}', '${escapedDisplayName}')"><svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4l13 8-13 8z"/></svg> 啟動</button>`;
           } else {
             actionHtml = `
-              <button class="btn-micro btn-micro-restart" title="重啟 ${displayName}" onclick="quickControlService(event, 'restart', '${item.category}', '${serviceKey}', '${escapedDisplayName}')">🔄</button>
-              <button class="btn-micro btn-micro-stop" title="停止 ${displayName}" onclick="quickControlService(event, 'stop', '${item.category}', '${serviceKey}', '${escapedDisplayName}')">⏹</button>
+              <button class="btn-micro btn-micro-restart" title="重啟 ${displayName}" onclick="quickControlService(event, 'restart', '${item.category}', '${serviceKey}', '${escapedDisplayName}')"><svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5M5 9a7 7 0 0112-2l3 5M19 15a7 7 0 01-12 2l-3-5"/></svg></button>
+              <button class="btn-micro btn-micro-stop" title="停止 ${displayName}" onclick="quickControlService(event, 'stop', '${item.category}', '${serviceKey}', '${escapedDisplayName}')"><svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="6" width="12" height="12"/></svg></button>
             `;
           }
 
@@ -1979,7 +1979,7 @@ const refreshAllData = async (isManual = false) => {
     const timeStr = now.toLocaleTimeString('zh-TW', { hour12: false });
     el.lastUpdatedTime.textContent = `最後更新：${timeStr}`;
 
-    if (isManual) showToast('✓ 狀態更新完成');
+    if (isManual) showToast('狀態更新完成');
   } finally {
     state.isRefreshingAll = false;
   }
@@ -1988,13 +1988,13 @@ const refreshAllData = async (isManual = false) => {
 const togglePolling = () => {
   state.isPolling = !state.isPolling;
   if (state.isPolling) {
-    el.pollingStatusIcon.textContent = '⏸️';
+    el.pollingStatusIcon.innerHTML = `<svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 5v14M16 5v14"/></svg>`;
     el.pollingStatusText.textContent = '暫停輪詢';
     el.footerStatusText.textContent = '系統監控總線運作中';
     startPollingScheduler();
-    showToast(`✓ 已恢復自動狀態輪詢 (每 ${state.pollingInterval / 1000} 秒)`);
+    showToast(`已恢復自動狀態輪詢 (每 ${state.pollingInterval / 1000} 秒)`);
   } else {
-    el.pollingStatusIcon.textContent = '▶️';
+    el.pollingStatusIcon.innerHTML = `<svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4l13 8-13 8z"/></svg>`;
     el.pollingStatusText.textContent = '恢復輪詢';
     el.footerStatusText.textContent = '自動輪詢已暫停';
     stopPollingScheduler();
@@ -2032,7 +2032,7 @@ const triggerBurstPolling = (totalMs = 8000, intervalMs = 1500) => {
       if (state.isPolling) {
         startPollingScheduler();
       }
-      showToast('✓ 服務狀態已全面恢復上線');
+      showToast('服務狀態已全面恢復上線');
     } else {
       burstTimer = setTimeout(runBurstTick, intervalMs);
     }
@@ -2050,14 +2050,15 @@ const setRestartStepStatus = (stepIndex, status, customText = '') => {
   if (!item || !icon) return;
 
   item.className = `restart-step-item ${status}`;
+  icon.setAttribute('aria-label', { pending: '等待中', running: '執行中', success: '完成', error: '失敗' }[status] || status);
   if (status === 'pending') {
-    icon.textContent = '⏳';
+    icon.innerHTML = `<svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h12M6 21h12M7 3c0 5 2 6 5 9-3 3-5 4-5 9M17 3c0 5-2 6-5 9 3 3 5 4 5 9"/></svg>`;
   } else if (status === 'running') {
-    icon.textContent = '🔄';
+    icon.innerHTML = `<svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5M5 9a7 7 0 0112-2l3 5M19 15a7 7 0 01-12 2l-3-5"/></svg>`;
   } else if (status === 'success') {
-    icon.textContent = '✓';
+    icon.innerHTML = `<svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12l5 5L20 5"/></svg>`;
   } else if (status === 'error') {
-    icon.textContent = '❌';
+    icon.innerHTML = `<svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 5l14 14M19 5L5 19"/></svg>`;
   }
 
   if (customText) {
@@ -2184,20 +2185,20 @@ const pollAndHealUntilAllOnline = async (maxAttempts = 20) => {
   if (allOnline) {
     state.isRestarting = false;
     await refreshAllData();
-    setRestartStepStatus(3, 'success', '✓ 全系統服務已順利重啟並全數在線！');
+    setRestartStepStatus(3, 'success', '全系統服務已順利重啟並全數在線！');
     const title = document.getElementById('restartModalTitle');
     if (title) {
-      title.textContent = '✓ 全域服務已全數成功上線';
+      title.textContent = '全域服務已全數成功上線';
       title.style.color = '#10b981';
     }
     const errorActions = document.getElementById('restartErrorActions');
     if (errorActions) errorActions.classList.add('hidden');
     await new Promise((r) => setTimeout(r, 800));
     hideRestartProgressOverlay();
-    showToast('✓ 全系統服務已全面恢復在線運作！');
+    showToast('全系統服務已全面恢復在線運作！');
     return true;
   } else {
-    setRestartStepStatus(3, 'error', `⚠️ 部分服務尚未就緒：${lastUnreadyName}`);
+    setRestartStepStatus(3, 'error', `警告：部分服務尚未就緒：${lastUnreadyName}`);
     handleRestartError(`部分服務尚未就緒 (${lastUnreadyName})，可點擊下方「重試未就緒服務」或「繼續等待探測」。`);
     return false;
   }
@@ -2290,7 +2291,7 @@ const executeRestartAllPipeline = async () => {
       }
       setRestartStepStatus(1, 'success');
     } catch (err) {
-      setRestartStepStatus(1, 'error', `⚠️ PM2 重啟異常：${err}`);
+      setRestartStepStatus(1, 'error', `警告：PM2 重啟異常：${err}`);
       handleRestartError(`PM2 進程重啟異常：${err}`);
       return;
     }
@@ -2304,7 +2305,7 @@ const executeRestartAllPipeline = async () => {
       }
       setRestartStepStatus(2, 'success');
     } catch (err) {
-      setRestartStepStatus(2, 'error', `⚠️ Apache 服務重啟異常：${err}`);
+      setRestartStepStatus(2, 'error', `警告：Apache 服務重啟異常：${err}`);
       handleRestartError(`Apache 系統服務重啟異常：${err}`);
       return;
     }
@@ -2322,12 +2323,12 @@ const handleRestartError = (errMsg) => {
   const errorActions = document.getElementById('restartErrorActions');
   const title = document.getElementById('restartModalTitle');
   if (title) {
-    title.textContent = '⚠️ 服務重啟未完全就緒';
+    title.textContent = '警告：服務重啟未完全就緒';
     title.style.color = '#ef4444';
   }
   if (subtitle) subtitle.textContent = errMsg;
   if (errorActions) errorActions.classList.remove('hidden');
-  showToast(`⚠️ ${errMsg}`);
+  showToast(`警告：${errMsg}`);
   refreshAllData();
 };
 
@@ -2336,14 +2337,14 @@ const setAllServicesRestartingVisual = () => {
     const svcPills = el.systemServicesTableBody.querySelectorAll('.status-pill');
     svcPills.forEach((p) => {
       p.className = 'status-pill restarting';
-      p.innerHTML = '<span class="spin-icon">🔄</span>重啟中...';
+      p.innerHTML = '<span class="spin-icon"><svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5M5 9a7 7 0 0112-2l3 5M19 15a7 7 0 01-12 2l-3-5"/></svg></span>重啟中...';
     });
   }
   if (el.pm2TableBody) {
     const pm2Pills = el.pm2TableBody.querySelectorAll('.status-pill');
     pm2Pills.forEach((p) => {
       p.className = 'status-pill restarting';
-      p.innerHTML = '<span class="spin-icon">🔄</span>重啟中...';
+      p.innerHTML = '<span class="spin-icon"><svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5M5 9a7 7 0 0112-2l3 5M19 15a7 7 0 01-12 2l-3-5"/></svg></span>重啟中...';
     });
   }
 };
@@ -3234,7 +3235,7 @@ const navigateConfigSearch = (step = 1) => {
   const total = state.configSearchMatches.length;
   if (total === 0) {
     if (state.configSearchQuery) {
-      showToast(`⚠️ 找不到匹配「${state.configSearchQuery}」的內容`);
+      showToast(`警告：找不到匹配「${state.configSearchQuery}」的內容`);
     }
     return;
   }
@@ -3401,7 +3402,7 @@ const fetchConfigContent = async (filePath) => {
       await toggleExamplePane(false);
     }
   } catch (err) {
-    el.txtConfigEditor.value = `❌ 無法讀取檔案內容：\n${err}`;
+    el.txtConfigEditor.value = `無法讀取檔案內容：\n${err}`;
     el.txtConfigEditor.disabled = true;
     state.originalConfigContent = '';
     state.isConfigDirty = false;
@@ -3455,7 +3456,7 @@ const loadExampleContent = async (filePath) => {
     }
   } catch (err) {
     console.warn('[範本讀取異常]', err);
-    el.txtExampleViewer.value = `❌ 無法讀取範本檔案：\n${err}`;
+    el.txtExampleViewer.value = `無法讀取範本檔案：\n${err}`;
     state.currentExampleContent = '';
     renderExampleConfigHighlight();
   }
@@ -3496,7 +3497,7 @@ const loadConfigBackupsList = async (filePath) => {
 
 const handleSaveConfig = async () => {
   if (!state.currentConfigPath) {
-    showToast('⚠️ 請先選擇欲編輯的組態檔案');
+    showToast('警告：請先選擇欲編輯的組態檔案');
     return;
   }
 
@@ -3531,7 +3532,7 @@ const handleSaveConfig = async () => {
       }
 
       showConfirmModal(
-        `⚠️ ${syntaxType} 組態語法驗證失敗`,
+        `警告：${syntaxType} 組態語法驗證失敗`,
         `檔案已寫入，但執行 ${syntaxType} 檢測未通過！\n\n錯誤細節：\n${res.syntax_output}\n\n為避免服務重啟或運作崩潰，建議立即還原至儲存前自動建立的備份檔。\n是否立即自動還原？`,
         async () => {
           if (res.backup_path) {
@@ -3541,7 +3542,7 @@ const handleSaveConfig = async () => {
               backupPath: res.backup_path,
             });
             await fetchConfigContent(state.currentConfigPath);
-            showToast('✓ 已成功復原至儲存前狀態');
+            showToast('已成功復原至儲存前狀態');
           }
         }
       );
@@ -3572,7 +3573,7 @@ const handleSaveConfig = async () => {
           await invoke('restart_pm2_process', { target: 'LAH-FE' });
           await invoke('restart_pm2_process', { target: 'LAH-SCHEDULER' });
           triggerBurstPolling(8000, 1500);
-          showToast('✓ 已送出前端與排程重啟指令');
+          showToast('已送出前端與排程重啟指令');
         }
       );
     } else if (res.related_service === 'pm2:wss') {
@@ -3583,7 +3584,7 @@ const handleSaveConfig = async () => {
           showToast('正在重啟即時通進程...');
           await invoke('restart_pm2_process', { target: 'LAH-WSS' });
           triggerBurstPolling(8000, 1500);
-          showToast('✓ 已送出 LAH-WSS 重啟指令');
+          showToast('已送出 LAH-WSS 重啟指令');
         }
       );
     } else if (res.related_service === 'pm2:api') {
@@ -3594,7 +3595,7 @@ const handleSaveConfig = async () => {
           showToast('正在重啟 FastCGI 進程...');
           await invoke('restart_pm2_process', { target: 'lah-api-v85' });
           triggerBurstPolling(8000, 1500);
-          showToast('✓ 已送出 lah-api-v85 重啟指令');
+          showToast('已送出 lah-api-v85 重啟指令');
         }
       );
     } else if (res.related_service === 'pm2') {
@@ -3608,17 +3609,17 @@ const handleSaveConfig = async () => {
         }
       );
     } else {
-      showToast('✓ ' + res.message);
+      showToast(res.message);
     }
   } catch (err) {
-    showToast(`❌ 儲存失敗：${err}`);
+    showToast(`儲存失敗：${err}`);
   }
 };
 
 const handleRestoreConfigBackup = async () => {
   const selectedBackup = el.configBackupSelect.value;
   if (!selectedBackup || selectedBackup === 'undefined') {
-    showToast('⚠️ 請先選擇欲還原的歷史備份檔');
+    showToast('警告：請先選擇欲還原的歷史備份檔');
     return;
   }
 
@@ -3636,13 +3637,13 @@ const handleRestoreConfigBackup = async () => {
         });
 
         if (res && res.success) {
-          showToast('✓ ' + res.message);
+          showToast(res.message);
           await fetchConfigContent(state.currentConfigPath);
         } else {
-          showToast('⚠️ ' + (res ? res.message : '還原失敗'));
+          showToast('警告：' + (res ? res.message : '還原失敗'));
         }
       } catch (err) {
-        showToast(`❌ 還原失敗：${err}`);
+        showToast(`還原失敗：${err}`);
       }
     }
   );
@@ -3668,15 +3669,15 @@ const handlePickCustomConfig = async () => {
       const fileName = pickedPath.split('\\').pop() || pickedPath;
       const opt = document.createElement('option');
       opt.value = pickedPath;
-      opt.textContent = `📂 自訂：${fileName}`;
+      opt.textContent = `自訂：${fileName}`;
       el.configSourceSelect.prepend(opt);
       el.configSourceSelect.selectedIndex = 0;
     }
 
     await fetchConfigContent(pickedPath);
-    showToast(`✓ 已載入自訂檔案：${pickedPath}`);
+    showToast(`已載入自訂檔案：${pickedPath}`);
   } catch (err) {
-    showToast(`❌ 選擇檔案失敗: ${err}`);
+    showToast(`選擇檔案失敗: ${err}`);
   }
 };
 
@@ -3755,11 +3756,11 @@ const toggleTerminalMaximize = (forceState) => {
 
   if (el.btnToggleTerminalMaximize) {
     if (isMax) {
-      el.btnToggleTerminalMaximize.innerHTML = '🗗 還原視窗';
+      el.btnToggleTerminalMaximize.innerHTML = `<svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="8" width="12" height="12"/><path d="M9 8V4h11v12h-2"/></svg> 還原視窗`;
       el.btnToggleTerminalMaximize.classList.add('btn-primary');
       el.btnToggleTerminalMaximize.classList.remove('btn-outline');
     } else {
-      el.btnToggleTerminalMaximize.innerHTML = '⛶ 放大視窗';
+      el.btnToggleTerminalMaximize.innerHTML = `<svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9V4h5m6 0h5v5M4 15v5h5m6 0h5v-5"/></svg> 放大視窗`;
       el.btnToggleTerminalMaximize.classList.remove('btn-primary');
       el.btnToggleTerminalMaximize.classList.add('btn-outline');
     }
@@ -3935,7 +3936,7 @@ const sendTerminalInput = async (cmd) => {
     setTimeout(pollTerminalOutput, 30);
     setTimeout(pollTerminalOutput, 100);
   } catch (err) {
-    showToast(`❌ 發送失敗：${err}`);
+    showToast(`發送失敗：${err}`);
   }
 };
 

@@ -68,7 +68,8 @@ document.querySelectorAll(".btn-eye").forEach((btn) => {
 // 進階參數折疊切換
 btnToggleAdvanced.addEventListener("click", () => {
   const isExpanded = advancedContent.classList.toggle("expanded");
-  advancedArrow.textContent = isExpanded ? "▲" : "▼";
+  btnToggleAdvanced.setAttribute("aria-expanded", String(isExpanded));
+  advancedArrow.innerHTML = isExpanded ? '<svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 15l7-7 7 7"/></svg>' : '<svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 9l7 7 7-7"/></svg>';
 });
 
 // 收集表單資料

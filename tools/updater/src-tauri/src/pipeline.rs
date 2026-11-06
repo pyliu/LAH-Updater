@@ -44,7 +44,7 @@ where
     };
 
     log_event("============================================================", "info");
-    log_event("🚀 開始執行「智慧控管與監控系統 - 自動安裝與更新工具」作業...", "info");
+    log_event("開始執行「智慧控管與監控系統 - 自動安裝與更新工具」作業...", "info");
     set_prog(0, "正在準備安裝與更新作業...");
 
     let mut selected_pkgs = options.packages.clone();
@@ -63,7 +63,7 @@ where
             set_prog(2, &format!("正在停止 Apache 服務 [{svc_name}]..."));
             apache_was_stopped = stop_service(&svc_name, &log_event);
         } else {
-            log_event("ℹ️ 系統未偵測到運行中的 Apache 服務，跳過停止步驟。", "info");
+            log_event("系統未偵測到運行中的 Apache 服務，跳過停止步驟。", "info");
         }
     }
 
@@ -78,9 +78,9 @@ where
         let node_exe = root_path.join("node").join("node.exe");
         let _ = kill_pm2_daemon(&root_path, &log_event);
         if is_file_locked(&node_exe) {
-            log_event(&format!("⚠️ 警告：{} 仍處於鎖定狀態，若解壓失敗請確認行程已結束。", node_exe.display()), "warning");
+            log_event(&format!("警告：警告：{} 仍處於鎖定狀態，若解壓失敗請確認行程已結束。", node_exe.display()), "warning");
         } else {
-            log_event("✅ node.exe 檔案未受鎖定，可安全覆蓋解壓。", "info");
+            log_event("node.exe 檔案未受鎖定，可安全覆蓋解壓。", "info");
         }
     }
 
@@ -104,7 +104,7 @@ where
         };
 
         if !zip_p.is_file() {
-            log_event(&format!("⚠️ 找不到安裝包檔案: {}", zip_p.display()), "warning");
+            log_event(&format!("警告：找不到安裝包檔案: {}", zip_p.display()), "warning");
             continue;
         }
 
@@ -117,7 +117,7 @@ where
         if pkg.id == "apache24" {
             if let Some(fname) = Path::new(&pkg.zip_path).file_name().and_then(|s| s.to_str()) {
                 if let Some((ver, vc)) = parse_apache_zip_meta(fname) {
-                    log_event(&format!("ℹ️ 解析 Apache 安裝包版本：Apache {ver} (編譯工具鏈: {vc})"), "info");
+                    log_event(&format!("解析 Apache 安裝包版本：Apache {ver} (編譯工具鏈: {vc})"), "info");
                 }
             }
         }
@@ -131,9 +131,9 @@ where
 
         let strip_prefix = detect_strip_prefix(&zip_p, expected, &alt_vec);
         if let Some(ref pfx) = strip_prefix {
-            log_event(&format!("🛡️ [防呆觸發] 偵測到頂層包含 '{pfx}' 單一目錄，已自動對齊解壓至目標路徑！"), "warning");
+            log_event(&format!("[防呆觸發] 偵測到頂層包含 '{pfx}' 單一目錄，已自動對齊解壓至目標路徑！"), "warning");
         } else {
-            log_event("ℹ️ 壓縮包頂層為直接檔案結構，依照目標目錄直接解壓縮覆蓋。", "info");
+            log_event("壓縮包頂層為直接檔案結構，依照目標目錄直接解壓縮覆蓋。", "info");
         }
 
         let base_percent = 5 + (idx as u32 * 75 / total_pkgs.max(1) as u32);
@@ -147,10 +147,10 @@ where
         match extract_zip(&zip_p, &tgt_p, strip_prefix.as_deref(), &on_file) {
             Ok(count) => {
                 total_files_extracted += count;
-                log_event(&format!("✅ {} 解壓縮覆蓋完成 (處理 {} 個項目)。", pkg.name, count), "success");
+                log_event(&format!("{} 解壓縮覆蓋完成 (處理 {} 個項目)。", pkg.name, count), "success");
             }
             Err(e) => {
-                let err_msg = format!("❌ 解壓縮 {} 失敗: {}", pkg.name, e);
+                let err_msg = format!("錯誤：解壓縮 {} 失敗: {}", pkg.name, e);
                 log_event(&err_msg, "error");
                 return UpdateSummary {
                     success: false,
@@ -181,12 +181,12 @@ where
             .unwrap_or("");
         if let Some(vc_zip) = find_vcredist_zip(&root_path, apache_pkg_path) {
             let fname = vc_zip.file_name().and_then(|s| s.to_str()).unwrap_or("vcredist.zip");
-            log_event(&format!("🛡️ [沙盒依賴補齊] 偵測到獨立 VC++ 執行期壓縮包 [{fname}]，自動補齊至 Apache24/bin..."), "info");
+            log_event(&format!("[沙盒依賴補齊] 偵測到獨立 VC++ 執行期壓縮包 [{fname}]，自動補齊至 Apache24/bin..."), "info");
             let apache_bin = root_path.join("Apache24").join("bin");
             let _ = fs::create_dir_all(&apache_bin);
             let on_file = |_rel: &str, _cur: usize, _tot: usize| {};
             if let Ok(count) = extract_zip(&vc_zip, &apache_bin, None, &on_file) {
-                log_event(&format!("  ✓ 已解壓 {count} 個 VC++ 核心執行期程式庫至 Apache24/bin"), "success");
+                log_event(&format!("  已解壓 {count} 個 VC++ 核心執行期程式庫至 Apache24/bin"), "success");
             }
         }
     }
@@ -238,7 +238,7 @@ where
             install_apache_service(&apache_tgt, LAH_WEB_SERVICE_NAME, &log_event);
         }
     } else if apache_tgt.is_dir() {
-        log_event("ℹ️ 目錄包含 Apache24 資料夾但未偵測到 bin/httpd.exe 核心執行檔，僅重定位設定檔並跳過服務註冊", "info");
+        log_event("目錄包含 Apache24 資料夾但未偵測到 bin/httpd.exe 核心執行檔，僅重定位設定檔並跳過服務註冊", "info");
     }
 
     // =========================================================================
@@ -327,10 +327,10 @@ where
     let (dashboard_deployed, dashboard_exe) = deploy_dashboard_if_found(&app_dir, &root_path, &log_event);
 
     let elapsed = start_time.elapsed().as_secs_f64();
-    set_prog(100, &format!("✅ 全部安裝與服務啟動確認完成！(耗時 {:.1} 秒)", elapsed));
+    set_prog(100, &format!("全部安裝與服務啟動確認完成！(耗時 {:.1} 秒)", elapsed));
     log_event("============================================================", "success");
-    log_event(&format!("🎉 全部選取的安裝包與 5 階段系統自動化配置已順利完成！(總耗時: {:.1} 秒)", elapsed), "success");
-    log_event(&format!("📝 完整安裝與更新過程日誌已留存至安裝根目錄：{}", install_log_path.display()), "info");
+    log_event(&format!("全部選取的安裝包與 5 階段系統自動化配置已順利完成！(總耗時: {:.1} 秒)", elapsed), "success");
+    log_event(&format!("完整安裝與更新過程日誌已留存至安裝根目錄：{}", install_log_path.display()), "info");
 
     UpdateSummary {
         success: true,
@@ -411,7 +411,7 @@ where
             install_apache_service(&apache_tgt, LAH_WEB_SERVICE_NAME, &log_event);
         }
     } else if apache_tgt.is_dir() {
-        log_event("ℹ️ 目錄包含 Apache24 資料夾但未偵測到 bin/httpd.exe 核心執行檔，僅重定位設定檔並跳過服務註冊", "info");
+        log_event("目錄包含 Apache24 資料夾但未偵測到 bin/httpd.exe 核心執行檔，僅重定位設定檔並跳過服務註冊", "info");
     }
 
     // 4. 配置 PHP 8.5 與 FCGI Proxy
@@ -493,10 +493,10 @@ where
     let (dashboard_deployed, dashboard_exe) = deploy_dashboard_if_found(&app_dir, &root_path, &log_event);
 
     let elapsed = start_time.elapsed().as_secs_f64();
-    set_prog(100, &format!("✅ 系統服務與資安配置套用完成！(耗時 {:.1} 秒)", elapsed));
+    set_prog(100, &format!("系統服務與資安配置套用完成！(耗時 {:.1} 秒)", elapsed));
     log_event("============================================================", "success");
-    log_event(&format!("🎉 系統服務與資安強化配置已即時生效！(耗時 {:.1} 秒)", elapsed), "success");
-    log_event(&format!("📝 完整系統配置與註冊日誌已留存至安裝根目錄：{}", install_log_path.display()), "info");
+    log_event(&format!("系統服務與資安強化配置已即時生效！(耗時 {:.1} 秒)", elapsed), "success");
+    log_event(&format!("完整系統配置與註冊日誌已留存至安裝根目錄：{}", install_log_path.display()), "info");
 
     UpdateSummary {
         success: true,
@@ -517,7 +517,7 @@ fn migrate_legacy_www_logs(root_path: &Path, log_event: &dyn Fn(&str, &str)) {
 
     if old_logs_dir.is_dir() {
         if let Err(e) = fs::create_dir_all(&api_logs_dir) {
-            log_event(&format!("⚠️ 建立日誌目錄失敗 [{api_logs_dir:?}]: {e}"), "warning");
+            log_event(&format!("警告：建立日誌目錄失敗 [{api_logs_dir:?}]: {e}"), "warning");
             return;
         }
 
@@ -536,7 +536,7 @@ fn migrate_legacy_www_logs(root_path: &Path, log_event: &dyn Fn(&str, &str)) {
                 }
             }
             if moved_count > 0 {
-                log_event(&format!("  ✓ 已將 {moved_count} 個歷史業務日誌自 www/log 平移至 logs/api"), "success");
+                log_event(&format!("  已將 {moved_count} 個歷史業務日誌自 www/log 平移至 logs/api"), "success");
             }
             let _ = fs::remove_dir(&old_logs_dir);
         }
@@ -548,7 +548,7 @@ fn migrate_legacy_www_logs(root_path: &Path, log_event: &dyn Fn(&str, &str)) {
 pub fn migrate_legacy_apache_logs(root_path: &Path, log_event: &dyn Fn(&str, &str)) {
     let apache_logs_dir = root_path.join("logs").join("apache");
     if let Err(e) = fs::create_dir_all(&apache_logs_dir) {
-        log_event(&format!("⚠️ 建立 Apache 統一日誌目錄失敗 [{apache_logs_dir:?}]: {e}"), "warning");
+        log_event(&format!("警告：建立 Apache 統一日誌目錄失敗 [{apache_logs_dir:?}]: {e}"), "warning");
         return;
     }
 
@@ -637,7 +637,7 @@ pub fn migrate_legacy_apache_logs(root_path: &Path, log_event: &dyn Fn(&str, &st
 
     if moved_count > 0 {
         log_event(
-            &format!("  ✓ 已將 {moved_count} 個歷史 Apache 日誌自 Apache24/logs 平移歸集至 logs/apache"),
+            &format!("  已將 {moved_count} 個歷史 Apache 日誌自 Apache24/logs 平移歸集至 logs/apache"),
             "success",
         );
     }

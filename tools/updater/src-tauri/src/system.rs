@@ -291,9 +291,9 @@ echo ============================================================\r\n\
 cmd /k\r\n";
 
     if let Err(e) = fs::write(&bat_path, content) {
-        log_fn(&format!("⚠️ 建立 lah-cmd.bat 失敗: {e}"), "warning");
+        log_fn(&format!("警告：建立 lah-cmd.bat 失敗: {e}"), "warning");
     } else {
-        log_fn("  ✓ 已就緒專屬沙盒維運終端批次檔 (lah-cmd.bat)", "success");
+        log_fn("  已就緒專屬沙盒維運終端批次檔 (lah-cmd.bat)", "success");
     }
 }
 
@@ -316,7 +316,7 @@ pub fn purge_portable_from_registry(target_dir: &Path, log_fn: &dyn Fn(&str, &st
                     let _ = sys_key.set_value("Path", &new_sys);
                     changed_any = true;
                     log_fn(
-                        &format!("  ✓ 已自系統 PATH (HKLM) 移除可攜路徑 [{target_norm}]，確保全域 Node 獨立性"),
+                        &format!("  已自系統 PATH (HKLM) 移除可攜路徑 [{target_norm}]，確保全域 Node 獨立性"),
                         "info",
                     );
                 }
@@ -324,7 +324,7 @@ pub fn purge_portable_from_registry(target_dir: &Path, log_fn: &dyn Fn(&str, &st
             if sys_key.get_value::<String, _>("PM2_HOME").is_ok() {
                 let _ = sys_key.delete_value("PM2_HOME");
                 changed_any = true;
-                log_fn("  ✓ 已自系統環境變數 (HKLM) 清理 PM2_HOME，避免污染一般終端", "info");
+                log_fn("  已自系統環境變數 (HKLM) 清理 PM2_HOME，避免污染一般終端", "info");
             }
         }
     }
@@ -338,7 +338,7 @@ pub fn purge_portable_from_registry(target_dir: &Path, log_fn: &dyn Fn(&str, &st
                 let _ = usr_key.set_value("Path", &new_usr);
                 changed_any = true;
                 log_fn(
-                    &format!("  ✓ 已自使用者 PATH (HKCU) 移除可攜路徑 [{target_norm}]，確保全域 Node 獨立性"),
+                    &format!("  已自使用者 PATH (HKCU) 移除可攜路徑 [{target_norm}]，確保全域 Node 獨立性"),
                     "info",
                 );
             }
@@ -346,7 +346,7 @@ pub fn purge_portable_from_registry(target_dir: &Path, log_fn: &dyn Fn(&str, &st
         if usr_key.get_value::<String, _>("PM2_HOME").is_ok() {
             let _ = usr_key.delete_value("PM2_HOME");
             changed_any = true;
-            log_fn("  ✓ 已自使用者環境變數 (HKCU) 清理 PM2_HOME，避免污染一般終端", "info");
+            log_fn("  已自使用者環境變數 (HKCU) 清理 PM2_HOME，避免污染一般終端", "info");
         }
     }
 
@@ -362,7 +362,7 @@ pub fn purge_portable_from_registry(target_dir: &Path, log_fn: &dyn Fn(&str, &st
 pub fn register_path_to_user_environment(target_dir: &Path, log_fn: &dyn Fn(&str, &str)) -> bool {
     if !target_dir.is_dir() {
         log_fn(
-            &format!("⚠️ 目錄不存在，略過設定 PATH: {}", target_dir.display()),
+            &format!("警告：目錄不存在，略過設定 PATH: {}", target_dir.display()),
             "warning",
         );
         return false;
@@ -381,7 +381,7 @@ pub fn register_path_to_user_environment(target_dir: &Path, log_fn: &dyn Fn(&str
     let (new_proc, _) = clean_and_prepend_path_string(&cur_proc, &target_norm);
     env::set_var("PATH", new_proc);
     log_fn(
-        &format!("✅ [零全域污染] 已將可攜環境限縮於當前行程與專屬沙盒 ({target_norm})"),
+        &format!("[零全域污染] 已將可攜環境限縮於當前行程與專屬沙盒 ({target_norm})"),
         "success",
     );
 
@@ -404,7 +404,7 @@ pub fn register_pm2_home_and_clean_legacy_env(pm2_home: &Path, log_fn: &dyn Fn(&
     }
     env::set_var("PM2_HOME", &val);
     log_fn(
-        &format!("✅ [零全域污染] 已設定當前行程 PM2_HOME={val}"),
+        &format!("[零全域污染] 已設定當前行程 PM2_HOME={val}"),
         "success",
     );
     true
@@ -561,7 +561,7 @@ pub fn deploy_dashboard_if_found(
     let dest_exe = root_path.join(filename);
 
     log_fn("--------------------------------------------------", "info");
-    log_fn(&format!("📊 偵測到同目錄下存在管理儀表板：{}", src_exe.display()), "info");
+    log_fn(&format!("偵測到同目錄下存在管理儀表板：{}", src_exe.display()), "info");
 
     // 若來源與目標不同，進行複製覆蓋
     if src_exe != dest_exe {
@@ -591,21 +591,21 @@ pub fn deploy_dashboard_if_found(
             Ok(_) => {
                 log_fn(
                     &format!(
-                        "  ✓ 已同步複製管理儀表板至安裝根目錄：{}",
+                        "  已同步複製管理儀表板至安裝根目錄：{}",
                         dest_exe.display()
                     ),
                     "success",
                 );
             }
             Err(err) => {
-                log_fn(&format!("  ⚠️ 同步管理儀表板失敗: {err}"), "warning");
+                log_fn(&format!("  警告：同步管理儀表板失敗: {err}"), "warning");
                 return (false, None);
             }
         }
     } else {
         log_fn(
             &format!(
-                "  ℹ️ 管理儀表板已位於安裝根目錄：{}",
+                "  管理儀表板已位於安裝根目錄：{}",
                 dest_exe.display()
             ),
             "info",
@@ -629,13 +629,13 @@ pub fn deploy_dashboard_if_found(
     if shortcut_ok && !created_paths.is_empty() {
         for cp in created_paths {
             log_fn(
-                &format!("  ✓ 已建立管理儀表板桌面捷徑：{}", cp.display()),
+                &format!("  已建立管理儀表板桌面捷徑：{}", cp.display()),
                 "success",
             );
         }
     } else {
         log_fn(
-            &format!("  ⚠️ 建立桌面捷徑時發生警告: {shortcut_err}"),
+            &format!("  警告：建立桌面捷徑時發生警告: {shortcut_err}"),
             "warning",
         );
     }

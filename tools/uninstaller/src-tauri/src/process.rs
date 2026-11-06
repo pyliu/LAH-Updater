@@ -2,7 +2,7 @@ use crate::system::{run_cmd_hidden, run_powershell};
 use std::path::Path;
 
 pub fn kill_all_pm2_and_node(root_dir: &Path, log_fn: &dyn Fn(&str, &str)) -> bool {
-    log_fn("⏳ 正在終止 PM2 核心守護進程、FastCGI 與殘留背景程序...", "info");
+    log_fn("正在終止 PM2 核心守護進程、FastCGI 與殘留背景程序...", "info");
 
     // 1. 嘗試呼叫 pm2 kill
     let pm2_cmd = root_dir.join("node").join("pm2.cmd");
@@ -10,7 +10,7 @@ pub fn kill_all_pm2_and_node(root_dir: &Path, log_fn: &dyn Fn(&str, &str)) -> bo
         let pm2_str = pm2_cmd.to_string_lossy();
         let (ok, _, _) = run_cmd_hidden(&pm2_str, &["kill"]);
         if ok {
-            log_fn("  ✓ 已執行 pm2 kill 停止所有受控 PM2 背景進程", "info");
+            log_fn("  已執行 pm2 kill 停止所有受控 PM2 背景進程", "info");
         }
     }
 
@@ -32,7 +32,7 @@ pub fn kill_all_pm2_and_node(root_dir: &Path, log_fn: &dyn Fn(&str, &str)) -> bo
         for line in stdout.lines() {
             let trimmed = line.trim();
             if !trimmed.is_empty() {
-                log_fn(&format!("  ✓ 強制終止殘留進程: {trimmed}"), "info");
+                log_fn(&format!("  強制終止殘留進程: {trimmed}"), "info");
             }
         }
     }

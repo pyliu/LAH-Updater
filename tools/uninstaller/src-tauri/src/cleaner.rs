@@ -5,7 +5,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 pub fn clean_pm2_dumps(root_dir: &Path, log_fn: &dyn Fn(&str, &str)) -> bool {
-    log_fn("⏳ 正在清除 PM2 快照狀態 (dump.pm2)...", "info");
+    log_fn("正在清除 PM2 快照狀態 (dump.pm2)...", "info");
 
     let mut candidates = Vec::new();
     let pm2_files = ["dump.pm2", "dump.pm2.bak", "module_conf.json", "pm2.pid", "pm2.log"];
@@ -22,7 +22,7 @@ pub fn clean_pm2_dumps(root_dir: &Path, log_fn: &dyn Fn(&str, &str)) -> bool {
         if p.is_file() {
             let _ = crate::system::remove_readonly(&p);
             if fs::remove_file(&p).is_ok() {
-                log_fn(&format!("  ✓ 已清除 PM2 狀態存檔: {}", p.display()), "info");
+                log_fn(&format!("  已清除 PM2 狀態存檔: {}", p.display()), "info");
             }
         }
     }
@@ -73,10 +73,10 @@ pub fn clean_files_and_directories(
     let total = dir_tasks.len();
     for (idx, (dpath, dname)) in dir_tasks.into_iter().enumerate() {
         if dpath.exists() {
-            log_fn(&format!("  🗑️ 正在刪除 {dname} [{}]...", dpath.display()), "info");
+            log_fn(&format!("  正在刪除 {dname} [{}]...", dpath.display()), "info");
             let (ok, _) = robust_rmtree(&dpath, log_fn);
             if ok {
-                log_fn(&format!("  ✓ 已成功刪除 {dname}"), "success");
+                log_fn(&format!("  已成功刪除 {dname}"), "success");
             }
         }
         let curr_pct = if total > 0 {
@@ -93,7 +93,7 @@ pub fn clean_files_and_directories(
         if bat.is_file() {
             let _ = crate::system::remove_readonly(&bat);
             if fs::remove_file(&bat).is_ok() {
-                log_fn("  ✓ 已刪除沙盒維運終端批次檔 (lah-cmd.bat)", "success");
+                log_fn("  已刪除沙盒維運終端批次檔 (lah-cmd.bat)", "success");
             }
         }
     }
@@ -108,7 +108,7 @@ pub fn clean_root_directory(
         return;
     }
 
-    log_fn("⏳ 正在清理安裝根目錄其餘殘留檔案 (僅保留刪除前備份壓縮檔)...", "info");
+    log_fn("正在清理安裝根目錄其餘殘留檔案 (僅保留刪除前備份壓縮檔)...", "info");
 
     // 建立使用者未勾選需保留的目錄集合
     let mut keep_paths = std::collections::HashSet::new();
@@ -148,7 +148,7 @@ pub fn clean_root_directory(
     // 磁碟機根目錄防呆保護 (例如 C:\ 或 D:\)
     let root_str = root_dir.to_string_lossy();
     if root_str.len() <= 3 && root_str.contains(':') {
-        log_fn("⚠️ 偵測到安裝根目錄為磁碟機根路徑，為保護作業系統，略過整層目錄清理！", "warning");
+        log_fn("警告：偵測到安裝根目錄為磁碟機根路徑，為保護作業系統，略過整層目錄清理！", "warning");
         return;
     }
 
@@ -160,13 +160,13 @@ pub fn clean_root_directory(
 
             // 1. 嚴格保護 backuper 產出之備份壓縮檔
             if fname.starts_with("_LAH_Backup_") && fname.ends_with(".zip") {
-                log_fn(&format!("  📦 保留刪除前關鍵備份壓縮檔: [{fname}]"), "info");
+                log_fn(&format!("  保留刪除前關鍵備份壓縮檔: [{fname}]"), "info");
                 continue;
             }
 
             // 2. 保留使用者未選取移除的目錄
             if keep_paths.contains(&norm_item) {
-                log_fn(&format!("  ℹ️ 保留未勾選移除項目: [{fname}]"), "info");
+                log_fn(&format!("  保留未勾選移除項目: [{fname}]"), "info");
                 continue;
             }
 
@@ -174,14 +174,14 @@ pub fn clean_root_directory(
             if item_path.is_file() {
                 let _ = crate::system::remove_readonly(&item_path);
                 if fs::remove_file(&item_path).is_ok() {
-                    log_fn(&format!("  🗑️ 已清理根目錄殘留檔案: [{fname}]"), "info");
+                    log_fn(&format!("  已清理根目錄殘留檔案: [{fname}]"), "info");
                 }
             } else if item_path.is_dir() {
                 let (ok, msg) = robust_rmtree(&item_path, log_fn);
                 if ok {
-                    log_fn(&format!("  🗑️ 已清理根目錄殘留資料夾: [{fname}]"), "info");
+                    log_fn(&format!("  已清理根目錄殘留資料夾: [{fname}]"), "info");
                 } else {
-                    log_fn(&format!("  ⚠️ 清理資料夾 [{fname}] 失敗: {msg}"), "warning");
+                    log_fn(&format!("  警告：清理資料夾 [{fname}] 失敗: {msg}"), "warning");
                 }
             }
         }
@@ -196,11 +196,11 @@ pub fn clean_root_directory(
 
         if remaining.is_empty() {
             let _ = fs::remove_dir(root_dir);
-            log_fn(&format!("  ✓ 安裝根目錄已完全清空，已安全移除資料夾 [{}]", root_dir.display()), "success");
+            log_fn(&format!("  安裝根目錄已完全清空，已安全移除資料夾 [{}]", root_dir.display()), "success");
         } else if remaining.iter().all(|f| f.starts_with("_LAH_Backup_") && f.ends_with(".zip")) {
-            log_fn(&format!("  🎉 安裝根目錄其餘項目已全數清除，僅保留必要備份檔: [{}] 於 [{}]", remaining.join(", "), root_dir.display()), "success");
+            log_fn(&format!("  安裝根目錄其餘項目已全數清除，僅保留必要備份檔: [{}] 於 [{}]", remaining.join(", "), root_dir.display()), "success");
         } else {
-            log_fn(&format!("  ℹ️ 安裝根目錄已完成清理，保留之項目 ({} 個): {}", remaining.len(), remaining.join(", ")), "info");
+            log_fn(&format!("  安裝根目錄已完成清理，保留之項目 ({} 個): {}", remaining.len(), remaining.join(", ")), "info");
         }
     }
 }

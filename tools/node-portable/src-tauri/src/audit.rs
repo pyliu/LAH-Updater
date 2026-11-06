@@ -232,7 +232,7 @@ pub fn execute_security_audit(
 
     if let Some(log) = log_fn {
         log(
-            &format!("🛡️ 正在執行【{}】資安邊界自檢與沙盒隔離檢測...", system_title),
+            &format!("正在執行【{}】資安邊界自檢與沙盒隔離檢測...", system_title),
             "info",
         );
     }
@@ -240,9 +240,9 @@ pub fn execute_security_audit(
     let path_clean = check_sandbox_path_isolation(root_dir);
     if let Some(log) = log_fn {
         if path_clean {
-            log("  ✓ 全域環境 PATH 零污染沙盒隔離: 合規 (HKLM/HKCU 無私有路徑)", "success");
+            log("  全域環境 PATH 零污染沙盒隔離: 合規 (HKLM/HKCU 無私有路徑)", "success");
         } else {
-            log("  ⚠️ 全域環境 PATH 檢測: 登錄檔中偵測到殘留路徑", "warning");
+            log("  警告：全域環境 PATH 檢測: 登錄檔中偵測到殘留路徑", "warning");
         }
     }
 
@@ -255,7 +255,7 @@ pub fn execute_security_audit(
             all_ports_secure = false;
         }
         if let Some(log) = log_fn {
-            let status_mark = if res.is_secure { "✓" } else { "⚠️" };
+            let status_mark = if res.is_secure { "合格" } else { "警告" };
             let level = if res.is_secure { "success" } else { "warning" };
             log(
                 &format!("  {} Port {}: {} - {}", status_mark, port, name, res.message),
@@ -289,7 +289,7 @@ pub fn execute_security_audit(
         if fs::write(&report_path, report_content).is_ok() {
             let p_str = report_path.to_string_lossy().to_string();
             if let Some(log) = log_fn {
-                log(&format!("  ✓ 稽核佐證報告已產出: {}", p_str), "info");
+                log(&format!("  稽核佐證報告已產出: {}", p_str), "info");
             }
             saved_path = Some(p_str);
         }

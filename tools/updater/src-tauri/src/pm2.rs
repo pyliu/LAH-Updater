@@ -202,7 +202,7 @@ pub fn sanitize_pm2_dump(dump_path: &Path, root_dir: &Path, log_fn: &dyn Fn(&str
         if let Ok(pretty) = serde_json::to_string_pretty(&parsed) {
             if fs::write(dump_path, pretty).is_ok() {
                 log_fn(
-                    "  ✓ 已清理 dump.pm2 內殘留之舊全域 Node/PM2 路徑設定",
+                    "  已清理 dump.pm2 內殘留之舊全域 Node/PM2 路徑設定",
                     "success",
                 );
             }
@@ -352,7 +352,7 @@ pub fn wire_bundled_pm2_logrotate(root_dir: &Path, log_fn: &dyn Fn(&str, &str)) 
         if let Ok(pretty) = serde_json::to_string_pretty(&conf_val) {
             if fs::write(&conf_path, pretty).is_ok() {
                 log_fn(
-                    &format!("  ✓ 已掛載便攜版內建模組 ({})", bundled_dir.display()),
+                    &format!("  已掛載便攜版內建模組 ({})", bundled_dir.display()),
                     "success",
                 );
             }
@@ -376,7 +376,7 @@ pub fn ensure_portable_pm2_patched(root_dir: &Path, log_fn: &dyn Fn(&str, &str))
         return false;
     }
 
-    log_fn("🟢 正在配置綠色版 Node.js 與 PM2 執行期環境...", "info");
+    log_fn("正在配置綠色版 Node.js 與 PM2 執行期環境...", "info");
     let mut patched_any = false;
 
     // 0. 確保統一的 <root_dir>\.pm2 目錄存在，若尚無 dump.pm2 則自動自既有全域/使用者 .pm2 遷移
@@ -391,7 +391,7 @@ pub fn ensure_portable_pm2_patched(root_dir: &Path, log_fn: &dyn Fn(&str, &str))
                 let dst_f = unified_pm2_home.join(fname);
                 if src_f.is_file() && !dst_f.is_file() && fs::copy(&src_f, &dst_f).is_ok() {
                     log_fn(
-                        &format!("  ✓ 已自 {} 遷移 {fname}", legacy_dir.display()),
+                        &format!("  已自 {} 遷移 {fname}", legacy_dir.display()),
                         "success",
                     );
                 }
@@ -432,7 +432,7 @@ endLocal & goto #_undefined_# 2>NUL || title %COMSPEC% & SET \"PATH=%dp0%;%PATH%
     };
     if need_write_cmd && fs::write(&pm2_cmd_path, pm2_cmd_content).is_ok() {
         patched_any = true;
-        log_fn("  ✓ 已建立可攜式 pm2.cmd 執行捷徑", "success");
+        log_fn("  已建立可攜式 pm2.cmd 執行捷徑", "success");
     }
 
     // 2. 修補 paths.js (主 pm2 與 pm2-logrotate 內嵌之 pm2)
@@ -596,7 +596,7 @@ endLocal & goto #_undefined_# 2>NUL || title %COMSPEC% & SET \"PATH=%dp0%;%PATH%
 
     if patched_any {
         log_fn(
-            "  ✓ PM2 綠色環境、Loopback TCP IPC (Port 42681) 與離線日誌輪替模組修補完成",
+            "  PM2 綠色環境、Loopback TCP IPC (Port 42681) 與離線日誌輪替模組修補完成",
             "success",
         );
     }
@@ -608,7 +608,7 @@ pub fn stop_and_remove_legacy_pm2_services(log_fn: &dyn Fn(&str, &str)) {
     for svc in LEGACY_PM2_SERVICES {
         if run_cmd_hidden("sc.exe", &["query", svc]).0 {
             log_fn(
-                &format!("🛑 偵測到舊全域 PM2 服務 [{svc}]，正在停止並移除..."),
+                &format!("偵測到舊全域 PM2 服務 [{svc}]，正在停止並移除..."),
                 "info",
             );
             let _ = run_cmd_hidden("net.exe", &["stop", svc]);
@@ -616,7 +616,7 @@ pub fn stop_and_remove_legacy_pm2_services(log_fn: &dyn Fn(&str, &str)) {
             std::thread::sleep(std::time::Duration::from_millis(800));
             let (ok_del, _, _) = run_cmd_hidden("sc.exe", &["delete", svc]);
             if ok_del {
-                log_fn(&format!("  ✓ 已移除舊全域服務 [{svc}]"), "success");
+                log_fn(&format!("  已移除舊全域服務 [{svc}]"), "success");
             }
         }
     }
@@ -625,13 +625,13 @@ pub fn stop_and_remove_legacy_pm2_services(log_fn: &dyn Fn(&str, &str)) {
 pub fn kill_pm2_daemon(root_dir: &Path, log_fn: &dyn Fn(&str, &str)) -> (bool, String) {
     stop_and_remove_legacy_pm2_services(log_fn);
 
-    log_fn("🛑 正在執行 pm2 kill 並釋放 Node.js / PM2 行程鎖定...", "info");
+    log_fn("正在執行 pm2 kill 並釋放 Node.js / PM2 行程鎖定...", "info");
     if let Some(pm2) = resolve_pm2_command(root_dir) {
         let (ok, stdout, stderr) = run_cmd_hidden(&pm2.to_string_lossy(), &["kill"]);
         if ok || stdout.contains("daemon stopped") {
-            log_fn("  ✓ PM2 守護進程已終止", "success");
+            log_fn("  PM2 守護進程已終止", "success");
         } else {
-            log_fn(&format!("  ℹ️ PM2 kill 輸出: {} {}", stdout, stderr), "info");
+            log_fn(&format!("  PM2 kill 輸出: {} {}", stdout, stderr), "info");
         }
     }
 
@@ -647,7 +647,7 @@ pub fn kill_pm2_daemon(root_dir: &Path, log_fn: &dyn Fn(&str, &str)) -> (bool, S
     let (ok_ps, _, _) = run_powershell(&ps_kill);
     if ok_ps {
         log_fn(
-            "  ✓ 本機相關 Node、舊全域 PM2 與 FastCGI 殘留進程已清理完畢",
+            "  本機相關 Node、舊全域 PM2 與 FastCGI 殘留進程已清理完畢",
             "success",
         );
     }
@@ -657,15 +657,15 @@ pub fn kill_pm2_daemon(root_dir: &Path, log_fn: &dyn Fn(&str, &str)) -> (bool, S
 
 pub fn resurrect_pm2_services(root_dir: &Path, log_fn: &dyn Fn(&str, &str)) -> (bool, String) {
     if let Some(pm2) = resolve_pm2_command(root_dir) {
-        log_fn("🚀 正在執行 pm2 resurrect 喚醒已註冊之受管服務...", "info");
+        log_fn("正在執行 pm2 resurrect 喚醒已註冊之受管服務...", "info");
         let (ok, stdout, stderr) =
             run_cmd_hidden(&pm2.to_string_lossy(), &["resurrect", "--no-color"]);
         if ok || stdout.contains("Restoring") {
-            log_fn("  ✓ PM2 服務已成功喚醒！", "success");
+            log_fn("  PM2 服務已成功喚醒！", "success");
             return (true, "PM2 已喚醒".to_string());
         } else {
             log_fn(
-                &format!("  ⚠️ pm2 resurrect 回傳: {} {}", stdout, stderr),
+                &format!("  警告：pm2 resurrect 回傳: {} {}", stdout, stderr),
                 "warning",
             );
         }
@@ -675,15 +675,15 @@ pub fn resurrect_pm2_services(root_dir: &Path, log_fn: &dyn Fn(&str, &str)) -> (
 
 pub fn restart_pm2_services(root_dir: &Path, log_fn: &dyn Fn(&str, &str)) -> (bool, String) {
     if let Some(pm2) = resolve_pm2_command(root_dir) {
-        log_fn("🔄 正在執行 pm2 restart all 重啟所有受管服務...", "info");
+        log_fn("正在執行 pm2 restart all 重啟所有受管服務...", "info");
         let (ok, stdout, stderr) =
             run_cmd_hidden(&pm2.to_string_lossy(), &["restart", "all", "--no-color"]);
         if ok {
-            log_fn("  ✓ PM2 服務已全部重新啟動！", "success");
+            log_fn("  PM2 服務已全部重新啟動！", "success");
             return (true, "已重啟全部 PM2 服務".to_string());
         } else {
             log_fn(
-                &format!("  ⚠️ pm2 restart all 警示: {} {}", stdout, stderr),
+                &format!("  警告：pm2 restart all 警示: {} {}", stdout, stderr),
                 "warning",
             );
         }
@@ -716,7 +716,7 @@ pub fn ensure_pm2_logrotate(root_dir: &Path, log_fn: &dyn Fn(&str, &str)) -> boo
     wire_bundled_pm2_logrotate(root_dir, log_fn);
 
     let Some(pm2) = resolve_pm2_command(root_dir) else {
-        log_fn("⚠️ 找不到 pm2.cmd，略過 pm2-logrotate 啟動", "warning");
+        log_fn("警告：找不到 pm2.cmd，略過 pm2-logrotate 啟動", "warning");
         return false;
     };
     let pm2_str = pm2.to_string_lossy().to_string();
@@ -732,7 +732,7 @@ pub fn ensure_pm2_logrotate(root_dir: &Path, log_fn: &dyn Fn(&str, &str)) -> boo
         );
         log_fn(
             &format!(
-                "  ✓ 便攜版內建 [pm2-logrotate] 已在線運作 ({})",
+                "  便攜版內建 [pm2-logrotate] 已在線運作 ({})",
                 local_mod.display()
             ),
             "success",
@@ -742,7 +742,7 @@ pub fn ensure_pm2_logrotate(root_dir: &Path, log_fn: &dyn Fn(&str, &str)) -> boo
 
     log_fn(
         &format!(
-            "📦 正在由便攜版目錄啟動日誌輪替模組 ({})...",
+            "正在由便攜版目錄啟動日誌輪替模組 ({})...",
             local_mod.display()
         ),
         "info",
@@ -756,7 +756,7 @@ pub fn ensure_pm2_logrotate(root_dir: &Path, log_fn: &dyn Fn(&str, &str)) -> boo
         );
         let _ = run_cmd_hidden(&pm2_str, &["save", "--force", "--no-color"]);
         log_fn(
-            "  ✓ 已喚醒便攜版內建 [pm2-logrotate] 模組（已啟用日誌壓縮）",
+            "  已喚醒便攜版內建 [pm2-logrotate] 模組（已啟用日誌壓縮）",
             "success",
         );
         return true;
@@ -777,13 +777,13 @@ pub fn ensure_pm2_logrotate(root_dir: &Path, log_fn: &dyn Fn(&str, &str)) -> boo
         );
         let _ = run_cmd_hidden(&pm2_str, &["save", "--force", "--no-color"]);
         log_fn(
-            "  ✓ 成功由便攜版目錄掛載並啟動 [pm2-logrotate] 模組（已啟用日誌壓縮）",
+            "  成功由便攜版目錄掛載並啟動 [pm2-logrotate] 模組（已啟用日誌壓縮）",
             "success",
         );
         true
     } else {
         log_fn(
-            &format!("  ⚠️ 啟動 [pm2-logrotate] 回傳警示: {} {}", stdout, stderr),
+            &format!("  警告：啟動 [pm2-logrotate] 回傳警示: {} {}", stdout, stderr),
             "warning",
         );
         false
@@ -832,7 +832,7 @@ pub fn ensure_winsw_service_files(
     if !exe_path.is_file() || fs::metadata(&exe_path).map_or(0, |m| m.len()) == 0 {
         fs::write(&exe_path, LAH_SERVICE_EXE)
             .map_err(|e| format!("釋出 lah-service.exe 失敗: {}", e))?;
-        log_fn("  ✓ 已釋出自包含 WinSW 服務核心 (lah-service.exe)", "success");
+        log_fn("  已釋出自包含 WinSW 服務核心 (lah-service.exe)", "success");
     }
 
     let runner_path = service_dir.join("service_runner.js");
@@ -852,7 +852,7 @@ pub fn setup_pm2_autostart(root_dir: &Path, log_fn: &dyn Fn(&str, &str)) -> (boo
     stop_and_remove_legacy_pm2_services(log_fn);
 
     grant_service_account_acls(root_dir, log_fn);
-    log_fn("⚙️ 正在設定 PM2 開機自啟動服務 (LAH_PM2_Service)...", "info");
+    log_fn("正在設定 PM2 開機自啟動服務 (LAH_PM2_Service)...", "info");
 
     let exe_path = match ensure_winsw_service_files(root_dir, log_fn) {
         Ok(p) => p,
@@ -871,13 +871,13 @@ pub fn setup_pm2_autostart(root_dir: &Path, log_fn: &dyn Fn(&str, &str)) -> (boo
     // 1. 安裝服務
     let (ok_inst, out_inst, _) = run_cmd_hidden(&exe_str, &["install"]);
     if ok_inst || out_inst.contains("already exists") {
-        log_fn("  ✓ LAH_PM2_Service 系統服務註冊完成", "success");
+        log_fn("  LAH_PM2_Service 系統服務註冊完成", "success");
     }
 
     // 2. 啟動服務
     let (ok_start, out_start, _) = run_cmd_hidden(&exe_str, &["start"]);
     if (ok_start || out_start.contains("Started")) && is_service_running("LAH_PM2_Service") {
-        log_fn("  ✓ LAH_PM2_Service 系統服務已成功啟動", "success");
+        log_fn("  LAH_PM2_Service 系統服務已成功啟動", "success");
         return (true, "LAH_PM2_Service 已註冊並啟動".to_string());
     }
 
@@ -965,13 +965,13 @@ pub fn audit_and_ensure_pm2_services(
     let _ = fs::create_dir_all(&logs_dir);
 
     let Some(pm2) = resolve_pm2_command(root_dir) else {
-        log_fn("⚠️ 系統未偵測到有效的 pm2.cmd，跳過 PM2 服務巡檢。", "warning");
+        log_fn("警告：系統未偵測到有效的 pm2.cmd，跳過 PM2 服務巡檢。", "warning");
         return (false, "未偵測到 pm2.cmd".to_string());
     };
     let pm2_str = pm2.to_string_lossy().to_string();
 
     log_fn("--------------------------------------------------", "info");
-    log_fn("🔍 正在執行 PM2 核心服務全方位狀態巡檢...", "info");
+    log_fn("正在執行 PM2 核心服務全方位狀態巡檢...", "info");
 
     // 1. 取得現有 PM2 程序清單
     let mut managed_apps: std::collections::HashMap<String, String> =
@@ -1064,12 +1064,12 @@ pub fn audit_and_ensure_pm2_services(
                 let (start_ok, stdout, stderr) =
                     run_cmd_hidden_in_dir(&pm2_str, &["start", &eco_str, "--no-color"], eco_dir);
                 if start_ok || stdout.contains("✓") {
-                    log_fn(&format!("  ✅ 成功啟動 [{}]！", eco.title), "success");
+                    log_fn(&format!("  成功啟動 [{}]！", eco.title), "success");
                     need_save = true;
                 } else {
                     log_fn(
                         &format!(
-                            "  ⚠️ 啟動 [{}] 回傳警示: {} {}",
+                            "  警告：啟動 [{}] 回傳警示: {} {}",
                             eco_path.display(),
                             stdout,
                             stderr
@@ -1093,12 +1093,12 @@ pub fn audit_and_ensure_pm2_services(
                     let (start_ok, stdout, stderr) =
                         run_cmd_hidden_in_dir(&pm2_str, &["start", &eco_str, "--only", app_to_start, "--no-color"], eco_dir);
                     if start_ok || stdout.contains("✓") {
-                        log_fn(&format!("  ✅ 成功精準啟動 [{}]！", app_to_start), "success");
+                        log_fn(&format!("  成功精準啟動 [{}]！", app_to_start), "success");
                         need_save = true;
                     } else {
                         log_fn(
                             &format!(
-                                "  ⚠️ 精準啟動 [{}] 回傳警示: {} {}",
+                                "  警告：精準啟動 [{}] 回傳警示: {} {}",
                                 app_to_start,
                                 stdout,
                                 stderr
@@ -1124,7 +1124,7 @@ pub fn audit_and_ensure_pm2_services(
     // 3. 若有補啟動任何項目，自動持久化保存狀態
     if need_save {
         log_fn(
-            "💾 偵測到服務配置異動，正在執行 [pm2 save] 更新持久化存檔...",
+            "偵測到服務配置異動，正在執行 [pm2 save] 更新持久化存檔...",
             "info",
         );
         let _ = run_cmd_hidden(&pm2_str, &["save", "--force", "--no-color"]);
@@ -1153,7 +1153,7 @@ pub fn audit_and_ensure_pm2_services(
         }
     }
 
-    log_fn("📋 PM2 核心服務現況總覽：", "info");
+    log_fn("PM2 核心服務現況總覽：", "info");
     let mut all_healthy = true;
     for app_name in &[
         "LAH-WSS",
@@ -1167,18 +1167,18 @@ pub fn audit_and_ensure_pm2_services(
             .map(|s| s.as_str())
             .unwrap_or("未註冊 / 離線");
         if st == "online" {
-            log_fn(&format!("  • {:<16} : ✅ {st}", app_name), "success");
+            log_fn(&format!("  • {:<16} : {st}", app_name), "success");
         } else {
             all_healthy = false;
-            log_fn(&format!("  • {:<16} : ⚠️ {st}", app_name), "warning");
+            log_fn(&format!("  • {:<16} : 警告：{st}", app_name), "warning");
         }
     }
 
     if all_healthy {
-        log_fn("🎉 全部 5 大核心服務與模組皆已成功在線運作！", "success");
+        log_fn("全部 5 大核心服務與模組皆已成功在線運作！", "success");
     } else {
         log_fn(
-            "⚠️ 部分核心服務未能順利在線，請檢視上方日誌輸出或終端機 pm2 status。",
+            "警告：部分核心服務未能順利在線，請檢視上方日誌輸出或終端機 pm2 status。",
             "warning",
         );
     }
@@ -1198,13 +1198,13 @@ pub fn idempotent_reconstruct_pm2_services(
     let _ = fs::create_dir_all(&logs_dir);
 
     let Some(pm2) = resolve_pm2_command(root_dir) else {
-        log_fn("⚠️ 系統未偵測到有效的 pm2.cmd，跳過 PM2 重置與啟動作業。", "warning");
+        log_fn("警告：系統未偵測到有效的 pm2.cmd，跳過 PM2 重置與啟動作業。", "warning");
         return (false, "未偵測到 pm2.cmd".to_string());
     };
     let pm2_str = pm2.to_string_lossy().to_string();
 
     log_fn("--------------------------------------------------", "info");
-    log_fn("🔄 正在以本次安裝配置為唯一準則，執行 PM2 確定性清空重置與重啟...", "info");
+    log_fn("正在以本次安裝配置為唯一準則，執行 PM2 確定性清空重置與重啟...", "info");
 
     // 1. 若 LAH_PM2_Service 系統服務正在運行，先停止它，避免背景 Watchdog 產生競態干擾
     if is_pm2_service_installed() {
@@ -1214,9 +1214,9 @@ pub fn idempotent_reconstruct_pm2_services(
     // 2. 清除既有 PM2 受控程序註冊表 (徹底消除舊進程殘留與重複 Worker 實例)
     let (del_ok, out_del, err_del) = run_cmd_hidden(&pm2_str, &["delete", "all", "--no-color"]);
     if del_ok || out_del.contains("deleted") {
-        log_fn("  ✓ 已清空舊有 PM2 程序清單 (pm2 delete all)", "success");
+        log_fn("  已清空舊有 PM2 程序清單 (pm2 delete all)", "success");
     } else {
-        log_fn(&format!("  ℹ️ PM2 重置清空輸出: {} {}", out_del.trim(), err_del.trim()), "info");
+        log_fn(&format!("  PM2 重置清空輸出: {} {}", out_del.trim(), err_del.trim()), "info");
     }
 
     // 3. 定義三大核心生態系
@@ -1250,20 +1250,20 @@ pub fn idempotent_reconstruct_pm2_services(
     for eco in &core_ecosystems {
         let Some(eco_path) = eco.candidates.iter().find(|p| p.is_file()) else {
             if eco.title.contains("lah-api-v85") {
-                log_fn("  ℹ️ 目標主機未安裝後端 PHP8 應用模組 (LAH-API)，跳過 lah-api-v85 啟動", "info");
+                log_fn("  目標主機未安裝後端 PHP8 應用模組 (LAH-API)，跳過 lah-api-v85 啟動", "info");
             }
             continue;
         };
 
         sanitize_ecosystem_config(eco_path);
-        log_fn(&format!("🚀 正在以標準配置啟動 [{}]：{}...", eco.title, eco_path.display()), "info");
+        log_fn(&format!("正在以標準配置啟動 [{}]：{}...", eco.title, eco_path.display()), "info");
         let eco_str = eco_path.to_string_lossy().to_string();
         let eco_dir = eco_path.parent().unwrap_or(root_dir);
         let (start_ok, stdout, stderr) = run_cmd_hidden_in_dir(&pm2_str, &["start", &eco_str, "--no-color"], eco_dir);
         if start_ok || stdout.contains("✓") {
-            log_fn(&format!("  ✅ 成功掛載並啟動 [{}]！", eco.title), "success");
+            log_fn(&format!("  成功掛載並啟動 [{}]！", eco.title), "success");
         } else {
-            log_fn(&format!("  ⚠️ 啟動 [{}] 回傳警示: {} {}", eco_path.display(), stdout, stderr), "warning");
+            log_fn(&format!("  警告：啟動 [{}] 回傳警示: {} {}", eco_path.display(), stdout, stderr), "warning");
         }
     }
 
@@ -1271,7 +1271,7 @@ pub fn idempotent_reconstruct_pm2_services(
     ensure_pm2_logrotate(root_dir, log_fn);
 
     // 6. 固化保存最新且唯一之 dump 存檔
-    log_fn("💾 正在固化保存最新 PM2 受管程序存檔 (pm2 save)...", "info");
+    log_fn("正在固化保存最新 PM2 受管程序存檔 (pm2 save)...", "info");
     let _ = run_cmd_hidden(&pm2_str, &["save", "--force", "--no-color"]);
 
     // 7. 根據安裝勾選狀態與既有服務狀態，決定 LAH_PM2_Service 後續處置
@@ -1286,7 +1286,7 @@ pub fn idempotent_reconstruct_pm2_services(
         }
         Pm2ServicePostUpdateAction::RefreshFilesAndRestart => {
             log_fn(
-                "🔄 正在同步 WinSW 守護設定並重新啟動已註冊之 PM2 系統服務 (LAH_PM2_Service)...",
+                "正在同步 WinSW 守護設定並重新啟動已註冊之 PM2 系統服務 (LAH_PM2_Service)...",
                 "info",
             );
             let _ = ensure_winsw_service_files(root_dir, log_fn);
@@ -1296,7 +1296,7 @@ pub fn idempotent_reconstruct_pm2_services(
         }
         Pm2ServicePostUpdateAction::Skip => {
             log_fn(
-                "  ℹ️ 未勾選註冊 PM2 系統服務，跳過 LAH_PM2_Service 註冊與自啟配置",
+                "  未勾選註冊 PM2 系統服務，跳過 LAH_PM2_Service 註冊與自啟配置",
                 "info",
             );
         }
@@ -1324,7 +1324,7 @@ pub fn idempotent_reconstruct_pm2_services(
         }
     }
 
-    log_fn("📋 安裝後 PM2 受管核心服務狀態：", "info");
+    log_fn("安裝後 PM2 受管核心服務狀態：", "info");
     let mut all_healthy = true;
     for app_name in &[
         "LAH-WSS",
@@ -1335,16 +1335,16 @@ pub fn idempotent_reconstruct_pm2_services(
     ] {
         let st = final_apps.get(*app_name).map(|s| s.as_str()).unwrap_or("未註冊 / 離線");
         if st == "online" {
-            log_fn(&format!("  • {:<16} : ✅ {st}", app_name), "success");
+            log_fn(&format!("  • {:<16} : {st}", app_name), "success");
         } else if *app_name == "lah-api-v85" && !root_dir.join("LAH-API").is_dir() {
-            log_fn(&format!("  • {:<16} : ℹ️ 未部署 (跳過)", app_name), "info");
+            log_fn(&format!("  • {:<16} : 未部署 (跳過)", app_name), "info");
         } else {
             all_healthy = false;
-            log_fn(&format!("  • {:<16} : ⚠️ {st}", app_name), "warning");
+            log_fn(&format!("  • {:<16} : 警告：{st}", app_name), "warning");
         }
     }
 
-    log_fn("🎉 PM2 受管服務已全面對齊本次安裝配置，無任何重複實例！", "success");
+    log_fn("PM2 受管服務已全面對齊本次安裝配置，無任何重複實例！", "success");
     (all_healthy, "PM2 冪等重建啟動完成".to_string())
 }
 

@@ -7,21 +7,21 @@ pub fn check_apache_syntax(apache_dir: &Path, log_fn: &dyn Fn(&str, &str)) -> (b
     let httpd_exe = apache_dir.join("bin").join("httpd.exe");
     if !httpd_exe.is_file() {
         let msg = format!("找不到 httpd.exe: {}", httpd_exe.display());
-        log_fn(&format!("⚠️ {}", msg), "warning");
+        log_fn(&format!("警告：{}", msg), "warning");
         return (false, msg);
     }
 
-    log_fn("🔍 正在檢驗 Apache 設定檔語法 (httpd.exe -t)...", "info");
+    log_fn("正在檢驗 Apache 設定檔語法 (httpd.exe -t)...", "info");
     let httpd_str = httpd_exe.to_string_lossy();
     let apache_str = apache_dir.to_string_lossy();
     let (ok, stdout, stderr) = run_cmd_hidden(&httpd_str, &["-t", "-d", &apache_str]);
 
     let combined = format!("{}\n{}", stdout, stderr);
     if combined.contains("Syntax OK") {
-        log_fn("  ✓ Apache 設定檔語法檢查通過 (Syntax OK)！", "success");
+        log_fn("  Apache 設定檔語法檢查通過 (Syntax OK)！", "success");
         (true, "Syntax OK".to_string())
     } else {
-        log_fn(&format!("  ⚠️ Apache 語法檢查警告或錯誤:\n{}", combined.trim()), "warning");
+        log_fn(&format!("  警告：Apache 語法檢查警告或錯誤:\n{}", combined.trim()), "warning");
         (ok, combined)
     }
 }
@@ -39,7 +39,7 @@ pub fn ensure_php_ini_configured(php_dir: &Path, is_php85: bool, log_fn: &dyn Fn
             let cand_path = php_dir.join(cand);
             if cand_path.is_file() {
                 if fs::copy(&cand_path, &ini_path).is_ok() {
-                    log_fn(&format!("  ✓ 已依據 {cand} 初始化產生 {ver_label} 設定檔: {}", ini_path.display()), "info");
+                    log_fn(&format!("  已依據 {cand} 初始化產生 {ver_label} 設定檔: {}", ini_path.display()), "info");
                     break;
                 }
             }
@@ -47,7 +47,7 @@ pub fn ensure_php_ini_configured(php_dir: &Path, is_php85: bool, log_fn: &dyn Fn
     }
 
     if !ini_path.is_file() {
-        log_fn(&format!("  ⚠️ 找不到 {ver_label} 設定檔或範本: {}", ini_path.display()), "warning");
+        log_fn(&format!("  警告：找不到 {ver_label} 設定檔或範本: {}", ini_path.display()), "warning");
         return false;
     }
 
@@ -137,7 +137,7 @@ pub fn ensure_php_ini_configured(php_dir: &Path, is_php85: bool, log_fn: &dyn Fn
 
     if content != orig {
         let _ = fs::write(&ini_path, content);
-        log_fn(&format!("  ✓ 已校正並儲存 {ver_label} 設定檔 ({})", ini_path.display()), "success");
+        log_fn(&format!("  已校正並儲存 {ver_label} 設定檔 ({})", ini_path.display()), "success");
     }
 
     true
@@ -229,14 +229,14 @@ pub fn configure_apache_mod_php7(apache_dir: &Path, root_dir: &Path, php7_dir: O
             if c.is_file() {
                 let _ = fs::create_dir_all(apache_dir.join("conf"));
                 if fs::copy(c, &conf_path).is_ok() {
-                    log_fn(&format!("  ✓ 已依據範本 [{}] 初始化建立 httpd.conf", c.display()), "info");
+                    log_fn(&format!("  已依據範本 [{}] 初始化建立 httpd.conf", c.display()), "info");
                     restored = true;
                     break;
                 }
             }
         }
         if !restored {
-            log_fn(&format!("⚠️ 未找到 httpd.conf：{}", conf_path.display()), "warning");
+            log_fn(&format!("警告：未找到 httpd.conf：{}", conf_path.display()), "warning");
             return (false, false);
         }
     }
@@ -302,7 +302,7 @@ pub fn configure_apache_mod_php7(apache_dir: &Path, root_dir: &Path, php7_dir: O
     content = normalize_apache_log_directives(&content, &apache_logs_fwd);
     if content != before_logs {
         log_fn(
-            "  ✓ 已將 Apache 日誌路徑 (ErrorLog / CustomLog) 歸集至統一日誌儲存庫 (logs/apache)",
+            "  已將 Apache 日誌路徑 (ErrorLog / CustomLog) 歸集至統一日誌儲存庫 (logs/apache)",
             "success",
         );
     }
@@ -362,7 +362,7 @@ pub fn configure_apache_mod_php7(apache_dir: &Path, root_dir: &Path, php7_dir: O
                 content = re_old_modphp7_c.replace_all(&content, "").to_string();
 
                 content.push_str(&php7_block);
-                log_fn("  ✓ 已向 Apache httpd.conf 掛載 PHP 7.4 mod_php 模組與相依程式庫", "success");
+                log_fn("  已向 Apache httpd.conf 掛載 PHP 7.4 mod_php 模組與相依程式庫", "success");
             }
         }
     }
@@ -450,7 +450,7 @@ pub fn configure_apache_fcgi_proxy(apache_dir: &Path, root_dir: &Path, php85_dir
         content = existing_fcgi_re.replace(&content, NoExpand(&fcgi_block)).to_string();
     } else {
         content.push_str(&fcgi_block);
-        log_fn("  ✓ 已向 Apache 注入 LAH-API (PHP 8.5 FastCGI 127.0.0.1:8085) 轉發設定", "success");
+        log_fn("  已向 Apache 注入 LAH-API (PHP 8.5 FastCGI 127.0.0.1:8085) 轉發設定", "success");
     }
 
     ensure_lah_api_ecosystem(&api_dir, php85_dir, log_fn);
@@ -524,7 +524,7 @@ module.exports = {{
 "#
     );
     if fs::write(&eco_path, eco_content).is_ok() {
-        log_fn(&format!("  ✓ 已自動建立 PM2 FastCGI 守護設定檔: {}", eco_path.display()), "success");
+        log_fn(&format!("  已自動建立 PM2 FastCGI 守護設定檔: {}", eco_path.display()), "success");
     }
 }
 
@@ -599,7 +599,7 @@ pub fn apply_apache_security_hardening(conf_path: &Path, root_dir: &Path, log_fn
         content = content.replace(PLACEHOLDER, &format!("{}\n", php2shell_block.trim()));
     } else {
         content.push_str(&php2shell_block);
-        log_fn("  ✓ Apache httpd.conf 已套用資安防護與 CVE-2024-4577 PHP2Shell 緩解設定", "success");
+        log_fn("  Apache httpd.conf 已套用資安防護與 CVE-2024-4577 PHP2Shell 緩解設定", "success");
     }
 
     // 4. 敏感檔案拒絕 (.env、SQLite 資料庫、備份與日誌、dot 目錄)
@@ -614,7 +614,7 @@ pub fn apply_apache_security_hardening(conf_path: &Path, root_dir: &Path, log_fn
         content = existing_sensitive_re.replace(&content, NoExpand(&sensitive_block)).to_string();
     } else {
         content.push_str(&format!("\n{}\n", sensitive_block));
-        log_fn("  ✓ Apache httpd.conf 已套用敏感檔案拒絕規則 (.env / *.db / dot 目錄)", "success");
+        log_fn("  Apache httpd.conf 已套用敏感檔案拒絕規則 (.env / *.db / dot 目錄)", "success");
     }
 
     // 5. Apache mpm_winnt 記憶體治理與子程序輪替回收
@@ -629,7 +629,7 @@ pub fn apply_apache_security_hardening(conf_path: &Path, root_dir: &Path, log_fn
         content = existing_mpm_re.replace(&content, NoExpand(&mpm_block)).to_string();
     } else {
         content.push_str(&format!("\n{}\n", mpm_block));
-        log_fn("  ✓ Apache httpd.conf 已套用 mpm_winnt 記憶體回收規則 (MaxConnectionsPerChild 10000 / MaxMemFree 2048)", "success");
+        log_fn("  Apache httpd.conf 已套用 mpm_winnt 記憶體回收規則 (MaxConnectionsPerChild 10000 / MaxMemFree 2048)", "success");
     }
 
     // 6. Node2Shell (CVE-2026-111497 Brotli OOB Write) Mitigation
@@ -644,7 +644,7 @@ pub fn apply_apache_security_hardening(conf_path: &Path, root_dir: &Path, log_fn
         content = existing_node2shell_re.replace(&content, NoExpand(&node2shell_block)).to_string();
     } else {
         content.push_str(&format!("\n{}\n", node2shell_block));
-        log_fn("  ✓ Apache httpd.conf 已套用 CVE-2026-111497 Node2Shell 標頭剝除防護", "success");
+        log_fn("  Apache httpd.conf 已套用 CVE-2026-111497 Node2Shell 標頭剝除防護", "success");
     }
 
     let changed = content != orig;
@@ -733,7 +733,7 @@ pub fn apply_php_security_hardening(ini_path: &Path, log_fn: &dyn Fn(&str, &str)
 
     if content != orig {
         let _ = fs::write(ini_path, content);
-        log_fn(&format!("  ✓ 已套用 PHP 安全設定 ({})", ini_path.display()), "success");
+        log_fn(&format!("  已套用 PHP 安全設定 ({})", ini_path.display()), "success");
     }
     true
 }

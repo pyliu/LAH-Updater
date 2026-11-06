@@ -744,6 +744,7 @@
   .faq-list strong {
     color: #1e293b;
   }
+  .ui-svg-icon { width: 1em; height: 1em; vertical-align: -0.125em; }
 </style>
 </head>
 <body>
@@ -778,12 +779,12 @@
         <span>Node 沙盒監管工具</span>
       </h1>
       <div class="nav-tabs">
-        <button id="tab_btn_install" class="tab-btn active">📦 沙盒安裝與部署</button>
-        <button id="tab_btn_console" class="tab-btn">🖥️ 沙盒 PM2 專屬控制台</button>
+        <button id="tab_btn_install" class="tab-btn active"><svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7l9-4 9 4v10l-9 4-9-4zM3 7l9 4 9-4M12 11v10"/></svg> 沙盒安裝與部署</button>
+        <button id="tab_btn_console" class="tab-btn"><svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M6 8l4 4-4 4m6 0h5"/></svg> 沙盒 PM2 專屬控制台</button>
       </div>
     </div>
     <div class="header-right">
-      <button id="btn_audit" class="btn-green btn-sm">🛡️ 資安自檢</button>
+      <button id="btn_audit" class="btn-green btn-sm"><svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2l8 3v6c0 5-3 8-8 11-5-3-8-6-8-11V5zM8 12l3 3 5-6"/></svg> 資安自檢</button>
       <div id="admin_badge" class="admin-badge not-admin">檢測權限中...</div>
     </div>
   </div>
@@ -795,7 +796,7 @@
       <!-- 左欄：配置與執行選項 -->
       <div class="install-col-left">
         <div class="card">
-          <div class="card-title">📁 安裝根目錄（Node 將安裝於其下 node 資料夾，並自動駐留控制台執行檔）</div>
+          <div class="card-title"><span><svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h7l2 2h9v10H3z"/></svg> 安裝根目錄（Node 將安裝於其下 node 資料夾，並自動駐留控制台執行檔）</span></div>
           <div class="row">
             <input id="root_dir" type="text" value="" placeholder="自動偵測中...">
             <button id="browse_btn">瀏覽...</button>
@@ -804,7 +805,7 @@
 
         <div class="card">
           <div class="card-title">
-            <span>🔎 環境狀態</span>
+            <span><svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="10" cy="10" r="6"/><path d="M15 15l5 5"/></svg> 環境狀態</span>
             <div style="display: flex; gap: 6px;">
               <button id="btn_rescan">重新偵測</button>
             </div>
@@ -813,21 +814,21 @@
         </div>
 
         <div class="card">
-          <div class="card-title">⚙️ 系統服務與執行選項</div>
+          <div class="card-title"><span><svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3m0 14v3M2 12h3m14 0h3M5 5l2 2m10 10 2 2M19 5l-2 2M7 17l-2 2"/></svg> 系統服務與執行選項</span></div>
           <div style="background:#f0fdf4; border:1px solid #bbf7d0; border-radius:6px; padding:6px 11px; margin-bottom:7px; font-size:12px; color:#166534; line-height:1.45;">
-            🛡️ <b>零全域污染沙盒架構</b>：安裝時自動自環境變數清理舊可攜殘留，並建立專屬維運終端 <code>lah-cmd.bat</code> 與駐留控制台。沙盒內自給自足，絕不干擾全域 Node 環境。
+            <svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2l8 3v6c0 5-3 8-8 11-5-3-8-6-8-11V5zM8 12l3 3 5-6"/></svg> <b>零全域污染沙盒架構</b>：安裝時自動自環境變數清理舊可攜殘留，並建立專屬維運終端 <code>lah-cmd.bat</code> 與駐留控制台。沙盒內自給自足，絕不干擾全域 Node 環境。
           </div>
           <div class="options-grid">
-            <label class="checkbox-item"><input type="checkbox" id="chk_service" checked><span>⚙️ 註冊開機自啟服務 PM2_Portable_Service（守護程序並隨開機自動啟動）</span></label>
-            <label class="checkbox-item"><input type="checkbox" id="chk_logrotate" checked><span>📦 直接由便攜版 node_modules 掛載並啟動 pm2-logrotate 日誌輪替模組（自動啟用日誌壓縮）</span></label>
-            <label class="checkbox-item"><input type="checkbox" id="chk_resurrect" checked><span>🔄 立即執行 pm2 resurrect 還原既有程式 dump</span></label>
+            <label class="checkbox-item"><input type="checkbox" id="chk_service" checked><span><svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3m0 14v3M2 12h3m14 0h3M5 5l2 2m10 10 2 2M19 5l-2 2M7 17l-2 2"/></svg> 註冊開機自啟服務 PM2_Portable_Service（守護程序並隨開機自動啟動）</span></label>
+            <label class="checkbox-item"><input type="checkbox" id="chk_logrotate" checked><span><svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7l9-4 9 4v10l-9 4-9-4zM3 7l9 4 9-4M12 11v10"/></svg> 直接由便攜版 node_modules 掛載並啟動 pm2-logrotate 日誌輪替模組（自動啟用日誌壓縮）</span></label>
+            <label class="checkbox-item"><input type="checkbox" id="chk_resurrect" checked><span><svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5M5 9a7 7 0 0112-2l3 5M19 15a7 7 0 01-12 2l-3-5"/></svg> 立即執行 pm2 resurrect 還原既有程式 dump</span></label>
           </div>
         </div>
 
         <div class="footer-bar">
           <button id="btn_exit">關閉離開</button>
-          <button id="btn_goto_console" class="btn-green" style="display:none;">🖥️ 進入沙盒控制台</button>
-          <button id="btn_start" class="danger">🚀 開始安裝</button>
+          <button id="btn_goto_console" class="btn-green" style="display:none;"><svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M6 8l4 4-4 4m6 0h5"/></svg> 進入沙盒控制台</button>
+          <button id="btn_start" class="danger"><svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4l13 8-13 8z"/></svg> 開始安裝</button>
         </div>
       </div>
 
@@ -835,10 +836,10 @@
       <div class="install-col-right">
         <div class="card">
           <div class="card-title">
-            <span>📝 部署與配置即時日誌 (Deployment Output)</span>
+            <span><svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 16L16 4l4 4L8 20H4zM13 7l4 4"/></svg> 部署與配置即時日誌 (Deployment Output)</span>
             <span class="status-pill online" style="font-size:11px;">實時連線中</span>
           </div>
-          <div id="inline_install_log_box" class="inline-log-box">準備就緒。點擊左側【🚀 開始安裝】後，此處將同步串流解壓、服務註冊與 PM2 初始化細節...</div>
+          <div id="inline_install_log_box" class="inline-log-box">準備就緒。點擊左側【<svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4l13 8-13 8z"/></svg> 開始安裝】後，此處將同步串流解壓、服務註冊與 PM2 初始化細節...</div>
         </div>
       </div>
     </div>
@@ -848,23 +849,23 @@
       <!-- 左卡：沙盒核心架構與資安邊界規格 -->
       <div class="guide-card" style="margin-top:0;">
         <div class="guide-card-title">
-          <span>🛡️ 沙盒核心架構與資安邊界規格</span>
+          <span><svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2l8 3v6c0 5-3 8-8 11-5-3-8-6-8-11V5zM8 12l3 3 5-6"/></svg> 沙盒核心架構與資安邊界規格</span>
         </div>
         <div class="guide-grid-3">
           <div class="guide-item">
-            <div class="guide-item-title">🛡️ 零全域環境污染與隔離</div>
+            <div class="guide-item-title"><svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2l8 3v6c0 5-3 8-8 11-5-3-8-6-8-11V5zM8 12l3 3 5-6"/></svg> 零全域環境污染與隔離</div>
             <div class="guide-item-desc">
               私有目錄隔離，絕不登錄 HKLM/HKCU。外部全域 Node 22+ 升級完全零干擾。
             </div>
           </div>
           <div class="guide-item">
-            <div class="guide-item-title">💻 專屬維運終端與駐留副本</div>
+            <div class="guide-item-title"><svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M6 8l4 4-4 4m6 0h5"/></svg> 專屬維運終端與駐留副本</div>
             <div class="guide-item-desc">
               根目錄產出 <code>lah-cmd.bat</code> 與控制台執行檔，現場維運隨點隨開。
             </div>
           </div>
           <div class="guide-item">
-            <div class="guide-item-title">⚙️ 開機守護與日誌輪替治理</div>
+            <div class="guide-item-title"><svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3m0 14v3M2 12h3m14 0h3M5 5l2 2m10 10 2 2M19 5l-2 2M7 17l-2 2"/></svg> 開機守護與日誌輪替治理</div>
             <div class="guide-item-desc">
               WinSW 服務免登入自啟，logrotate 自動 Gzip 壓縮防硬碟爆滿。
             </div>
@@ -875,7 +876,7 @@
       <!-- 右卡：自動化部署初始化與維運流程 -->
       <div class="guide-card" style="margin-top:0;">
         <div class="guide-card-title">
-          <span>📋 自動化部署檢核與初始化流程</span>
+          <span><svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 2h8l4 4v16H6zM14 2v5h4M9 11h6M9 15h6"/></svg> 自動化部署檢核與初始化流程</span>
         </div>
         <table class="cheat-table">
           <tr><td style="width:115px; font-weight:bold; color:#166534;">1. 解壓私有沙盒</td><td>解壓 <code>node.zip</code> 至根目錄 <code>node\</code>，建立私有 Runtime。</td></tr>
@@ -894,7 +895,7 @@
       <div class="card">
         <div>
           <div class="card-title">
-            <span>🛡️ 沙盒 Node 核心與守護服務</span>
+            <span><svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2l8 3v6c0 5-3 8-8 11-5-3-8-6-8-11V5zM8 12l3 3 5-6"/></svg> 沙盒 Node 核心與守護服務</span>
             <span id="con_svc_badge" class="status-pill stopped">檢測中...</span>
           </div>
           <div class="kv-grid">
@@ -913,10 +914,10 @@
           </div>
         </div>
         <div class="btn-group">
-          <button id="btn_svc_start" class="btn-sm btn-green">▶ 啟動服務</button>
-          <button id="btn_svc_stop" class="btn-sm">⏹ 停止服務</button>
-          <button id="btn_svc_restart" class="btn-sm">🔄 重啟服務</button>
-          <button id="btn_open_cmd" class="btn-sm primary" style="margin-left:auto;">💻 沙盒終端 (lah-cmd)</button>
+          <button id="btn_svc_start" class="btn-sm btn-green"><svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4l13 8-13 8z"/></svg> 啟動服務</button>
+          <button id="btn_svc_stop" class="btn-sm"><svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="6" width="12" height="12"/></svg> 停止服務</button>
+          <button id="btn_svc_restart" class="btn-sm"><svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5M5 9a7 7 0 0112-2l3 5M19 15a7 7 0 01-12 2l-3-5"/></svg> 重啟服務</button>
+          <button id="btn_open_cmd" class="btn-sm primary" style="margin-left:auto;"><svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M6 8l4 4-4 4m6 0h5"/></svg> 沙盒終端 (lah-cmd)</button>
         </div>
       </div>
 
@@ -924,7 +925,7 @@
       <div class="card">
         <div>
           <div class="card-title">
-            <span>📦 內建日誌輪替 (pm2-logrotate)</span>
+            <span><svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7l9-4 9 4v10l-9 4-9-4zM3 7l9 4 9-4M12 11v10"/></svg> 內建日誌輪替 (pm2-logrotate)</span>
             <span id="con_lr_badge" class="status-pill stopped">檢測中...</span>
           </div>
           <div class="kv-grid">
@@ -947,9 +948,9 @@
           </div>
         </div>
         <div class="btn-group">
-          <button id="btn_lr_trigger" class="btn-sm btn-green">🗜️ 立即壓縮輪替</button>
-          <button id="btn_lr_repair" class="btn-sm btn-warn">⚡ 啟動 / 修復掛載</button>
-          <button id="btn_lr_logs" class="btn-sm" style="margin-left:auto;">📄 模組日誌</button>
+          <button id="btn_lr_trigger" class="btn-sm btn-green"><svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="5" width="16" height="15"/><path d="M3 5h18V2H3zM10 9h4"/></svg> 立即壓縮輪替</button>
+          <button id="btn_lr_repair" class="btn-sm btn-warn"><svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 2L4 14h7l-1 8 10-12h-7z"/></svg> 啟動 / 修復掛載</button>
+          <button id="btn_lr_logs" class="btn-sm" style="margin-left:auto;"><svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 2h8l4 4v16H6zM14 2v5h4M9 11h6M9 15h6"/></svg> 模組日誌</button>
         </div>
       </div>
     </div>
@@ -958,7 +959,7 @@
     <div class="card" style="margin-bottom: 6px;">
       <div class="card-title">
         <div style="display:flex; align-items:center; gap:8px;">
-          <span>🚀 受管業務系統清單 (Managed PM2 Apps)</span>
+          <span><svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4l13 8-13 8z"/></svg> 受管業務系統清單 (Managed PM2 Apps)</span>
           <span id="con_app_count" class="status-pill online">0 系統</span>
         </div>
         <div class="btn-group">
@@ -966,12 +967,12 @@
             <input type="checkbox" id="chk_auto_refresh" checked style="accent-color:#16a34a;">
             <span>自動刷新</span>
           </label>
-          <button id="btn_pm2_refresh" class="btn-sm">🔄 重新整理</button>
-          <button id="btn_pm2_restart_all" class="btn-sm btn-green">⚡ 全部重啟</button>
-          <button id="btn_pm2_save" class="btn-sm">💾 儲存快照</button>
-          <button id="btn_pm2_resurrect" class="btn-sm">♻️ 還原快照</button>
-          <button id="btn_open_log_modal" class="btn-sm primary">📄 日誌預覽</button>
-          <button id="btn_open_logs_dir" class="btn-sm">📂 日誌目錄</button>
+          <button id="btn_pm2_refresh" class="btn-sm"><svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5M5 9a7 7 0 0112-2l3 5M19 15a7 7 0 01-12 2l-3-5"/></svg> 重新整理</button>
+          <button id="btn_pm2_restart_all" class="btn-sm btn-green"><svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 2L4 14h7l-1 8 10-12h-7z"/></svg> 全部重啟</button>
+          <button id="btn_pm2_save" class="btn-sm"><svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 3h14l3 3v15H3V3zM7 3v6h9V3M7 21v-8h10v8"/></svg> 儲存快照</button>
+          <button id="btn_pm2_resurrect" class="btn-sm"><svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5M5 9a7 7 0 0112-2l3 5M19 15a7 7 0 01-12 2l-3-5"/></svg> 還原快照</button>
+          <button id="btn_open_log_modal" class="btn-sm primary"><svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 2h8l4 4v16H6zM14 2v5h4M9 11h6M9 15h6"/></svg> 日誌預覽</button>
+          <button id="btn_open_logs_dir" class="btn-sm"><svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h7l2 2h9v10H3z"/></svg> 日誌目錄</button>
         </div>
       </div>
 
@@ -1003,7 +1004,7 @@
     <div id="inline_log_card" class="inline-log-card">
       <div class="card-title" style="margin-bottom: 5px;">
         <div style="display:flex; align-items:center; gap:8px;">
-          <span>📄 即時日誌串流 (Live Stream)：<b id="inline_log_proc_name" style="color:#0284c7;">尚未選取進程</b></span>
+          <span><svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 2h8l4 4v16H6zM14 2v5h4M9 11h6M9 15h6"/></svg> 即時日誌串流 (Live Stream)：<b id="inline_log_proc_name" style="color:#0284c7;">尚未選取進程</b></span>
           <span id="inline_log_badge" class="status-pill online" style="font-size:11px;">串流中</span>
         </div>
         <div class="btn-group" style="gap:4px;">
@@ -1014,10 +1015,10 @@
             <option value="200" selected>最後 200 行</option>
             <option value="500">最後 500 行</option>
           </select>
-          <button id="btn_inline_reload" class="btn-sm primary">🔄 重新載入</button>
-          <button id="btn_inline_notepad" class="btn-sm">📝 記事本</button>
-          <button id="btn_inline_folder" class="btn-sm">📂 日誌夾</button>
-          <button id="btn_inline_modal" class="btn-sm" title="以獨立視窗全螢幕放大預覽">🔍 彈窗放大</button>
+          <button id="btn_inline_reload" class="btn-sm primary"><svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5M5 9a7 7 0 0112-2l3 5M19 15a7 7 0 01-12 2l-3-5"/></svg> 重新載入</button>
+          <button id="btn_inline_notepad" class="btn-sm"><svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 16L16 4l4 4L8 20H4zM13 7l4 4"/></svg> 記事本</button>
+          <button id="btn_inline_folder" class="btn-sm"><svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h7l2 2h9v10H3z"/></svg> 日誌夾</button>
+          <button id="btn_inline_modal" class="btn-sm" title="以獨立視窗全螢幕放大預覽"><svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="10" cy="10" r="6"/><path d="M15 15l5 5"/></svg> 彈窗放大</button>
         </div>
       </div>
       <div id="inline_log_meta" style="font-size: 11px; color: #64748b; margin-bottom: 4px; font-family: Consolas, monospace;">
@@ -1031,10 +1032,10 @@
       <!-- 左卡：CLI Cheat Sheet -->
       <div class="guide-item">
         <div class="guide-item-title">
-          <span>⌨️ 沙盒終端常用指令速查 (CLI Cheat Sheet)</span>
+          <span><svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M6 9h1m3 0h1m3 0h1m3 0h1M6 12h1m3 0h1m3 0h1m3 0h1M7 16h10"/></svg> 沙盒終端常用指令速查 (CLI Cheat Sheet)</span>
         </div>
         <div class="guide-item-desc" style="margin-bottom: 3px;">
-          點擊上方【💻 沙盒終端】開啟專屬視窗後，可隨時執行以下命令：
+          點擊上方【<svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M6 8l4 4-4 4m6 0h5"/></svg> 沙盒終端】開啟專屬視窗後，可隨時執行以下命令：
         </div>
         <table class="cheat-table">
           <tr>
@@ -1063,23 +1064,23 @@
       <!-- 右卡：維運 SOP 與常見問題 -->
       <div class="guide-item">
         <div class="guide-item-title">
-          <span>📋 核心守護機制與維運 SOP (Operational FAQ)</span>
+          <span><svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 2h8l4 4v16H6zM14 2v5h4M9 11h6M9 15h6"/></svg> 核心守護機制與維運 SOP (Operational FAQ)</span>
         </div>
         <div class="guide-item-desc" style="margin-bottom: 3px;">
           Node 可攜沙盒環境標準日常維護與狀態防護守則：
         </div>
         <ul class="faq-list">
-          <li><strong>改動程式後請固化狀態</strong>：更新應用程式代碼、修補參數或變更進程後，務必點擊上方【💾 儲存快照】（<code>pm2 save</code>），避免伺服器重啟時遺失變更。</li>
+          <li><strong>改動程式後請固化狀態</strong>：更新應用程式代碼、修補參數或變更進程後，務必點擊上方【<svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 3h14l3 3v15H3V3zM7 3v6h9V3M7 21v-8h10v8"/></svg> 儲存快照】（<code>pm2 save</code>），避免伺服器重啟時遺失變更。</li>
           <li><strong>60 秒常駐守護與自癒</strong>：背景服務具備定期偵測機制，若偵測到 PM2 程序解譯器異常搶佔，會自動強制自癒並以沙盒可攜 Node 重啟。</li>
-          <li><strong>日誌容量定期釋放</strong>：日誌由 <code>pm2-logrotate</code> 自動以 Gzip 壓縮，若遇進程密集輸出，可隨時點擊【🗜️ 立即壓縮輪替】即刻釋放硬碟空間。</li>
-          <li><strong>資安合規佐證</strong>：右上角【🛡️ 資安自檢】已支援動態受管服務識別，檢測完成後將於 <code>logs\</code> 匯出合格佐證報告供稽核備查。</li>
+          <li><strong>日誌容量定期釋放</strong>：日誌由 <code>pm2-logrotate</code> 自動以 Gzip 壓縮，若遇進程密集輸出，可隨時點擊【<svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="5" width="16" height="15"/><path d="M3 5h18V2H3zM10 9h4"/></svg> 立即壓縮輪替】即刻釋放硬碟空間。</li>
+          <li><strong>資安合規佐證</strong>：右上角【<svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2l8 3v6c0 5-3 8-8 11-5-3-8-6-8-11V5zM8 12l3 3 5-6"/></svg> 資安自檢】已支援動態受管服務識別，檢測完成後將於 <code>logs\</code> 匯出合格佐證報告供稽核備查。</li>
         </ul>
       </div>
     </div>
 
     <!-- 底部即時回饋狀態列 -->
     <div id="console_toast" class="toast-bar">
-      <span id="console_toast_msg">✅ 沙盒控制台已就緒（所有指令皆透過隔離環境 PM2_HOME 與沙盒 Node 執行）</span>
+      <span id="console_toast_msg">沙盒控制台已就緒（所有指令皆透過隔離環境 PM2_HOME 與沙盒 Node 執行）</span>
       <span id="console_last_updated" class="mono" style="font-size:11px; color:#94a3b8;">--:--:--</span>
     </div>
   </div>
@@ -1107,7 +1108,7 @@
       <div id="log_box"></div>
       <div class="footer-bar" style="margin-top: 12px; gap: 8px;">
         <button id="btn_modal_back" style="display: none;">返回安裝設定</button>
-        <button id="btn_modal_to_console" class="danger" style="display: none;">🖥️ 進入沙盒控制台</button>
+        <button id="btn_modal_to_console" class="danger" style="display: none;"><svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M6 8l4 4-4 4m6 0h5"/></svg> 進入沙盒控制台</button>
         <button id="btn_close_modal" disabled>關閉離開</button>
       </div>
     </div>
@@ -1118,7 +1119,7 @@
     <div class="modal-content">
       <div class="modal-header">
         <h2>
-          <span id="audit_modal_title">🛡️ 資安邊界自檢與沙盒隔離報告</span>
+          <span id="audit_modal_title"><svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2l8 3v6c0 5-3 8-8 11-5-3-8-6-8-11V5zM8 12l3 3 5-6"/></svg> 資安邊界自檢與沙盒隔離報告</span>
         </h2>
       </div>
       <div id="audit_badge_box" style="padding: 9px 13px; border-radius: 6px; font-weight: bold; margin-bottom: 9px; font-size: 13px;"></div>
@@ -1134,11 +1135,11 @@
     <div class="modal-content">
       <div class="modal-header">
         <h2>
-          <span>📄 沙盒即時日誌預覽 (Log Tail)</span>
+          <span><svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 2h8l4 4v16H6zM14 2v5h4M9 11h6M9 15h6"/></svg> 沙盒即時日誌預覽 (Log Tail)</span>
         </h2>
         <div class="btn-group">
-          <button id="btn_log_Notepad" class="btn-sm">📝 記事本開啟</button>
-          <button id="btn_log_Folder" class="btn-sm">📂 開啟日誌資料夾</button>
+          <button id="btn_log_Notepad" class="btn-sm"><svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 16L16 4l4 4L8 20H4zM13 7l4 4"/></svg> 記事本開啟</button>
+          <button id="btn_log_Folder" class="btn-sm"><svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h7l2 2h9v10H3z"/></svg> 開啟日誌資料夾</button>
         </div>
       </div>
 
@@ -1153,7 +1154,7 @@
           <option value="200" selected>最後 200 行</option>
           <option value="500">最後 500 行</option>
         </select>
-        <button id="btn_log_reload" class="btn-sm primary">🔄 重新載入</button>
+        <button id="btn_log_reload" class="btn-sm primary"><svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5M5 9a7 7 0 0112-2l3 5M19 15a7 7 0 01-12 2l-3-5"/></svg> 重新載入</button>
       </div>
 
       <div id="log_meta_bar" style="font-size: 11.5px; color: #64748b; margin-bottom: 6px; font-family: Consolas, monospace;">

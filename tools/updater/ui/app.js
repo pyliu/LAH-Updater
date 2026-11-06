@@ -171,12 +171,12 @@ function renderInitialCatalog() {
           <input type="checkbox" id="chk_pkg_${pkg.id}" checked>
           <span class="pkg-title">${pkg.title}</span>
         </label>
-        <span class="pkg-badge notfound" id="badge_pkg_${pkg.id}">⚪ 偵測中...</span>
+        <span class="pkg-badge notfound" id="badge_pkg_${pkg.id}">未啟用偵測中...</span>
       </div>
       <div class="pkg-meta">
         <span id="meta_file_${pkg.id}">檔名：<code>${pkg.name}</code> (掃描中...)</span>
         <span id="meta_target_${pkg.id}" style="margin-left: 10px; color:#94a3b8;">
-          ○ 正在檢查目標目錄...
+          正在檢查目標目錄...
         </span>
       </div>
       <div class="pkg-hint-warn" id="hint_pkg_${pkg.id}"></div>
@@ -232,10 +232,10 @@ function updatePackageCards(scannedPkgs) {
       }
 
       if (scanned.target_exists) {
-        metaTgtEl.textContent = "✓ 目標目錄已存在";
+        metaTgtEl.textContent = "目標目錄已存在";
         metaTgtEl.style.color = "#16a34a";
       } else {
-        metaTgtEl.textContent = "○ 目標目錄尚未建立";
+        metaTgtEl.textContent = "目標目錄尚未建立";
         metaTgtEl.style.color = "#94a3b8";
       }
     }
@@ -268,13 +268,13 @@ function checkPhp85AndApiDependency(userToggledPkgId = null) {
 
       // 若目前 apiPkg 仍未勾選 (例如手動取消)，呈現醒目警示徽章
       if (!apiPkg.checked) {
-        const warnText = "⚠️ 僅選取 PHP 8.5 執行環境，目標主機未安裝 LAH-API 程式碼，更新後將不會啟動 lah-api-v85 服務";
+        const warnText = "警告：僅選取 PHP 8.5 執行環境，目標主機未安裝 LAH-API 程式碼，更新後將不會啟動 lah-api-v85 服務";
         if (hintPhp85) {
           hintPhp85.textContent = warnText;
           hintPhp85.style.display = "block";
         }
         if (hintApi) {
-          hintApi.textContent = "💡 建議同步勾選本更新包，以於 PHP 8.5 建立並啟動 lah-api-v85 核心業務 API";
+          hintApi.textContent = "建議同步勾選本更新包，以於 PHP 8.5 建立並啟動 lah-api-v85 核心業務 API";
           hintApi.style.display = "block";
         }
         return;
@@ -307,10 +307,10 @@ async function init() {
     const isAdmin = await invoke("check_admin");
     const badge = document.getElementById("admin_badge");
     if (isAdmin) {
-      badge.textContent = "👑 管理員權限";
+      badge.textContent = "管理員權限";
       badge.className = "admin-badge is-admin";
     } else {
-      badge.textContent = "⚠️ 一般權限 (建議以管理員身分執行)";
+      badge.textContent = "警告：一般權限 (建議以管理員身分執行)";
       badge.className = "admin-badge not-admin";
     }
   } catch (e) {
@@ -356,10 +356,10 @@ async function scanEnvironment(isInitial = false) {
     // 狀態摘要更新
     const rootBadge = document.getElementById("root_status_badge");
     if (res.root_exists) {
-      rootBadge.textContent = "🟢 目錄已就緒";
+      rootBadge.textContent = "目錄已就緒";
       rootBadge.style.color = "#16a34a";
     } else {
-      rootBadge.textContent = "🔴 目錄尚未建立";
+      rootBadge.textContent = "目錄尚未建立";
       rootBadge.style.color = "#dc2626";
     }
 
@@ -688,7 +688,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (php85Pkg && php85Pkg.checked && apiPkg && !apiPkg.checked && !apiPkg.target_exists) {
       appendLog(
         "warning",
-        "⚠️ 提示：您已選取 PHP 8.5 執行環境，但未勾選「後端 PHP8 更新包 (LAH-API.zip)」且目標主機查無程式碼，更新後系統將跳過 lah-api-v85 服務啟動。"
+        "警告：提示：您已選取 PHP 8.5 執行環境，但未勾選「後端 PHP8 更新包 (LAH-API.zip)」且目標主機查無程式碼，更新後系統將跳過 lah-api-v85 服務啟動。"
       );
     }
 
@@ -745,7 +745,7 @@ document.addEventListener("DOMContentLoaded", () => {
       state.isUpdating = false;
 
       if (summary.success) {
-        document.getElementById("modal_progress_title").textContent = "🎉 系統安裝與更新完成！";
+        document.getElementById("modal_progress_title").textContent = "系統安裝與更新完成！";
         document.getElementById("badge_updating").textContent = "已完成";
         document.getElementById("badge_updating").style.color = "#16a34a";
         document.getElementById("btn_modal_back").style.display = "inline-block";
@@ -770,14 +770,14 @@ document.addEventListener("DOMContentLoaded", () => {
           document.getElementById("modal_cleanup").classList.add("active");
         }
       } else {
-        document.getElementById("modal_progress_title").textContent = "❌ 安裝與更新失敗";
+        document.getElementById("modal_progress_title").textContent = "安裝與更新失敗";
         document.getElementById("badge_updating").textContent = "異常中斷";
         document.getElementById("badge_updating").style.color = "#dc2626";
         document.getElementById("btn_modal_back").style.display = "inline-block";
       }
     } catch (e) {
       state.isUpdating = false;
-      document.getElementById("modal_progress_title").textContent = "❌ 更新發生錯誤";
+      document.getElementById("modal_progress_title").textContent = "更新發生錯誤";
       appendLog("error", `更新過程發生異常錯誤: ${e}`);
       document.getElementById("btn_modal_back").style.display = "inline-block";
     }
@@ -792,7 +792,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (php85Pkg && php85Pkg.checked && apiPkg && !apiPkg.checked && !apiPkg.target_exists) {
       appendLog(
         "warning",
-        "⚠️ 提示：您已選取 PHP 8.5 執行環境，但未勾選「後端 PHP8 更新包 (LAH-API.zip)」且目標主機查無程式碼，更新後系統將跳過 lah-api-v85 服務啟動。"
+        "警告：提示：您已選取 PHP 8.5 執行環境，但未勾選「後端 PHP8 更新包 (LAH-API.zip)」且目標主機查無程式碼，更新後系統將跳過 lah-api-v85 服務啟動。"
       );
     }
 
@@ -817,7 +817,7 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById("bar_progress").style.width = "0%";
     document.getElementById("lbl_progress_percent").textContent = "0%";
     document.getElementById("lbl_progress_status").textContent = "正在準備套用系統配置與註冊服務...";
-    document.getElementById("modal_progress_title").textContent = "⚡ 正在即時套用系統配置與註冊服務...";
+    document.getElementById("modal_progress_title").textContent = "正在即時套用系統配置與註冊服務...";
     document.getElementById("badge_updating").textContent = "套用中";
     document.getElementById("badge_updating").style.color = "#0284c7";
     document.getElementById("btn_modal_back").style.display = "none";
@@ -833,7 +833,7 @@ document.addEventListener("DOMContentLoaded", () => {
       state.isUpdating = false;
 
       if (summary.success) {
-        document.getElementById("modal_progress_title").textContent = "🎉 系統配置套用完成！";
+        document.getElementById("modal_progress_title").textContent = "系統配置套用完成！";
         document.getElementById("badge_updating").textContent = "已完成";
         document.getElementById("badge_updating").style.color = "#16a34a";
         document.getElementById("btn_modal_back").style.display = "inline-block";
@@ -847,14 +847,14 @@ document.addEventListener("DOMContentLoaded", () => {
           }
         }
       } else {
-        document.getElementById("modal_progress_title").textContent = "⚠️ 套用未完全成功";
+        document.getElementById("modal_progress_title").textContent = "警告：套用未完全成功";
         document.getElementById("badge_updating").textContent = "有警告";
         document.getElementById("badge_updating").style.color = "#d97706";
         document.getElementById("btn_modal_back").style.display = "inline-block";
       }
     } catch (e) {
       state.isUpdating = false;
-      document.getElementById("modal_progress_title").textContent = "❌ 套用發生錯誤";
+      document.getElementById("modal_progress_title").textContent = "套用發生錯誤";
       appendLog("error", `套用設定過程發生異常錯誤: ${e}`);
       document.getElementById("btn_modal_back").style.display = "inline-block";
     }

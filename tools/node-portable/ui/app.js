@@ -14,7 +14,7 @@ async function initAdminStatus() {
   const badge = $("admin_badge");
   try {
     const isAdmin = await invoke("check_admin");
-    badge.textContent = isAdmin ? "👑 管理員權限" : "⚠️ 一般權限（服務控制需管理員）";
+    badge.textContent = isAdmin ? "管理員權限" : "警告：一般權限（服務控制需管理員）";
     badge.className = "admin-badge " + (isAdmin ? "is-admin" : "not-admin");
   } catch (e) {
     console.error("check_admin failed:", e);
@@ -85,7 +85,7 @@ $("tab_btn_console").onclick = () => switchTab("console");
 $("btn_goto_console").onclick = () => switchTab("console");
 
 function row(label, value, ok) {
-  const mark = ok === undefined ? "" : ok ? "✅ " : "⚪ ";
+  const mark = ok === undefined ? "" : ok ? "正常：" : "未就緒：";
   return `<div>${mark}<strong>${label}</strong>：${value}</div>`;
 }
 
@@ -127,7 +127,7 @@ async function rescan(isInitial = false) {
 async function refreshConsole(silent = false) {
   const rootDir = $("root_dir").value.trim();
   if (!silent) {
-    setToast("⏳ 正在同步沙盒 Node / PM2 狀態...");
+    setToast("正在同步沙盒 Node / PM2 狀態...");
   }
   try {
     const ov = await invoke("get_console_overview", { rootDir });
@@ -142,13 +142,13 @@ async function refreshConsole(silent = false) {
 
     const svcBadge = $("con_svc_badge");
     if (ov.service_running) {
-      svcBadge.textContent = "✅ 服務執行中";
+      svcBadge.textContent = "服務執行中";
       svcBadge.className = "status-pill online";
     } else if (ov.service_installed) {
-      svcBadge.textContent = "⚪ 服務已停止";
+      svcBadge.textContent = "服務已停止";
       svcBadge.className = "status-pill stopped";
     } else {
-      svcBadge.textContent = "⚪ 服務未註冊";
+      svcBadge.textContent = "服務未註冊";
       svcBadge.className = "status-pill stopped";
     }
 
@@ -156,16 +156,16 @@ async function refreshConsole(silent = false) {
     const lrProc = (ov.processes || []).find((p) => p.name === "pm2-logrotate" || p.is_module);
     const lrBadge = $("con_lr_badge");
     if (lrProc && lrProc.status === "online") {
-      lrBadge.textContent = "✅ 運作中 (online)";
+      lrBadge.textContent = "運作中 (online)";
       lrBadge.className = "status-pill online";
     } else if (lrProc) {
-      lrBadge.textContent = `❌ ${lrProc.status}`;
+      lrBadge.textContent = `${lrProc.status}`;
       lrBadge.className = "status-pill errored";
     } else if (ov.logrotate_configured) {
-      lrBadge.textContent = "⚪ 已掛載 (待喚醒)";
+      lrBadge.textContent = "已掛載 (待喚醒)";
       lrBadge.className = "status-pill stopped";
     } else {
-      lrBadge.textContent = "⚪ 未掛載";
+      lrBadge.textContent = "未掛載";
       lrBadge.className = "status-pill stopped";
     }
 
@@ -174,7 +174,7 @@ async function refreshConsole(silent = false) {
       : lrProc && lrProc.version !== "-"
       ? `v${lrProc.version}`
       : "-";
-    $("con_lr_compress").textContent = ov.logrotate_compress ? "✅ 已啟用 (Gzip)" : "⚪ 未啟用";
+    $("con_lr_compress").textContent = ov.logrotate_compress ? "已啟用 (Gzip)" : "未啟用";
     $("con_lr_pid").textContent = lrProc && lrProc.pid ? String(lrProc.pid) : "-";
     $("con_lr_mem").textContent = lrProc ? formatBytes(lrProc.memory) : "-";
 
@@ -188,15 +188,15 @@ async function refreshConsole(silent = false) {
     const tbody = $("pm2_apps_tbody");
     if (!ov.installed) {
       tbody.innerHTML = `<tr><td colspan="9" style="text-align:center; padding: 26px; color:#b45309;">
-        ⚠️ 此目錄尚未安裝沙盒 Node.js 與 PM2，請先切換至「📦 沙盒安裝與部署」分頁執行安裝。
+        警告：此目錄尚未安裝沙盒 Node.js 與 PM2，請先切換至「沙盒安裝與部署」分頁執行安裝。
       </td></tr>`;
     } else if (ov.pm2_error && apps.length === 0) {
       tbody.innerHTML = `<tr><td colspan="9" style="text-align:center; padding: 24px; color:#64748b;">
-        ℹ️ 目前尚無活躍進程或 PM2 守護進程待喚醒（可點擊上方「♻️ 還原快照」或「▶ 啟動服務」喚醒）
+        目前尚無活躍進程或 PM2 守護進程待喚醒（可點擊上方「還原快照」或「啟動服務」喚醒）
       </td></tr>`;
     } else if (apps.length === 0) {
       tbody.innerHTML = `<tr><td colspan="9" style="text-align:center; padding: 24px; color:#64748b;">
-        目前沙盒 PM2 尚無受管業務系統（可點擊「♻️ 還原快照」載入 dump.pm2，或開啟「💻 沙盒終端」啟動系統）
+        目前沙盒 PM2 尚無受管業務系統（可點擊「還原快照」載入 dump.pm2，或開啟「沙盒終端」啟動系統）
       </td></tr>`;
     } else {
       tbody.innerHTML = apps
@@ -204,7 +204,7 @@ async function refreshConsole(silent = false) {
           const isOnline = app.status === "online";
           const pillClass = isOnline ? "online" : app.status === "stopped" ? "stopped" : "errored";
           const toggleAction = isOnline ? "stop" : "start";
-          const toggleLabel = isOnline ? "⏹ 停止" : "▶ 啟動";
+          const toggleLabel = isOnline ? "停止" : "啟動";
           const safeName = escapeHtml(app.name);
           return `<tr>
             <td class="mono">${app.pm_id}</td>
@@ -218,8 +218,8 @@ async function refreshConsole(silent = false) {
             <td style="text-align:right;">
               <div class="btn-group" style="justify-content:flex-end; gap:4px;">
                 <button class="btn-sm" data-pm2-action="${toggleAction}" data-pm2-target="${safeName}">${toggleLabel}</button>
-                <button class="btn-sm btn-green" data-pm2-action="restart" data-pm2-target="${safeName}">🔄 重啟</button>
-                <button class="btn-sm primary" data-pm2-log="${safeName}">📄 日誌</button>
+                <button class="btn-sm btn-green" data-pm2-action="restart" data-pm2-target="${safeName}"><svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5M5 9a7 7 0 0112-2l3 5M19 15a7 7 0 01-12 2l-3-5"/></svg> 重啟</button>
+                <button class="btn-sm primary" data-pm2-log="${safeName}"><svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 2h8l4 4v16H6zM14 2v5h4M9 11h6M9 15h6"/></svg> 日誌</button>
               </div>
             </td>
           </tr>`;
@@ -231,7 +231,7 @@ async function refreshConsole(silent = false) {
     const p = (n) => String(n).padStart(2, "0");
     $("console_last_updated").textContent = `更新於 ${p(now.getHours())}:${p(now.getMinutes())}:${p(now.getSeconds())}`;
     if (!silent) {
-      setToast("✅ 沙盒狀態同步完成");
+      setToast("沙盒狀態同步完成");
     }
     // 大螢幕工作台模式：自動同步內嵌日誌串流
     if (ov.processes && ov.processes.length > 0) {
@@ -244,7 +244,7 @@ async function refreshConsole(silent = false) {
       updateInlineLog(currentInlineProc, currentInlineLogType);
     }
   } catch (err) {
-    setToast(`❌ 同步沙盒狀態失敗：${err}`, "error");
+    setToast(`同步沙盒狀態失敗：${err}`, "error");
   }
 }
 
@@ -288,13 +288,13 @@ async function executePm2Action(action, target, btnEl = null) {
   const rootDir = $("root_dir").value.trim();
   isBusy = true;
   if (btnEl) btnEl.disabled = true;
-  setToast(`⏳ 正在對 [${target}] 執行 PM2 ${action} 指令...`);
+  setToast(`正在對 [${target}] 執行 PM2 ${action} 指令...`);
   try {
     const res = await invoke("pm2_process_action", { rootDir, action, target });
     setToast(res.message, res.success ? "success" : "error");
     await refreshConsole(true);
   } catch (err) {
-    setToast(`❌ 執行失敗：${err}`, "error");
+    setToast(`執行失敗：${err}`, "error");
   } finally {
     isBusy = false;
     if (btnEl) btnEl.disabled = false;
@@ -306,13 +306,13 @@ async function executeServiceAction(action, btnEl = null) {
   const rootDir = $("root_dir").value.trim();
   isBusy = true;
   if (btnEl) btnEl.disabled = true;
-  setToast(`⏳ 正在對 PM2_Portable_Service 執行 [${action}]...`);
+  setToast(`正在對 PM2_Portable_Service 執行 [${action}]...`);
   try {
     const res = await invoke("pm2_service_action", { rootDir, action });
     setToast(res.message, res.success ? "success" : "error");
     await refreshConsole(true);
   } catch (err) {
-    setToast(`❌ 服務操作失敗：${err}`, "error");
+    setToast(`服務操作失敗：${err}`, "error");
   } finally {
     isBusy = false;
     if (btnEl) btnEl.disabled = false;
@@ -335,13 +335,13 @@ $("btn_lr_trigger").onclick = async (e) => {
   const rootDir = $("root_dir").value.trim();
   isBusy = true;
   btn.disabled = true;
-  setToast("⏳ 正在執行 Gzip 日誌壓縮輪替與 pm2 reloadLogs...");
+  setToast("正在執行 Gzip 日誌壓縮輪替與 pm2 reloadLogs...");
   try {
     const res = await invoke("trigger_logrotate_now", { rootDir });
     setToast(res.message, res.success ? "success" : "error");
     await refreshConsole(true);
   } catch (err) {
-    setToast(`❌ 日誌輪替失敗：${err}`, "error");
+    setToast(`日誌輪替失敗：${err}`, "error");
   } finally {
     isBusy = false;
     btn.disabled = false;
@@ -354,13 +354,13 @@ $("btn_lr_repair").onclick = async (e) => {
   const rootDir = $("root_dir").value.trim();
   isBusy = true;
   btn.disabled = true;
-  setToast("⏳ 正在由沙盒內建模組掛載並啟動 pm2-logrotate...");
+  setToast("正在由沙盒內建模組掛載並啟動 pm2-logrotate...");
   try {
     const res = await invoke("repair_logrotate", { rootDir });
     setToast(res.message, res.success ? "success" : "error");
     await refreshConsole(true);
   } catch (err) {
-    setToast(`❌ 啟動 pm2-logrotate 失敗：${err}`, "error");
+    setToast(`啟動 pm2-logrotate 失敗：${err}`, "error");
   } finally {
     isBusy = false;
     btn.disabled = false;
@@ -533,34 +533,34 @@ $("btn_audit").onclick = async () => {
     const report = await invoke("run_security_audit", { rootDir });
     const sysTitle = report.system_title || "Node 沙盒受管系統";
     if ($("audit_modal_title")) {
-      $("audit_modal_title").textContent = `🛡️ ${sysTitle} - 資安邊界自檢報告`;
+      $("audit_modal_title").textContent = `${sysTitle} - 資安邊界自檢報告`;
     }
     const badge = $("audit_badge_box");
     if (report.overall_secure) {
       badge.style.background = "#dcfce7";
       badge.style.color = "#15803d";
       badge.style.border = "1px solid #bbf7d0";
-      badge.textContent = `🛡️ 資安自檢評定：【合格安全】（${sysTitle} 已達成零全域污染沙盒隔離，受管服務無執行期標頭洩漏）`;
+      badge.textContent = `資安自檢評定：【合格安全】（${sysTitle} 已達成零全域污染沙盒隔離，受管服務無執行期標頭洩漏）`;
     } else {
       badge.style.background = "#fee2e2";
       badge.style.color = "#b91c1c";
       badge.style.border = "1px solid #fecaca";
-      badge.textContent = `⚠️ 資安自檢評定：【發現潛在風險】（${sysTitle} 請檢視下方標頭外洩項目或清理 PATH 登錄檔）`;
+      badge.textContent = `警告：資安自檢評定：【發現潛在風險】（${sysTitle} 請檢視下方標頭外洩項目或清理 PATH 登錄檔）`;
     }
 
     let detail = `檢測系統：${sysTitle}\n檢測時間：${report.timestamp}\n安裝目錄：${report.root_dir}\n`;
-    detail += `全域 PATH 零污染沙盒：${report.sandbox_path_clean ? "✅ 合規 (HKLM/HKCU 無殘留)" : "⚠️ 未合規 (登錄檔存在可攜路徑)"}\n\n`;
+    detail += `全域 PATH 零污染沙盒：${report.sandbox_path_clean ? "合規 (HKLM/HKCU 無殘留)" : "警告：未合規 (登錄檔存在可攜路徑)"}\n\n`;
     detail += "受管服務網路通訊邊界檢測：\n";
     for (const p of report.port_results) {
       detail += `• Port ${p.port} (${p.service_name})：\n`;
       detail += `  - 監聽狀態：${p.is_listening ? "監聽中" : "未啟動/未監聽"}\n`;
-      detail += `  - 判定結果：${p.is_secure ? "✅ 合格 (無敏感技術棧指紋)" : "⚠️ 需改善"}\n`;
+      detail += `  - 判定結果：${p.is_secure ? "合格 (無敏感技術棧指紋)" : "警告：需改善"}\n`;
       if (p.leaked_headers && p.leaked_headers.length > 0) {
         detail += `  - 洩漏標頭：${p.leaked_headers.join(", ")}\n`;
       }
     }
     if (report.report_file_path) {
-      detail += `\n📄 完整佐證報告已匯出：\n${report.report_file_path}\n`;
+      detail += `\n完整佐證報告已匯出：\n${report.report_file_path}\n`;
     }
     $("audit_detail_box").textContent = detail;
     $("modal_audit").classList.add("active");
@@ -568,7 +568,7 @@ $("btn_audit").onclick = async () => {
     alert(`執行資安自檢失敗: ${err}`);
   } finally {
     $("btn_audit").disabled = false;
-    $("btn_audit").textContent = "🛡️ 資安自檢";
+    $("btn_audit").textContent = "資安自檢";
   }
 };
 
@@ -625,13 +625,13 @@ $("btn_start").onclick = async () => {
   try {
     const res = await invoke("run_install", { options });
     $("status_text").textContent = res.success
-      ? `✅ ${res.message}（耗時 ${res.elapsed_secs.toFixed(1)} 秒）`
-      : `⚠️ 安裝失敗：${res.message}`;
+      ? `${res.message}（耗時 ${res.elapsed_secs.toFixed(1)} 秒）`
+      : `警告：安裝失敗：${res.message}`;
     if (res.success) {
       $("btn_modal_to_console").style.display = "inline-block";
     }
   } catch (err) {
-    appendLog(`❌ 安裝發生嚴重異常: ${err}`, "error");
+    appendLog(`安裝發生嚴重異常: ${err}`, "error");
     $("status_text").textContent = "安裝過程發生異常！";
   } finally {
     isBusy = false;

@@ -7,21 +7,21 @@ let isBusy = false;
 
 // 項目核取定義與文字對齊清單
 const CHECKBOX_ITEMS = [
-  { id: "chk_services", key: "do_services", label: "• 🛑 停止並解除安裝 Windows 服務 (系統入口閘道服務, 背景服務總線)" },
-  { id: "chk_kill_procs", key: "do_kill_procs", label: "• ⚡ 終止守護行程與背景程序 (pm2 kill, 殘留 node.exe / php-cgi / httpd)" },
-  { id: "chk_autostart", key: "do_autostart", label: "• 🧹 清除開機自啟動與環境變數 (啟動資料夾, 排程器, PATH, PM2_HOME)" },
-  { id: "chk_remove_fe", key: "do_remove_fe", label: "• 🌐 移除智慧前端網站 (LAH-NUXTJS)" },
-  { id: "chk_remove_wss", key: "do_remove_wss", label: "• 💬 移除即時通訊伺服器 (lah-messenger-server)" },
-  { id: "chk_remove_api", key: "do_remove_api", label: "• 🔌 移除現代化後端 API 模組 (LAH-API)" },
-  { id: "chk_remove_www", key: "do_remove_www", label: "• 🏢 移除舊版後端生產庫 (www)" },
-  { id: "chk_remove_apache", key: "do_remove_apache", label: "• 🌐 移除 Apache 網頁伺服器本體 (Apache24)" },
-  { id: "chk_remove_node", key: "do_remove_node", label: "• 🟩 移除 Node.js 執行期環境 (node, .pm2, lah-cmd.bat)" },
-  { id: "chk_remove_php85", key: "do_remove_php85", label: "• 🐘 移除 PHP 8.5 手動安裝目錄 (php85)" },
-  { id: "chk_remove_php7", key: "do_remove_php7", label: "• 🐘 移除 PHP 7 手動安裝目錄 (php7)" },
-  { id: "chk_remove_instantclient", key: "do_remove_instantclient", label: "• 🏛️ 移除 Oracle Instant Client (instantclient_11_2)" },
-  { id: "chk_remove_logs", key: "do_remove_logs", label: "• 📜 移除系統日誌目錄 (logs)" },
-  { id: "chk_pm2_dumps", key: "do_pm2_dumps", label: "• 🔄 重置 PM2 狀態快照 (.pm2\\dump.pm2)" },
-  { id: "chk_clean_root", key: "do_clean_root", label: "• 🧹 深度清理安裝根目錄其餘殘留檔案 (僅保留備份檔)" }
+  { id: "chk_services", key: "do_services", label: "• 停止並解除安裝 Windows 服務 (系統入口閘道服務, 背景服務總線)" },
+  { id: "chk_kill_procs", key: "do_kill_procs", label: "• 終止守護行程與背景程序 (pm2 kill, 殘留 node.exe / php-cgi / httpd)" },
+  { id: "chk_autostart", key: "do_autostart", label: "• 清除開機自啟動與環境變數 (啟動資料夾, 排程器, PATH, PM2_HOME)" },
+  { id: "chk_remove_fe", key: "do_remove_fe", label: "• 移除智慧前端網站 (LAH-NUXTJS)" },
+  { id: "chk_remove_wss", key: "do_remove_wss", label: "• 移除即時通訊伺服器 (lah-messenger-server)" },
+  { id: "chk_remove_api", key: "do_remove_api", label: "• 移除現代化後端 API 模組 (LAH-API)" },
+  { id: "chk_remove_www", key: "do_remove_www", label: "• 移除舊版後端生產庫 (www)" },
+  { id: "chk_remove_apache", key: "do_remove_apache", label: "• 移除 Apache 網頁伺服器本體 (Apache24)" },
+  { id: "chk_remove_node", key: "do_remove_node", label: "• 移除 Node.js 執行期環境 (node, .pm2, lah-cmd.bat)" },
+  { id: "chk_remove_php85", key: "do_remove_php85", label: "• 移除 PHP 8.5 手動安裝目錄 (php85)" },
+  { id: "chk_remove_php7", key: "do_remove_php7", label: "• 移除 PHP 7 手動安裝目錄 (php7)" },
+  { id: "chk_remove_instantclient", key: "do_remove_instantclient", label: "• 移除 Oracle Instant Client (instantclient_11_2)" },
+  { id: "chk_remove_logs", key: "do_remove_logs", label: "• 移除系統日誌目錄 (logs)" },
+  { id: "chk_pm2_dumps", key: "do_pm2_dumps", label: "• 重置 PM2 狀態快照 (.pm2\\dump.pm2)" },
+  { id: "chk_clean_root", key: "do_clean_root", label: "• 深度清理安裝根目錄其餘殘留檔案 (僅保留備份檔)" }
 ];
 
 // 初始化檢測管理員權限
@@ -30,10 +30,10 @@ async function initAdminStatus() {
     const isAdmin = await invoke("check_admin");
     const badge = $("admin_badge");
     if (isAdmin) {
-      badge.textContent = "👑 管理員權限";
+      badge.textContent = "管理員權限";
       badge.className = "admin-badge is-admin";
     } else {
-      badge.textContent = "⚠️ 一般使用者權限";
+      badge.textContent = "警告：一般使用者權限";
       badge.className = "admin-badge not-admin";
     }
   } catch (e) {
@@ -232,9 +232,9 @@ $("btn_confirm_ok").onclick = async () => {
     const res = await invoke("run_uninstall", { options: opts });
     if (res.success) {
       appendLog("\n==================================================", "success");
-      appendLog("🎉 智慧控管與監控系統 已成功解除安裝！", "success");
+      appendLog("智慧控管與監控系統 已成功解除安裝！", "success");
       if (res.backup_path) {
-        appendLog(`📦 刪除前備份壓縮檔存放位置: ${res.backup_path}`, "success");
+        appendLog(`刪除前備份壓縮檔存放位置: ${res.backup_path}`, "success");
       }
       appendLog("==================================================", "success");
       if (statusEl) statusEl.textContent = "移除作業已圓滿完成！";
@@ -243,7 +243,7 @@ $("btn_confirm_ok").onclick = async () => {
         btnClose.textContent = "完成並結束";
       }
     } else {
-      if (statusEl) statusEl.textContent = `⚠️ 移除過程發生錯誤：${res.message}`;
+      if (statusEl) statusEl.textContent = `警告：移除過程發生錯誤：${res.message}`;
       if (btnBack) btnBack.style.display = "inline-block";
       if (btnClose) {
         btnClose.disabled = false;
@@ -251,7 +251,7 @@ $("btn_confirm_ok").onclick = async () => {
       }
     }
   } catch (err) {
-    appendLog(`❌ 執行移除作業發生嚴重異常: ${err}`, "error");
+    appendLog(`執行移除作業發生嚴重異常: ${err}`, "error");
     const statusEl = $("status_text");
     if (statusEl) statusEl.textContent = "移除過程發生異常！";
     const btnBack = $("btn_modal_back");

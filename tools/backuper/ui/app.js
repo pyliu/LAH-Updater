@@ -82,24 +82,24 @@ $("run").onclick = async () => {
   $("percentText").textContent = "0%";
   $("statusText").textContent = "正在準備備份系統重要資料...";
 
-  openModal("📦 系統重要資料備份進行中");
+  openModal("系統重要資料備份進行中");
 
   try {
     const r = await invoke("run_backup", { root, dest });
     if (r.zip_path) {
       log("\n==================================================");
-      log(`🎉 備份完成！`);
-      log(`📦 儲存檔案：${r.zip_path}`);
-      log(`📄 備份檔案數：${r.files} 檔 (略過 ${r.skipped} 檔)`);
-      log(`💾 壓縮包大小：${(r.size_bytes / 1048576).toFixed(2)} MB`);
+      log(`備份完成！`);
+      log(`儲存檔案：${r.zip_path}`);
+      log(`備份檔案數：${r.files} 檔 (略過 ${r.skipped} 檔)`);
+      log(`壓縮包大小：${(r.size_bytes / 1048576).toFixed(2)} MB`);
       log("==================================================");
       $("statusText").textContent = "備份已順利完成！";
     } else {
-      log("\nℹ️ 未在目標根目錄偵測到需備份的現存資料，略過建立備份檔。");
+      log("\n未在目標根目錄偵測到需備份的現存資料，略過建立備份檔。");
       $("statusText").textContent = "未偵測到可備份資料";
     }
   } catch (e) {
-    log(`\n❌ 備份失敗：${e}`);
+    log(`\n備份失敗：${e}`);
     $("statusText").textContent = "備份過程發生錯誤！";
   } finally {
     isBusy = false;
@@ -116,7 +116,7 @@ $("restore").onclick = async () => {
   if (!root) return alert("請輸入系統安裝根目錄！");
   if (!zip) return alert("請先選擇欲還原的備份 ZIP 壓縮檔案！");
 
-  if (!confirm(`⚠️ 【重要警告：即將執行系統還原】\n\n備份來源：\n${zip}\n\n還原目標：\n${root}\n\n• 還原過程同名檔案將被直接覆蓋！\n• 系統將在覆蓋前自動建立 restore_undo_*.zip 復原點。\n• 若包含 Apache 配置，系統將自動校準其路徑至當前目標根目錄。\n\n您確定要繼續執行還原嗎？`)) {
+  if (!confirm(`【重要警告：即將執行系統還原】\n\n備份來源：\n${zip}\n\n還原目標：\n${root}\n\n• 還原過程同名檔案將被直接覆蓋！\n• 系統將在覆蓋前自動建立 restore_undo_*.zip 復原點。\n• 若包含 Apache 配置，系統將自動校準其路徑至當前目標根目錄。\n\n您確定要繼續執行還原嗎？`)) {
     return;
   }
 
@@ -129,22 +129,22 @@ $("restore").onclick = async () => {
   $("percentText").textContent = "0%";
   $("statusText").textContent = "正在檢查服務並準備還原...";
 
-  openModal("🚨 系統重要資料還原進行中");
+  openModal("系統重要資料還原進行中");
 
   try {
     const r = await invoke("run_restore", { root, zip });
     log("\n==================================================");
-    log(`🎉 還原完成！`);
-    log(`📄 成功還原：${r.restored} 個檔案`);
+    log(`還原完成！`);
+    log(`成功還原：${r.restored} 個檔案`);
     if (r.undo_zip) {
-      log(`🛡️ 覆蓋前自動復原點存檔 (已備份 ${r.undo_files} 檔)：\n  -> ${r.undo_zip}`);
+      log(`覆蓋前自動復原點存檔 (已備份 ${r.undo_files} 檔)：\n  -> ${r.undo_zip}`);
     } else {
-      log(`🛡️ 無需覆蓋現存檔案，未建立復原點。`);
+      log(`無需覆蓋現存檔案，未建立復原點。`);
     }
     log("==================================================");
     $("statusText").textContent = "還原已順利完成！";
   } catch (e) {
-    log(`\n❌ 還原失敗：${e}`);
+    log(`\n還原失敗：${e}`);
     $("statusText").textContent = "還原過程發生錯誤！";
   } finally {
     isBusy = false;

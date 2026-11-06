@@ -17,7 +17,7 @@ pub fn execute_uninstall_workflow(
 
     if !root_path.is_dir() {
         let msg = format!("指定的安裝根目錄不存在：{}", root_path.display());
-        log_fn(&format!("❌ {msg}"), "error");
+        log_fn(&format!("錯誤：{msg}"), "error");
         return UninstallReport {
             success: false,
             message: msg,
@@ -26,7 +26,7 @@ pub fn execute_uninstall_workflow(
     }
 
     log_fn(&"=".repeat(60), "info");
-    log_fn(&format!("🚨 開始執行系統自動移除清理作業... (目標: {})", root_path.display()), "info");
+    log_fn(&format!("開始執行系統自動移除清理作業... (目標: {})", root_path.display()), "info");
     progress_fn(5.0, "正在準備移除作業...");
 
     // 階段 2：停止並解除安裝 Windows 服務
@@ -93,9 +93,9 @@ pub fn execute_uninstall_workflow(
     }
 
     let elapsed = start_time.elapsed().as_secs_f64();
-    progress_fn(100.0, &format!("✅ 全部選取項目已成功移除！(耗時 {elapsed:.1} 秒)"));
+    progress_fn(100.0, &format!("全部選取項目已成功移除！(耗時 {elapsed:.1} 秒)"));
     log_fn(&"=".repeat(60), "success");
-    log_fn(&format!("🎉 智慧控管與監控系統 - 自動移除作業順利完成！(耗時 {elapsed:.1} 秒)"), "success");
+    log_fn(&format!("智慧控管與監控系統 - 自動移除作業順利完成！(耗時 {elapsed:.1} 秒)"), "success");
 
     UninstallReport {
         success: true,

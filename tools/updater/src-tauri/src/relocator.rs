@@ -461,7 +461,7 @@ pub fn relocate_or_bypass_pm2_dump(
         let _ = fs::copy(&dump_path, &quarantine);
         let _ = fs::write(&dump_path, "[]\n");
         log_fn(
-            "  🛡️ [快照旁路] .pm2/dump.pm2 格式損毀無法解析，已隔離備份並重設為空快照，將由 ecosystem.config.js 重新建構服務",
+            "  [快照旁路] .pm2/dump.pm2 格式損毀無法解析，已隔離備份並重設為空快照，將由 ecosystem.config.js 重新建構服務",
             "warning",
         );
         return (false, true);
@@ -533,7 +533,7 @@ pub fn relocate_or_bypass_pm2_dump(
     if replaced_count > 0 || dropped_dups > 0 || !dropped_missing.is_empty() {
         log_fn(
             &format!(
-                "  ✓ [路徑重定位] 已修復 .pm2/dump.pm2 快照（置換 {} 處舊路徑、移除 {} 個重複項目、剔除 {} 個未安裝之幽靈行程）",
+                "  [路徑重定位] 已修復 .pm2/dump.pm2 快照（置換 {} 處舊路徑、移除 {} 個重複項目、剔除 {} 個未安裝之幽靈行程）",
                 replaced_count,
                 dropped_dups,
                 dropped_missing.len()
@@ -577,7 +577,7 @@ pub fn relocate_pm2_logrotate_wrapper(
     if count > 0 && patched != content {
         if fs::write(&wrapper_path, patched).is_ok() {
             log_fn(
-                "  ✓ [路徑重定位] 已更新 pm2-logrotate 模組入口橋接路徑",
+                "  [路徑重定位] 已更新 pm2-logrotate 模組入口橋接路徑",
                 "success",
             );
             return true;
@@ -617,7 +617,7 @@ pub fn relocate_text_config_file(
             let _ = fs::remove_file(&bak_path);
             log_fn(
                 &format!(
-                    "  ✓ [路徑重定位] {} ({}) 已置換 {} 處舊目錄參照",
+                    "  [路徑重定位] {} ({}) 已置換 {} 處舊目錄參照",
                     description,
                     file_path.display(),
                     count
@@ -668,7 +668,7 @@ pub fn execute_path_relocation_and_verify(
 
     log_fn(
         &format!(
-            "🧭 [路徑重定位] 正在掃描並遷移跨目錄設定（歷史根目錄候選: {:?} ➔ 目標根目錄: {}）...",
+            "[路徑重定位] 正在掃描並遷移跨目錄設定（歷史根目錄候選: {:?} ➔ 目標根目錄: {}）...",
             old_roots, new_root_str
         ),
         "info",
@@ -711,7 +711,7 @@ pub fn execute_path_relocation_and_verify(
                     }
                     Ok(_) => {}
                     Err(err_msg) => {
-                        log_fn(&format!("  ⚠️ {}", err_msg), "warning");
+                        log_fn(&format!("  警告：{}", err_msg), "warning");
                     }
                 }
             }
@@ -764,7 +764,7 @@ pub fn execute_path_relocation_and_verify(
     if report.verified_clean {
         log_fn(
             &format!(
-                "  ✓ [啟動前檢驗通過] 目標目錄 {} 下所有關鍵設定檔與快照已確認無舊路徑殘留",
+                "  [啟動前檢驗通過] 目標目錄 {} 下所有關鍵設定檔與快照已確認無舊路徑殘留",
                 new_root_str
             ),
             "success",
@@ -772,7 +772,7 @@ pub fn execute_path_relocation_and_verify(
     } else {
         log_fn(
             &format!(
-                "  ⚠️ [啟動前檢驗警告] 偵測到 {} 處殘留舊路徑，請檢視日誌詳情",
+                "  警告：[啟動前檢驗警告] 偵測到 {} 處殘留舊路徑，請檢視日誌詳情",
                 report.remaining_findings.len()
             ),
             "warning",
@@ -833,7 +833,7 @@ pub fn verify_no_stale_root_paths(
                 let _ = fs::copy(&target_path, &quarantine);
                 let _ = fs::write(&target_path, "[]\n");
                 log_fn(
-                    "  🛡️ [例外自癒] 檢驗發現 .pm2/dump.pm2 仍含殘留舊路徑，已隔離至 dump.pm2.legacy_quarantine 並重設為空陣列",
+                    "  [例外自癒] 檢驗發現 .pm2/dump.pm2 仍含殘留舊路徑，已隔離至 dump.pm2.legacy_quarantine 並重設為空陣列",
                     "warning",
                 );
                 continue;
@@ -874,7 +874,7 @@ pub fn verify_no_stale_root_paths(
             for f in file_findings {
                 log_fn(
                     &format!(
-                        "  ⚠️ [殘留路徑警示] {} 第 {} 行仍含舊路徑 [{}]: {}",
+                        "  警告：[殘留路徑警示] {} 第 {} 行仍含舊路徑 [{}]: {}",
                         f.rel_path, f.line_number, f.matched_legacy_root, f.line_preview
                     ),
                     "warning",

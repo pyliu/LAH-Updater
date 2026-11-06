@@ -32,7 +32,7 @@ pub fn query_apache_service() -> Option<String> {
 
 pub fn uninstall_apache_service(root_dir: &Path, log_fn: &dyn Fn(&str, &str)) -> bool {
     let svc_name = query_apache_service().unwrap_or_else(|| "LAH_Web_Service".to_string());
-    log_fn(&format!("⏳ 正在停止並解除安裝 Web 系統入口服務 [{}]...", svc_name), "info");
+    log_fn(&format!("正在停止並解除安裝 Web 系統入口服務 [{}]...", svc_name), "info");
 
     let mut uninstalled = false;
 
@@ -44,7 +44,7 @@ pub fn uninstall_apache_service(root_dir: &Path, log_fn: &dyn Fn(&str, &str)) ->
         let (ok_un, stdout, _) = run_cmd_hidden(&winsw_str, &["uninstall"]);
         if ok_un || stdout.to_lowercase().contains("successfully") {
             uninstalled = true;
-            log_fn("  ✓ 已透過 WinSW 成功卸載 Web 沙盒服務 (LAH_Web_Service)", "success");
+            log_fn("  已透過 WinSW 成功卸載 Web 沙盒服務 (LAH_Web_Service)", "success");
         }
     }
 
@@ -59,7 +59,7 @@ pub fn uninstall_apache_service(root_dir: &Path, log_fn: &dyn Fn(&str, &str)) ->
         let (ok, _, _) = run_cmd_hidden(&httpd_str, &["-k", "uninstall", "-n", &svc_name]);
         if ok {
             uninstalled = true;
-            log_fn(&format!("  ✓ 已透過 httpd.exe 解除安裝 Apache 服務 [{}]", svc_name), "success");
+            log_fn(&format!("  已透過 httpd.exe 解除安裝 Apache 服務 [{}]", svc_name), "success");
         }
     }
 
@@ -68,21 +68,21 @@ pub fn uninstall_apache_service(root_dir: &Path, log_fn: &dyn Fn(&str, &str)) ->
         let (ok_del, _, _) = run_cmd_hidden("sc.exe", &["delete", s]);
         if ok_del {
             uninstalled = true;
-            log_fn(&format!("  ✓ 已自 Windows SCM 刪除系統服務 [{s}]"), "success");
+            log_fn(&format!("  已自 Windows SCM 刪除系統服務 [{s}]"), "success");
         }
     }
 
     if uninstalled {
-        log_fn(&format!("  ✓ Web 系統入口服務 [{}] 已成功解除安裝", svc_name), "success");
+        log_fn(&format!("  Web 系統入口服務 [{}] 已成功解除安裝", svc_name), "success");
     } else {
-        log_fn("  ℹ️ 未偵測到運作中之 Web 系統服務或先前已卸載", "info");
+        log_fn("  未偵測到運作中之 Web 系統服務或先前已卸載", "info");
     }
 
     true
 }
 
 pub fn uninstall_lah_pm2_service(root_dir: &Path, log_fn: &dyn Fn(&str, &str)) -> bool {
-    log_fn("⏳ 正在停止並解除安裝背景服務總線 (含 LAH_PM2_Service 與 PM2_Portable_Service)...", "info");
+    log_fn("正在停止並解除安裝背景服務總線 (含 LAH_PM2_Service 與 PM2_Portable_Service)...", "info");
 
     let service_pairs = [
         ("LAH_PM2_Service", "lah-service.exe"),
@@ -98,7 +98,7 @@ pub fn uninstall_lah_pm2_service(root_dir: &Path, log_fn: &dyn Fn(&str, &str)) -
             let _ = run_cmd_hidden(&exe_str, &["stop"]);
             let (ok_un, stdout, _) = run_cmd_hidden(&exe_str, &["uninstall"]);
             if ok_un || stdout.to_lowercase().contains("successfully") {
-                log_fn(&format!("  ✓ 已透過 WinSW 成功卸載系統服務: {svc_name}"), "success");
+                log_fn(&format!("  已透過 WinSW 成功卸載系統服務: {svc_name}"), "success");
             }
         }
 
@@ -109,7 +109,7 @@ pub fn uninstall_lah_pm2_service(root_dir: &Path, log_fn: &dyn Fn(&str, &str)) -
             sleep(Duration::from_millis(500));
             let (ok_sc, _, _) = run_cmd_hidden("sc.exe", &["delete", svc_name]);
             if ok_sc {
-                log_fn(&format!("  ✓ 已自 Windows SCM 刪除系統服務: {svc_name}"), "success");
+                log_fn(&format!("  已自 Windows SCM 刪除系統服務: {svc_name}"), "success");
             }
         }
     }

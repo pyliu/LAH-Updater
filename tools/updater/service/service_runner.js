@@ -123,12 +123,12 @@ function auditDaemonRuntime() {
         const currentExe = path.normalize(data.ExecutablePath).toLowerCase();
         const expectedExe = TARGET_NODE_EXE.toLowerCase();
         if (currentExe !== expectedExe) {
-          log(`⚠️ 偵測到現有 PM2 核心由非目標 Node 運行 [${data.ExecutablePath}] (PID: ${data.ProcessId})，正在終止並切換...`, 'WARN');
+          log(`偵測到現有 PM2 核心由非目標 Node 運行 [${data.ExecutablePath}] (PID: ${data.ProcessId})，正在終止並切換...`, 'WARN');
           spawnSync(PM2_BIN, ['kill', '--no-color'], { windowsHide: true, timeout: 15000 });
           spawnSync('powershell', ['-NoProfile', '-Command', 'Stop-Process -Id ' + data.ProcessId + ' -Force -ErrorAction SilentlyContinue'], { windowsHide: true, timeout: 5000 });
           return false;
         } else {
-          log(`✅ PM2 核心已確認由綠色 Node 運行 (PID: ${data.ProcessId})`, 'INFO');
+          log(`PM2 核心已確認由綠色 Node 運行 (PID: ${data.ProcessId})`, 'INFO');
           return true;
         }
       }
@@ -224,26 +224,26 @@ function sanitizeEcosystemCwd(ecoPath) {
         const newline = content.includes('\r\n') ? '\r\n' : '\n';
         const updated = content.slice(0, insertPos) + '    cwd: __dirname,' + newline + content.slice(insertPos);
         fs.writeFileSync(ecoPath, updated, 'utf8');
-        log(`  ✓ 已自動修補 [${path.basename(ecoPath)}] 之工作目錄 (cwd: __dirname)`, 'INFO');
+        log(`  已自動修補 [${path.basename(ecoPath)}] 之工作目錄 (cwd: __dirname)`, 'INFO');
       }
     }
   } catch (e) {
-    log(`  ⚠️ 嘗試修補生態系 cwd 失敗: ${e.message}`, 'WARN');
+    log(`  嘗試修補生態系 cwd 失敗: ${e.message}`, 'WARN');
   }
 }
 
 function resurrectAndEnsureServices() {
   wireBundledLogrotate();
-  log('⏳ 正在執行 [pm2 resurrect] 喚醒受控服務...', 'INFO');
+  log('正在執行 [pm2 resurrect] 喚醒受控服務...', 'INFO');
   try {
     const res = spawnSync(PM2_BIN, ['resurrect', '--no-color'], { encoding: 'utf8', windowsHide: true, timeout: 30000 });
     if (res.status === 0) {
-      log('✅ 成功喚醒 PM2 服務清單！', 'SUCCESS');
+      log('成功喚醒 PM2 服務清單！', 'SUCCESS');
     } else {
-      log(`⚠️ pm2 resurrect 回傳: ${res.stderr || res.stdout}`, 'WARN');
+      log(`pm2 resurrect 回傳: ${res.stderr || res.stdout}`, 'WARN');
     }
   } catch (e) {
-    log(`❌ 呼叫 pm2 resurrect 失敗: ${e.message}`, 'ERROR');
+    log(`呼叫 pm2 resurrect 失敗: ${e.message}`, 'ERROR');
   }
 
   // 取得目前在線列表
@@ -298,13 +298,13 @@ function resurrectAndEnsureServices() {
         try {
           const startRes = spawnSync(PM2_BIN, ['start', validPath, '--no-color'], { cwd: appCwd, encoding: 'utf8', windowsHide: true, timeout: 30000 });
           if (startRes.status === 0) {
-            log(`  ✅ 成功啟動 [${eco.title}]！`, 'SUCCESS');
+            log(`  成功啟動 [${eco.title}]！`, 'SUCCESS');
             needSave = true;
           } else {
-            log(`  ⚠️ 啟動 [${validPath}] 警示: ${startRes.stderr || startRes.stdout}`, 'WARN');
+            log(`  啟動 [${validPath}] 警示: ${startRes.stderr || startRes.stdout}`, 'WARN');
           }
         } catch (err) {
-          log(`  ❌ 啟動失敗: ${err.message}`, 'ERROR');
+          log(`  啟動失敗: ${err.message}`, 'ERROR');
         }
       } else {
         for (const appName of missing) {
@@ -312,13 +312,13 @@ function resurrectAndEnsureServices() {
           try {
             const startRes = spawnSync(PM2_BIN, ['start', validPath, '--only', appName, '--no-color'], { cwd: appCwd, encoding: 'utf8', windowsHide: true, timeout: 30000 });
             if (startRes.status === 0) {
-              log(`  ✅ 成功精準啟動 [${appName}]！`, 'SUCCESS');
+              log(`  成功精準啟動 [${appName}]！`, 'SUCCESS');
               needSave = true;
             } else {
-              log(`  ⚠️ 精準啟動 [${appName}] 警示: ${startRes.stderr || startRes.stdout}`, 'WARN');
+              log(`  精準啟動 [${appName}] 警示: ${startRes.stderr || startRes.stdout}`, 'WARN');
             }
           } catch (err) {
-            log(`  ❌ 精準啟動 [${appName}] 失敗: ${err.message}`, 'ERROR');
+            log(`  精準啟動 [${appName}] 失敗: ${err.message}`, 'ERROR');
           }
         }
       }
@@ -340,18 +340,18 @@ function resurrectAndEnsureServices() {
         }
       }
       if (isLogrotateOnline()) {
-        log('  ✅ 成功啟動便攜版 [pm2-logrotate] 模組！', 'SUCCESS');
+        log('  成功啟動便攜版 [pm2-logrotate] 模組！', 'SUCCESS');
         needSave = true;
       } else {
-        log(`  ⚠️ 啟動 [pm2-logrotate] 警示: ${(modRes && (modRes.stderr || modRes.stdout)) || ''}`, 'WARN');
+        log(`  啟動 [pm2-logrotate] 警示: ${(modRes && (modRes.stderr || modRes.stdout)) || ''}`, 'WARN');
       }
     } catch (err) {
-      log(`  ❌ 啟動 pm2-logrotate 失敗: ${err.message}`, 'ERROR');
+      log(`  啟動 pm2-logrotate 失敗: ${err.message}`, 'ERROR');
     }
   }
 
   if (needSave) {
-    log('💾 正在儲存最新受控程序狀態 (pm2 save)...', 'INFO');
+    log('正在儲存最新受控程序狀態 (pm2 save)...', 'INFO');
     try {
       spawnSync(PM2_BIN, ['save', '--force', '--no-color'], { windowsHide: true, timeout: 15000 });
     } catch (e) {}
@@ -380,14 +380,14 @@ function auditApacheMemory() {
         const now = Date.now();
         if (memMb > APACHE_MEM_LIMIT_MB && (now - lastApacheRestartMs) > APACHE_RESTART_COOLDOWN_MS) {
           lastApacheRestartMs = now;
-          log(`⚠️ [Memory Guard] 偵測到 Apache (httpd.exe) 記憶體佔用達 ${memMb} MB (超過閾值 ${APACHE_MEM_LIMIT_MB} MB)，正在執行保護性重啟 LAH_Web_Service...`, 'WARN');
+          log(`[Memory Guard] 偵測到 Apache (httpd.exe) 記憶體佔用達 ${memMb} MB (超過閾值 ${APACHE_MEM_LIMIT_MB} MB)，正在執行保護性重啟 LAH_Web_Service...`, 'WARN');
           const svcName = resolveApacheServiceName();
           const stopRes = spawnSync('net.exe', ['stop', svcName], { encoding: 'utf8', windowsHide: true, timeout: 20000 });
           const startRes = spawnSync('net.exe', ['start', svcName], { encoding: 'utf8', windowsHide: true, timeout: 20000 });
           if (startRes.status === 0) {
-            log(`✅ [Memory Guard] 已完成 ${svcName} 保護性重啟，釋放 Apache 工作集記憶體。`, 'SUCCESS');
+            log(`[Memory Guard] 已完成 ${svcName} 保護性重啟，釋放 Apache 工作集記憶體。`, 'SUCCESS');
           } else {
-            log(`⚠️ [Memory Guard] 重啟 ${svcName} 回傳非零狀態 (stop=${stopRes.status}, start=${startRes.status}): ${(startRes.stderr || startRes.stdout || '').trim()}`, 'WARN');
+            log(`[Memory Guard] 重啟 ${svcName} 回傳非零狀態 (stop=${stopRes.status}, start=${startRes.status}): ${(startRes.stderr || startRes.stdout || '').trim()}`, 'WARN');
           }
         }
       }
@@ -496,10 +496,10 @@ function auditLogLifecycle() {
     processDir(path.join(TARGET_ROOT, 'logs'), false);
 
     if (totalCompressed > 0 || totalDeleted > 0) {
-      log(`✅ [Log Lifecycle] 日誌生命週期治理完成：已壓縮 ${totalCompressed} 個歷史日誌（.log.gz），清理 ${totalDeleted} 個過期檔案（保留 30 天）`, 'SUCCESS');
+      log(`[Log Lifecycle] 日誌生命週期治理完成：已壓縮 ${totalCompressed} 個歷史日誌（.log.gz），清理 ${totalDeleted} 個過期檔案（保留 30 天）`, 'SUCCESS');
     }
   } catch (err) {
-    log(`⚠️ [Log Lifecycle] 日誌生命週期治理例外: ${err.message}`, 'WARN');
+    log(`[Log Lifecycle] 日誌生命週期治理例外: ${err.message}`, 'WARN');
   }
 }
 
@@ -524,7 +524,7 @@ function watchdogCheck() {
       const offline = required.filter(a => apps[a] !== 'online');
 
       if (offline.length > 0) {
-        log(`⚠️ Watchdog 偵測到異常或離線服務: ${offline.join(', ')}，正在嘗試喚醒與重啟...`, 'WARN');
+        log(`Watchdog 偵測到異常或離線服務: ${offline.join(', ')}，正在嘗試喚醒與重啟...`, 'WARN');
         resurrectAndEnsureServices();
       }
     }
@@ -535,14 +535,14 @@ function watchdogCheck() {
 
 // 主流程啟動
 log('=================================================================', 'INFO');
-log('🚀 LAH PM2 Windows 原生系統服務已啟動 (Service Runner 運行中)', 'SUCCESS');
+log('LAH PM2 Windows 原生系統服務已啟動 (Service Runner 運行中)', 'SUCCESS');
 log(`執行檔: ${process.execPath} (PID: ${process.pid})`, 'INFO');
 
 syncPm2Home();
 auditDaemonRuntime();
 resurrectAndEnsureServices();
 
-log('🛡️ Watchdog 背景守護機制已啟動 (每 60 秒自動巡檢與修復)', 'INFO');
+log('Watchdog 背景守護機制已啟動 (每 60 秒自動巡檢與修復)', 'INFO');
 
 // 定時巡檢（每 60 秒）
 const interval = setInterval(watchdogCheck, 60000);
