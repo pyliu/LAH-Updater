@@ -143,6 +143,77 @@ pub fn ensure_php_ini_configured(php_dir: &Path, is_php85: bool, log_fn: &dyn Fn
     true
 }
 
+pub fn normalize_apache_log_directives(content: &str, apache_logs_fwd: &str) -> String {
+    let mut out = content.to_string();
+
+    let re_errlog_rotate = Regex::new(
+        r#"(?m)^([ \t]*)ErrorLog[ \t]+"\|(?:[^"]*?/)?rotatelogs(?:\.exe)?[ \t]+-l[ \t]+[^"]*?(error\.[^"]+)"[ \t]*(\r?)$"#,
+    )
+    .unwrap();
+    if re_errlog_rotate.is_match(&out) {
+        out = re_errlog_rotate
+            .replace_all(&out, |caps: &regex::Captures| {
+                let indent = &caps[1];
+                let err_pattern = &caps[2];
+                let cr = &caps[3];
+                format!(
+                    r#"{indent}ErrorLog "|bin/rotatelogs.exe -l {apache_logs_fwd}/{err_pattern}"{cr}"#
+                )
+            })
+            .to_string();
+    } else {
+        let re_errlog_plain =
+            Regex::new(r#"(?m)^([ \t]*)ErrorLog[ \t]+"[^"]*"[ \t]*(\r?)$"#).unwrap();
+        if re_errlog_plain.is_match(&out) {
+            out = re_errlog_plain
+                .replace_all(&out, |caps: &regex::Captures| {
+                    let indent = &caps[1];
+                    let cr = &caps[2];
+                    format!(
+                        r#"{indent}ErrorLog "|bin/rotatelogs.exe -l {apache_logs_fwd}/error.%Y.%m.%d.log 100M"{cr}"#
+                    )
+                })
+                .to_string();
+        }
+    }
+
+    let re_custlog_rotate = Regex::new(
+        r#"(?m)^([ \t]*)CustomLog[ \t]+"\|(?:[^"]*?/)?rotatelogs(?:\.exe)?[ \t]+-l[ \t]+[^"]*?(access\.[^"]+)"[ \t]+(\S+)[ \t]*(\r?)$"#,
+    )
+    .unwrap();
+    if re_custlog_rotate.is_match(&out) {
+        out = re_custlog_rotate
+            .replace_all(&out, |caps: &regex::Captures| {
+                let indent = &caps[1];
+                let acc_pattern = &caps[2];
+                let fmt_name = &caps[3];
+                let cr = &caps[4];
+                format!(
+                    r#"{indent}CustomLog "|bin/rotatelogs.exe -l  {apache_logs_fwd}/{acc_pattern}" {fmt_name}{cr}"#
+                )
+            })
+            .to_string();
+    } else {
+        let re_custlog_plain = Regex::new(
+            r#"(?m)^([ \t]*)CustomLog[ \t]+"[^"]*"[ \t]+(?:common|combined)[ \t]*(\r?)$"#,
+        )
+        .unwrap();
+        if re_custlog_plain.is_match(&out) {
+            out = re_custlog_plain
+                .replace_all(&out, |caps: &regex::Captures| {
+                    let indent = &caps[1];
+                    let cr = &caps[2];
+                    format!(
+                        r#"{indent}CustomLog "|bin/rotatelogs.exe -l  {apache_logs_fwd}/access.%Y.%m.%d.log 100M" combined{cr}"#
+                    )
+                })
+                .to_string();
+        }
+    }
+
+    out
+}
+
 pub fn configure_apache_mod_php7(apache_dir: &Path, root_dir: &Path, php7_dir: Option<&Path>, log_fn: &dyn Fn(&str, &str)) -> (bool, bool) {
     let conf_path = apache_dir.join("conf").join("httpd.conf");
     if !conf_path.is_file() {
@@ -227,13 +298,13 @@ pub fn configure_apache_mod_php7(apache_dir: &Path, root_dir: &Path, php7_dir: O
     let unified_apache_logs_dir = root_dir.join("logs").join("apache");
     let _ = fs::create_dir_all(&unified_apache_logs_dir);
     let apache_logs_fwd = unified_apache_logs_dir.to_string_lossy().replace('\\', "/");
-    let re_errlog = Regex::new(r#"(?m)^\s*ErrorLog\s+"\|bin/rotatelogs\.exe\s+-l\s+[a-zA-Z]:/[^"]*?/logs/(?:apache/)?(error\.[^"]+)""#).unwrap();
-    if re_errlog.is_match(&content) {
-        content = re_errlog.replace_all(&content, format!(r#"ErrorLog "|bin/rotatelogs.exe -l {}/$1""#, apache_logs_fwd)).to_string();
-    }
-    let re_custlog = Regex::new(r#"(?m)^\s*CustomLog\s+"\|bin/rotatelogs\.exe\s+-l\s+[a-zA-Z]:/[^"]*?/logs/(?:apache/)?(access\.[^"]+)"\s+(.*)$"#).unwrap();
-    if re_custlog.is_match(&content) {
-        content = re_custlog.replace_all(&content, format!(r#"CustomLog "|bin/rotatelogs.exe -l  {}/$1" $2"#, apache_logs_fwd)).to_string();
+    let before_logs = content.clone();
+    content = normalize_apache_log_directives(&content, &apache_logs_fwd);
+    if content != before_logs {
+        log_fn(
+            "  ✓ 已將 Apache 日誌路徑 (ErrorLog / CustomLog) 歸集至統一日誌儲存庫 (logs/apache)",
+            "success",
+        );
     }
 
     // 5. mod_php7 與相依 DLL (php7ts, libcrypto, libssl, libssh2, nghttp2, libsqlite3, libsodium, libsasl)
@@ -862,7 +933,7 @@ mod tests {
     }
 
     #[test]
-    fn test_node2shell_mitigation_injection_and_idempotency() {
+fn test_node2shell_mitigation_injection_and_idempotency() {
         let temp_root = std::env::temp_dir().join(format!("lah_test_node2shell_{}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()));
         fs::create_dir_all(&temp_root).unwrap();
         let conf_path = temp_root.join("httpd.conf");
@@ -883,6 +954,87 @@ mod tests {
         assert!(ok2);
         assert!(!changed2);
         assert_eq!(fs::read_to_string(&conf_path).unwrap(), content);
+        let _ = fs::remove_dir_all(&temp_root);
+    }
+
+    #[test]
+    fn test_configure_apache_mod_php7_upgrades_default_plain_logs_to_unified_rotatelogs() {
+        let temp_root = std::env::temp_dir().join(format!(
+            "lah_test_apache_plain_logs_{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let apache_dir = temp_root.join("Apache24");
+        let conf_dir = apache_dir.join("conf");
+        fs::create_dir_all(&conf_dir).unwrap();
+
+        let conf_path = conf_dir.join("httpd.conf");
+        let default_conf = concat!(
+            "Define SRVROOT \"c:/Apache24\"\r\n",
+            "ServerRoot \"${SRVROOT}\"\r\n",
+            "DocumentRoot \"${SRVROOT}/htdocs\"\r\n",
+            "# ErrorLog: The location of the error log file.\r\n",
+            "ErrorLog \"logs/error_log\"\r\n",
+            "<IfModule log_config_module>\r\n",
+            "    # CustomLog \"logs/access.log\" combined\r\n",
+            "    CustomLog \"logs/access_log\" common\r\n",
+            "</IfModule>\r\n"
+        );
+        fs::write(&conf_path, default_conf).unwrap();
+
+        let (ok, changed) = configure_apache_mod_php7(&apache_dir, &temp_root, None, &|_, _| {});
+        assert!(ok);
+        assert!(changed);
+
+        let unified_logs_fwd = temp_root
+            .join("logs")
+            .join("apache")
+            .to_string_lossy()
+            .replace('\\', "/");
+        let first_pass = fs::read_to_string(&conf_path).unwrap();
+        assert!(
+            !first_pass.contains("\"logs/error_log\""),
+            "plain ErrorLog was not upgraded:\n{first_pass}"
+        );
+        assert!(
+            !first_pass.contains("\"logs/access_log\""),
+            "plain CustomLog was not upgraded:\n{first_pass}"
+        );
+        assert!(first_pass.contains(&format!(
+            r#"ErrorLog "|bin/rotatelogs.exe -l {}/error.%Y.%m.%d.log 100M""#,
+            unified_logs_fwd
+        )));
+        assert!(first_pass.contains(&format!(
+            r#"    CustomLog "|bin/rotatelogs.exe -l  {}/access.%Y.%m.%d.log 100M" combined"#,
+            unified_logs_fwd
+        )));
+
+        let (ok2, changed2) = configure_apache_mod_php7(&apache_dir, &temp_root, None, &|_, _| {});
+        assert!(ok2);
+        assert!(!changed2);
+        let second_pass = fs::read_to_string(&conf_path).unwrap();
+        assert_eq!(first_pass, second_pass);
+
+        let dot_log_conf = concat!(
+            "Define SRVROOT \"c:/Apache24\"\n",
+            "ErrorLog \"logs/error.log\"\n",
+            "CustomLog \"logs/access.log\" common\n"
+        );
+        fs::write(&conf_path, dot_log_conf).unwrap();
+        let (ok3, changed3) = configure_apache_mod_php7(&apache_dir, &temp_root, None, &|_, _| {});
+        assert!(ok3);
+        assert!(changed3);
+        let third_pass = fs::read_to_string(&conf_path).unwrap();
+        assert!(third_pass.contains(&format!(
+            r#"ErrorLog "|bin/rotatelogs.exe -l {}/error.%Y.%m.%d.log 100M""#,
+            unified_logs_fwd
+        )));
+        assert!(third_pass.contains(&format!(
+            r#"CustomLog "|bin/rotatelogs.exe -l  {}/access.%Y.%m.%d.log 100M" combined"#,
+            unified_logs_fwd
+        )));
 
         let _ = fs::remove_dir_all(&temp_root);
     }

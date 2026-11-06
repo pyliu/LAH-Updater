@@ -199,6 +199,7 @@ where
 
     // 確保 logs/api 日誌目錄存在並平移既有 www/log 歷史日誌
     migrate_legacy_www_logs(&root_path, &log_event);
+    migrate_legacy_apache_logs(&root_path, &log_event);
 
     // 步驟 3：備份檔還原
     if options.restore_backup {
@@ -206,6 +207,7 @@ where
         if b_path.is_file() {
             set_prog(85, "正在從備份包還原原始自訂設定...");
             let _ = restore_from_backup_zip(&b_path, &root_path, &log_event);
+            migrate_legacy_apache_logs(&root_path, &log_event);
         }
     }
 
@@ -391,6 +393,7 @@ where
     // 2. 確保環境檔存在並執行跨目錄路徑重定位
     ensure_default_env_files(&root_path, &log_event);
     migrate_legacy_www_logs(&root_path, &log_event);
+    migrate_legacy_apache_logs(&root_path, &log_event);
     let reloc_report = execute_path_relocation_and_verify(&root_path, &log_event);
 
     // 3. 配置 PHP 7.4 與 Apache mod_php
@@ -472,6 +475,7 @@ where
         if is_service_running(&target_svc) {
             stop_service(&target_svc, &log_event);
         }
+        migrate_legacy_apache_logs(&root_path, &log_event);
         start_service(&target_svc, &log_event);
     }
 
@@ -538,5 +542,167 @@ fn migrate_legacy_www_logs(root_path: &Path, log_event: &dyn Fn(&str, &str)) {
         }
     } else {
         let _ = fs::create_dir_all(&api_logs_dir);
+    }
+}
+
+pub fn migrate_legacy_apache_logs(root_path: &Path, log_event: &dyn Fn(&str, &str)) {
+    let apache_logs_dir = root_path.join("logs").join("apache");
+    if let Err(e) = fs::create_dir_all(&apache_logs_dir) {
+        log_event(&format!("⚠️ 建立 Apache 統一日誌目錄失敗 [{apache_logs_dir:?}]: {e}"), "warning");
+        return;
+    }
+
+    let legacy_logs_dir = root_path.join("Apache24").join("logs");
+    if !legacy_logs_dir.is_dir() {
+        return;
+    }
+
+    let Ok(entries) = fs::read_dir(&legacy_logs_dir) else {
+        return;
+    };
+
+    let mut moved_count = 0usize;
+    for entry in entries.flatten() {
+        let p = entry.path();
+        if !p.is_file() {
+            continue;
+        }
+        let Some(fname) = p.file_name().and_then(|s| s.to_str()) else {
+            continue;
+        };
+        let fname_lower = fname.to_ascii_lowercase();
+        if fname_lower == "httpd.pid" {
+            continue;
+        }
+
+        let is_rotated = (fname_lower.starts_with("access.") || fname_lower.starts_with("error."))
+            && (fname_lower.ends_with(".log") || fname_lower.ends_with(".gz")) && fname_lower != "access.log" && fname_lower != "error.log";
+        let plain_prefix = match fname_lower.as_str() {
+            "access_log" | "access.log" => Some("access"),
+            "error_log" | "error.log" => Some("error"),
+            _ => None,
+        };
+
+        if is_rotated {
+            let target = apache_logs_dir.join(fname);
+            if !target.exists() {
+                if fs::rename(&p, &target).is_ok() {
+                    moved_count += 1;
+                } else if fs::copy(&p, &target).is_ok() {
+                    let _ = fs::remove_file(&p);
+                    moved_count += 1;
+                }
+            } else if let Ok(src_bytes) = fs::read(&p) {
+                if !src_bytes.is_empty() {
+                    if let Ok(mut f) = fs::OpenOptions::new().create(true).append(true).open(&target) {
+                        use std::io::Write;
+                        let _ = f.write_all(&src_bytes);
+                    }
+                }
+                if fs::remove_file(&p).is_ok() {
+                    moved_count += 1;
+                }
+            }
+        } else if let Some(prefix) = plain_prefix {
+            let date_str = p
+                .metadata()
+                .and_then(|m| m.modified())
+                .map(|mtime| {
+                    chrono::DateTime::<chrono::Local>::from(mtime)
+                        .format("%Y.%m.%d")
+                        .to_string()
+                })
+                .unwrap_or_else(|_| chrono::Local::now().format("%Y.%m.%d").to_string());
+            let target = apache_logs_dir.join(format!("{prefix}.{date_str}.log"));
+            if !target.exists() {
+                if fs::rename(&p, &target).is_ok() {
+                    moved_count += 1;
+                } else if fs::copy(&p, &target).is_ok() {
+                    let _ = fs::remove_file(&p);
+                    moved_count += 1;
+                }
+            } else if let Ok(src_bytes) = fs::read(&p) {
+                if !src_bytes.is_empty() {
+                    if let Ok(mut f) = fs::OpenOptions::new().create(true).append(true).open(&target) {
+                        use std::io::Write;
+                        let _ = f.write_all(&src_bytes);
+                    }
+                }
+                if fs::remove_file(&p).is_ok() {
+                    moved_count += 1;
+                }
+            }
+        }
+    }
+
+    if moved_count > 0 {
+        log_event(
+            &format!("  ✓ 已將 {moved_count} 個歷史 Apache 日誌自 Apache24/logs 平移歸集至 logs/apache"),
+            "success",
+        );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_migrate_legacy_apache_logs_moves_rotated_and_plain_logs_while_preserving_pid() {
+        let temp_root = std::env::temp_dir().join(format!(
+            "lah_test_migrate_apache_logs_{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let legacy_dir = temp_root.join("Apache24").join("logs");
+        fs::create_dir_all(&legacy_dir).unwrap();
+
+        fs::write(legacy_dir.join("httpd.pid"), b"1234\n").unwrap();
+        fs::write(legacy_dir.join("install.txt"), b"keep me\n").unwrap();
+        fs::write(legacy_dir.join("access.2026.11.04.log"), b"rotated access\n").unwrap();
+        fs::write(legacy_dir.join("error.2026.11.04.log.gz"), b"gz error").unwrap();
+        fs::write(legacy_dir.join("access_log"), b"plain access line\n").unwrap();
+        fs::write(legacy_dir.join("error_log"), b"plain error line\n").unwrap();
+
+        migrate_legacy_apache_logs(&temp_root, &|_, _| {});
+
+        let unified_dir = temp_root.join("logs").join("apache");
+        assert!(legacy_dir.join("httpd.pid").is_file());
+        assert!(legacy_dir.join("install.txt").is_file());
+        assert!(!legacy_dir.join("access.2026.11.04.log").exists());
+        assert!(!legacy_dir.join("error.2026.11.04.log.gz").exists());
+        assert!(!legacy_dir.join("access_log").exists());
+        assert!(!legacy_dir.join("error_log").exists());
+
+        assert_eq!(
+            fs::read_to_string(unified_dir.join("access.2026.11.04.log")).unwrap(),
+            "rotated access\n"
+        );
+        assert_eq!(
+            fs::read(unified_dir.join("error.2026.11.04.log.gz")).unwrap(),
+            b"gz error"
+        );
+
+        let today = chrono::Local::now().format("%Y.%m.%d").to_string();
+        assert_eq!(
+            fs::read_to_string(unified_dir.join(format!("access.{today}.log"))).unwrap(),
+            "plain access line\n"
+        );
+        assert_eq!(
+            fs::read_to_string(unified_dir.join(format!("error.{today}.log"))).unwrap(),
+            "plain error line\n"
+        );
+
+        fs::write(legacy_dir.join("error.log"), b"second error line\n").unwrap();
+        migrate_legacy_apache_logs(&temp_root, &|_, _| {});
+        assert!(!legacy_dir.join("error.log").exists());
+        assert_eq!(
+            fs::read_to_string(unified_dir.join(format!("error.{today}.log"))).unwrap(),
+            "plain error line\nsecond error line\n"
+        );
+
+        let _ = fs::remove_dir_all(&temp_root);
     }
 }

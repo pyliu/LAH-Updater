@@ -62,7 +62,8 @@ pub fn calibrate_httpd_conf(root: &Path) {
     let root_fwd = root.to_string_lossy().replace('\\', "/").trim_end_matches('/').to_string();
     let apache_fwd = format!("{root_fwd}/Apache24");
     let www_fwd = format!("{root_fwd}/www");
-    let logs_fwd = format!("{apache_fwd}/logs");
+    let logs_fwd = format!("{root_fwd}/logs/apache");
+    let _ = fs::create_dir_all(root.join("logs").join("apache"));
     let api_fwd = format!("{root_fwd}/LAH-API");
     let php7_fwd = format!("{root_fwd}/php7");
 
@@ -87,12 +88,55 @@ pub fn calibrate_httpd_conf(root: &Path) {
         updated = re_old_www.replace_all(&updated, format!(r#"<Directory "{}">"#, www_fwd)).to_string();
     }
 
-    // 4. Rotatelogs 日誌路徑
-    if let Ok(re_errlog) = Regex::new(r#"(?m)^\s*ErrorLog\s+"\|bin/rotatelogs\.exe\s+-l\s+[a-zA-Z]:/[^"]*?/logs/(error\.[^"]+)""#) {
-        updated = re_errlog.replace_all(&updated, format!(r#"ErrorLog "|bin/rotatelogs.exe -l {}/$1""#, logs_fwd)).to_string();
+    // 4. Rotatelogs 日誌路徑 (含舊版 Apache24/logs 與預設 logs/error_log 平移歸集至 logs/apache)
+    if let Ok(re_errlog_rotate) = Regex::new(
+        r#"(?m)^([ \t]*)ErrorLog[ \t]+"\|(?:[^"]*?/)?rotatelogs(?:\.exe)?[ \t]+-l[ \t]+[^"]*?(error\.[^"]+)"[ \t]*(\r?)$"#,
+    ) {
+        if re_errlog_rotate.is_match(&updated) {
+            updated = re_errlog_rotate
+                .replace_all(&updated, |caps: &regex::Captures| {
+                    let indent = &caps[1];
+                    let err_pat = &caps[2];
+                    let cr = &caps[3];
+                    format!(r#"{indent}ErrorLog "|bin/rotatelogs.exe -l {logs_fwd}/{err_pat}"{cr}"#)
+                })
+                .to_string();
+        } else if let Ok(re_errlog_plain) = Regex::new(r#"(?m)^([ \t]*)ErrorLog[ \t]+"[^"]*"[ \t]*(\r?)$"#) {
+            updated = re_errlog_plain
+                .replace_all(&updated, |caps: &regex::Captures| {
+                    let indent = &caps[1];
+                    let cr = &caps[2];
+                    format!(r#"{indent}ErrorLog "|bin/rotatelogs.exe -l {logs_fwd}/error.%Y.%m.%d.log 100M"{cr}"#)
+                })
+                .to_string();
+        }
     }
-    if let Ok(re_custlog) = Regex::new(r#"(?m)^\s*CustomLog\s+"\|bin/rotatelogs\.exe\s+-l\s+[a-zA-Z]:/[^"]*?/logs/(access\.[^"]+)"\s+(.*)$"#) {
-        updated = re_custlog.replace_all(&updated, format!(r#"CustomLog "|bin/rotatelogs.exe -l  {}/$1" $2"#, logs_fwd)).to_string();
+    if let Ok(re_custlog_rotate) = Regex::new(
+        r#"(?m)^([ \t]*)CustomLog[ \t]+"\|(?:[^"]*?/)?rotatelogs(?:\.exe)?[ \t]+-l[ \t]+[^"]*?(access\.[^"]+)"[ \t]+(\S+)[ \t]*(\r?)$"#,
+    ) {
+        if re_custlog_rotate.is_match(&updated) {
+            updated = re_custlog_rotate
+                .replace_all(&updated, |caps: &regex::Captures| {
+                    let indent = &caps[1];
+                    let acc_pat = &caps[2];
+                    let fmt_name = &caps[3];
+                    let cr = &caps[4];
+                    format!(r#"{indent}CustomLog "|bin/rotatelogs.exe -l  {logs_fwd}/{acc_pat}" {fmt_name}{cr}"#)
+                })
+                .to_string();
+        } else if let Ok(re_custlog_plain) =
+            Regex::new(r#"(?m)^([ \t]*)CustomLog[ \t]+"[^"]*"[ \t]+(?:common|combined)[ \t]*(\r?)$"#)
+        {
+            updated = re_custlog_plain
+                .replace_all(&updated, |caps: &regex::Captures| {
+                    let indent = &caps[1];
+                    let cr = &caps[2];
+                    format!(
+                        r#"{indent}CustomLog "|bin/rotatelogs.exe -l  {logs_fwd}/access.%Y.%m.%d.log 100M" combined{cr}"#
+                    )
+                })
+                .to_string();
+        }
     }
 
     // 5. FastCGI / LAH-API Alias 與 Directory
@@ -225,10 +269,30 @@ PHPIniDir "C:/AppServ/php7/"
         assert!(new_conf.contains(&format!(r#"Define SRVROOT "{test_root_fwd}/Apache24""#)));
         assert!(new_conf.contains(&format!(r#"DocumentRoot "{test_root_fwd}/www""#)));
         assert!(new_conf.contains(&format!(r#"<Directory "{test_root_fwd}/www">"#)));
-        assert!(new_conf.contains(&format!(r#"ErrorLog "|bin/rotatelogs.exe -l {test_root_fwd}/Apache24/logs/error.%Y.%m.%d.log 100M""#)));
+        assert!(new_conf.contains(&format!(
+            r#"ErrorLog "|bin/rotatelogs.exe -l {test_root_fwd}/logs/apache/error.%Y.%m.%d.log 100M""#
+        )));
+        assert!(new_conf.contains(&format!(
+            r#"CustomLog "|bin/rotatelogs.exe -l  {test_root_fwd}/logs/apache/access.%Y.%m.%d.log 100M" combined"#
+        )));
         assert!(new_conf.contains(&format!(r#"Alias /LAH-API/api "{test_root_fwd}/LAH-API/v1""#)));
         assert!(new_conf.contains(&format!(r#"Alias /get_user_img.php "{test_root_fwd}/LAH-API/v1/get_user_img.php""#)));
         assert!(new_conf.contains(&format!(r#"LoadModule php7_module "{test_root_fwd}/php7/php7apache2_4.dll""#)));
+
+        let plain_conf = r#"
+Define SRVROOT "C:/Apache24"
+ErrorLog "logs/error_log"
+    CustomLog "logs/access_log" common
+"#;
+        fs::write(&conf_file, plain_conf).unwrap();
+        calibrate_httpd_conf(&test_root);
+        let new_plain_conf = fs::read_to_string(&conf_file).unwrap();
+        assert!(new_plain_conf.contains(&format!(
+            r#"ErrorLog "|bin/rotatelogs.exe -l {test_root_fwd}/logs/apache/error.%Y.%m.%d.log 100M""#
+        )));
+        assert!(new_plain_conf.contains(&format!(
+            r#"    CustomLog "|bin/rotatelogs.exe -l  {test_root_fwd}/logs/apache/access.%Y.%m.%d.log 100M" combined"#
+        )));
 
         let _ = fs::remove_dir_all(&temp);
     }
