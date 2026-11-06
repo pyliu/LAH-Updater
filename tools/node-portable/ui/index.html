@@ -745,9 +745,179 @@
     color: #1e293b;
   }
   .ui-svg-icon { width: 1em; height: 1em; vertical-align: -0.125em; }
+
+  #pane_console.active {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    font-size: 16.25px;
+  }
+  #pane_console .card-title,
+  #pane_console .pm2-table { font-size: 15.625px; }
+  #pane_console .kv-grid,
+  #pane_console .status-pill,
+  #pane_console .toast-bar,
+  #pane_console .guide-item-title { font-size: 14.375px; }
+  #pane_console button.btn-sm,
+  #pane_console .guide-card-title { font-size: 15px; }
+  #pane_console .guide-card { font-size: 14.375px; }
+  #pane_console .guide-item-desc,
+  #pane_console .cheat-table,
+  #pane_console .cheat-code,
+  #pane_console .cheat-desc,
+  #pane_console .faq-list { font-size: 13.75px; }
+  #pane_console .inline-log-box { font-size: 15px; }
+  #pane_console [style*="font-size:11px"],
+  #pane_console [style*="font-size: 11px"] { font-size: 13.75px !important; }
+  #pane_console [style*="font-size:11.5px"] { font-size: 14.375px !important; }
+  #pane_console [style*="font-size:12px"] { font-size: 15px !important; }
+  #pane_console .pm2-list-card { display: flex; flex-direction: column; min-height: 160px; }
+  #pane_console .pm2-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap: 8px; overflow-y: auto; align-content: start; min-height: 100px; max-height: clamp(150px, calc(100vh - 450px), 400px); }
+  #pane_console .pm2-card { border: 1px solid #cbd5e1; border-radius: 6px; padding: 9px; background: #f8fafc; min-width: 0; }
+  #pane_console .pm2-card.active-row { border-color: #16a34a; box-shadow: 0 0 0 2px #86efac; background: #f0fdf4; }
+  #pane_console .pm2-card:focus-visible { outline: 2px solid #0369a1; outline-offset: -2px; }
+  #pane_console .pm2-card-header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px; }
+  #pane_console .pm2-card-name { overflow-wrap: anywhere; white-space: normal; text-align: left; font-weight: 700; padding: 2px 4px; }
+  #pane_console .pm2-card-details { display: flex; flex-wrap: wrap; gap: 3px 12px; margin: 7px 0; font-size: 14.375px; }
+  #pane_console .pm2-empty { padding: 12px; color: #64748b; }
+  #pane_console .console-guide { margin-top: 6px; align-self: flex-start; }
+  #pane_console .console-guide-body { overflow-y: auto; min-height: 0; }
+  @media (max-width: 900px) { #pane_console .console-guide-body .guide-grid-2 { grid-template-columns: 1fr; } }
+  @media (min-width: 1060px) and (min-height: 600px) {
+    #pane_console .pm2-list-card { flex: 2 1 0; }
+    #pane_console .pm2-cards { flex: 1; max-height: none; }
+  }
+  #pane_console .console-top-grid > .card { min-width: 0; }
+  @media (min-width: 1060px) and (min-height: 600px) {
+    #pane_console.active { font-size: 17.5px; }
+    #pane_console .inline-log-card { flex: 1 1 0; min-height: 80px; }
+    #pane_console .inline-log-box { min-height: 0; max-height: none; }
+  }
+
+  body.console-mode {
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  body.console-mode > .header { flex: 0 0 auto; }
+  body.console-mode #pane_console.active { flex: 1; min-height: 0; overflow: hidden; }
+  #pane_console > .console-top-grid,
+  #pane_console > .console-guide,
+  #pane_console > .toast-bar { flex: 0 0 auto; }
+  #pane_console > .toast-bar { margin-top: auto; }
+  #pane_console > .console-guide { margin-bottom: 5px; }
+  #pane_console .pm2-list-card { flex: 0 1 auto; min-height: 0; }
+  #pane_console .pm2-cards { flex: 0 1 auto; min-height: 100px; max-height: 42vh; }
+  #pane_console .inline-log-card {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 0;
+    min-height: 170px;
+    margin: 6px 0;
+    padding: 8px 12px;
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 7px;
+  }
+  #pane_console .inline-log-card > .card-title { flex: 0 0 auto; }
+  #pane_console .inline-log-box {
+    flex: 1;
+    min-height: 0;
+    max-height: none;
+    overflow: auto;
+    background: #1e1e1e;
+    color: #d4d4d4;
+    padding: 9px 12px;
+    font-family: Consolas, "Courier New", monospace;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    border-radius: 6px;
+    border: 1px solid #333333;
+    user-select: text;
+  }
+  @media (max-height: 599px) {
+    #pane_console .inline-log-card { min-height: 90px; }
+    #pane_console .inline-log-card .btn-group { display: none; }
+    #pane_console #inline_log_meta { display: none; }
+  }
+  #pane_console .inline-log-card.is-collapsed { flex: 0 0 auto; min-height: 0; }
+  #pane_console .inline-log-card.is-collapsed .btn-group,
+  #pane_console .inline-log-card.is-collapsed #inline_log_meta,
+  #pane_console .inline-log-card.is-collapsed #inline_log_box { display: none; }
+
+  body.install-mode { height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+  body.install-mode > .header { flex: 0 0 auto; }
+  #pane_install.active { flex: 1; min-height: 0; display: flex; flex-direction: column; font-size: 16.25px; }
+  #pane_install .install-layout-wrap { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 8px; margin-bottom: 6px; }
+  #pane_install .install-col-left { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 6px 8px; flex: 0 0 auto; min-height: 0; }
+  #pane_install .install-col-left > .card { margin: 0; padding: 8px 10px; min-width: 0; }
+  #pane_install .install-col-left > .card:nth-child(1) { grid-column: 1; grid-row: 1; }
+  #pane_install .install-col-left > .card:nth-child(2) { grid-column: 1; grid-row: 2; }
+  #pane_install .install-col-left > .card:nth-child(3) { grid-column: 2; grid-row: 1 / span 2; }
+  #pane_install .footer-bar { grid-column: 1 / -1; margin: 0; flex-wrap: wrap; }
+  #pane_install .card-title { font-size: 15.625px; }
+  #pane_install button, #pane_install input[type=text], #pane_install select { font-size: 15.625px; }
+  #pane_install button.btn-sm { font-size: 15px; }
+  #pane_install button.danger { font-size: 16.25px; }
+  #pane_install .checkbox-item { font-size: 15.625px; line-height: 1.35; padding: 4px 0; }
+  #pane_install input[type=text] { min-width: 0; }
+  #pane_install #scan_box { font-size: 15px !important; line-height: 1.5 !important; overflow-wrap: anywhere; }
+  #pane_install .install-sandbox-note { font-size: 15px !important; padding: 6px 8px !important; }
+  #pane_install .install-col-right { display: flex; flex-direction: column; flex: 1; min-height: 100px; min-width: 0; }
+  #pane_install .install-col-right > .card { flex: 1; min-height: 0; display: flex; flex-direction: column; margin: 0; padding: 8px 10px; }
+  #pane_install .install-col-right .card-title { flex: 0 0 auto; }
+  #pane_install .install-col-right .inline-log-box { flex: 1; min-height: 0; max-height: none; overflow: auto; background: #1e1e1e; color: #d4d4d4; padding: 10px; font: 15px/1.5 Consolas, "Courier New", monospace; white-space: pre-wrap; overflow-wrap: anywhere; border-radius: 6px; user-select: text; }
+  #pane_install [style*="font-size:11px"] { font-size: 13.75px !important; }
+  #pane_install .guide-card { font-size: 14.375px; }
+  #pane_install .guide-card-title { font-size: 15px; }
+  #pane_install .guide-item-title { font-size: 14.375px; }
+  #pane_install .guide-item-desc, #pane_install .cheat-table { font-size: 13.75px; }
+  #pane_install .install-guide-toggle { align-self: flex-start; flex: 0 0 auto; }
+  #pane_install .install-guide-region { display: none; }
+  #pane_install .install-guide-region.is-open { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; padding: 18px; background: rgba(15,23,42,.6); z-index: 1000; }
+  #pane_install .install-guide-content { background: #fff; padding: 14px; border-radius: 8px; max-height: 90vh; overflow: auto; max-width: 1100px; }
+  #pane_install .install-guide-header { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  #pane_install .install-guide-intro { font-size: 15px; }
+  @media (min-width: 1280px) {
+    #pane_install .install-layout-wrap { display: grid; grid-template-columns: minmax(440px, .85fr) minmax(0, 1.15fr); }
+    #pane_install .install-col-left { display: flex; flex-direction: column; justify-content: flex-start; }
+    #pane_install .install-col-left > .card:nth-child(3) { flex: 1; }
+    #pane_install .footer-bar { margin-top: auto; }
+    #pane_install .card-title, #pane_install button, #pane_install input[type=text] { font-size: 16.875px; }
+    #pane_install .checkbox-item { font-size: 16.25px; }
+    #pane_install .footer-bar button { font-size: 16.875px; }
+    #pane_install .install-col-right .inline-log-box { font-size: 15.625px; }
+  }
+  @media (min-width: 1280px) and (min-height: 900px) {
+    #pane_install.active { display: grid; grid-template-columns: minmax(440px, .85fr) minmax(0, 1.15fr); grid-template-rows: minmax(0, 1fr) auto; gap: 8px; }
+    #pane_install .install-layout-wrap { display: contents; }
+    #pane_install .install-col-left { grid-column: 1; grid-row: 1; }
+    #pane_install .install-col-left > .card:nth-child(3) { display: flex; flex-direction: column; }
+    #pane_install .options-grid { flex: 1; display: flex; flex-direction: column; justify-content: space-evenly; }
+    #pane_install .checkbox-item { flex: 1; align-items: center; }
+
+    #pane_install .install-col-right { grid-column: 2; grid-row: 1 / span 2; }
+    #pane_install .install-guide-region { grid-column: 1; grid-row: 2; }
+    #pane_install .install-bottom-section { grid-template-columns: 1fr; gap: 6px; }
+    #pane_install .install-guide-region:not(.is-open) { display: block; flex: 0 0 auto; }
+    #pane_install .install-guide-region:not(.is-open) .install-guide-content { background: transparent; max-width: none; max-height: none; overflow: visible; padding: 0; }
+    #pane_install .install-guide-region:not(.is-open) .install-guide-header,
+    #pane_install .install-guide-region:not(.is-open) .install-guide-intro,
+    #pane_install .install-guide-toggle { display: none; }
+    #pane_install .install-bottom-section .guide-card-title { font-size: 16.25px; }
+    #pane_install .install-bottom-section .guide-item-title { font-size: 15px; }
+    #pane_install .install-bottom-section .guide-item-desc, #pane_install .install-bottom-section .cheat-table { font-size: 14.375px; }
+  }
+  @media (max-height: 599px) {
+    #pane_install .install-sandbox-note { display: none; }
+    #pane_install .install-col-left > .card { padding: 6px 8px; }
+    #pane_install .checkbox-item { padding: 2px 0; }
+  }
 </style>
 </head>
-<body>
+<body class="install-mode">
   <!-- 頂部導覽與模式分頁切換列 -->
   <div class="header">
     <div class="header-left">
@@ -796,7 +966,7 @@
       <!-- 左欄：配置與執行選項 -->
       <div class="install-col-left">
         <div class="card">
-          <div class="card-title"><span><svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h7l2 2h9v10H3z"/></svg> 安裝根目錄（Node 將安裝於其下 node 資料夾，並自動駐留控制台執行檔）</span></div>
+          <div class="card-title"><span><svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h7l2 2h9v10H3z"/></svg> 系統安裝根目錄</span></div>
           <div class="row">
             <input id="root_dir" type="text" value="" placeholder="自動偵測中...">
             <button id="browse_btn">瀏覽...</button>
@@ -815,13 +985,13 @@
 
         <div class="card">
           <div class="card-title"><span><svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3m0 14v3M2 12h3m14 0h3M5 5l2 2m10 10 2 2M19 5l-2 2M7 17l-2 2"/></svg> 系統服務與執行選項</span></div>
-          <div style="background:#f0fdf4; border:1px solid #bbf7d0; border-radius:6px; padding:6px 11px; margin-bottom:7px; font-size:12px; color:#166534; line-height:1.45;">
+          <div class="install-sandbox-note" style="background:#f0fdf4; border:1px solid #bbf7d0; border-radius:6px; padding:6px 11px; margin-bottom:7px; font-size:12px; color:#166534; line-height:1.45;">
             <svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2l8 3v6c0 5-3 8-8 11-5-3-8-6-8-11V5zM8 12l3 3 5-6"/></svg> <b>零全域污染沙盒架構</b>：安裝時自動自環境變數清理舊可攜殘留，並建立專屬維運終端 <code>lah-cmd.bat</code> 與駐留控制台。沙盒內自給自足，絕不干擾全域 Node 環境。
           </div>
           <div class="options-grid">
-            <label class="checkbox-item"><input type="checkbox" id="chk_service" checked><span><svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3m0 14v3M2 12h3m14 0h3M5 5l2 2m10 10 2 2M19 5l-2 2M7 17l-2 2"/></svg> 註冊開機自啟服務 PM2_Portable_Service（守護程序並隨開機自動啟動）</span></label>
-            <label class="checkbox-item"><input type="checkbox" id="chk_logrotate" checked><span><svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7l9-4 9 4v10l-9 4-9-4zM3 7l9 4 9-4M12 11v10"/></svg> 直接由便攜版 node_modules 掛載並啟動 pm2-logrotate 日誌輪替模組（自動啟用日誌壓縮）</span></label>
-            <label class="checkbox-item"><input type="checkbox" id="chk_resurrect" checked><span><svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5M5 9a7 7 0 0112-2l3 5M19 15a7 7 0 01-12 2l-3-5"/></svg> 立即執行 pm2 resurrect 還原既有程式 dump</span></label>
+            <label class="checkbox-item"><input type="checkbox" id="chk_service" checked><span><svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3m0 14v3M2 12h3m14 0h3M5 5l2 2m10 10 2 2M19 5l-2 2M7 17l-2 2"/></svg> 註冊開機自啟服務（PM2_Portable_Service）</span></label>
+            <label class="checkbox-item"><input type="checkbox" id="chk_logrotate" checked><span><svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7l9-4 9 4v10l-9 4-9-4zM3 7l9 4 9-4M12 11v10"/></svg> 啟用 pm2-logrotate 日誌輪替與 Gzip 壓縮</span></label>
+            <label class="checkbox-item"><input type="checkbox" id="chk_resurrect" checked><span><svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5M5 9a7 7 0 0112-2l3 5M19 15a7 7 0 01-12 2l-3-5"/></svg> 立即還原既有程式快照（pm2 resurrect）</span></label>
           </div>
         </div>
 
@@ -845,7 +1015,12 @@
     </div>
 
     <!-- 下半部：橫貫滿版之沙盒架構特點與部署檢核 SOP (大螢幕與小螢幕均勻填滿畫面，消弭底部空白) -->
-    <div class="guide-grid-2 install-bottom-section" style="margin-top: 8px;">
+    <button id="btn_install_guide" class="btn-sm install-guide-toggle" type="button">沙盒架構與部署說明</button>
+    <div id="install_guide" class="install-guide-region">
+      <div class="install-guide-content">
+        <div class="install-guide-header"><strong>沙盒架構與部署說明</strong><button id="btn_close_install_guide" type="button">關閉</button></div>
+        <p class="install-guide-intro">Node 將安裝於根目錄下的 node 資料夾，並建立專屬維運終端及控制台副本；私有環境不會取代系統全域 Node。</p>
+        <div class="guide-grid-2 install-bottom-section" style="margin-top: 8px;">
       <!-- 左卡：沙盒核心架構與資安邊界規格 -->
       <div class="guide-card" style="margin-top:0;">
         <div class="guide-card-title">
@@ -884,6 +1059,8 @@
           <tr><td style="font-weight:bold; color:#166534;">3. 註冊背景守護</td><td>安裝 <code>PM2_Portable_Service</code> 為 Windows 服務，達成免登入自啟。</td></tr>
           <tr><td style="font-weight:bold; color:#166534;">4. 模組與快照復原</td><td>自動掛載 <code>pm2-logrotate</code> (Gzip 啟用) 並復原既有程序快照。</td></tr>
         </table>
+      </div>
+    </div>
       </div>
     </div>
   </div>
@@ -956,7 +1133,7 @@
     </div>
 
     <!-- 受管業務系統清單 -->
-    <div class="card" style="margin-bottom: 6px;">
+    <div class="card pm2-list-card" style="margin-bottom: 6px;">
       <div class="card-title">
         <div style="display:flex; align-items:center; gap:8px;">
           <span><svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4l13 8-13 8z"/></svg> 受管業務系統清單 (Managed PM2 Apps)</span>
@@ -976,28 +1153,7 @@
         </div>
       </div>
 
-      <div class="table-wrap">
-        <table class="pm2-table">
-          <thead>
-            <tr>
-              <th style="width: 42px;">ID</th>
-              <th>系統名稱</th>
-              <th style="width: 90px;">狀態</th>
-              <th style="width: 72px;">PID</th>
-              <th style="width: 68px;">CPU</th>
-              <th style="width: 86px;">記憶體</th>
-              <th style="width: 90px;">運行時間</th>
-              <th style="width: 64px;">重啟</th>
-              <th style="width: 195px; text-align:right;">操作</th>
-            </tr>
-          </thead>
-          <tbody id="pm2_apps_tbody">
-            <tr>
-              <td colspan="9" style="text-align:center; padding: 24px; color:#64748b;">正在載入沙盒 PM2 受管系統清單...</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+      <div id="pm2_apps_tbody" class="pm2-cards" aria-label="受管業務系統清單"></div>
     </div>
 
     <!-- 大螢幕工作台模式：內嵌即時日誌串流面板 (Inline Live Log Stream) -->
@@ -1020,6 +1176,7 @@
           <button id="btn_inline_folder" class="btn-sm"><svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h7l2 2h9v10H3z"/></svg> 日誌夾</button>
           <button id="btn_inline_modal" class="btn-sm" title="以獨立視窗全螢幕放大預覽"><svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="10" cy="10" r="6"/><path d="M15 15l5 5"/></svg> 彈窗放大</button>
         </div>
+        <button id="btn_toggle_inline_log" class="btn-sm" type="button" aria-expanded="true" aria-controls="inline_log_box">收合日誌</button>
       </div>
       <div id="inline_log_meta" style="font-size: 11px; color: #64748b; margin-bottom: 4px; font-family: Consolas, monospace;">
         檔案路徑：-
@@ -1028,7 +1185,11 @@
     </div>
 
     <!-- 分頁 2 底部：維運常用指令速查與核心守護 SOP (飽滿充實填滿畫面) -->
-    <div class="guide-grid-2">
+    <button id="btn_console_guide" class="console-guide btn-sm" type="button">維運常用指令與核心守護說明</button>
+    <div id="modal_console_guide" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="console_guide_title">
+      <div class="modal-content">
+        <div class="modal-header"><h2 id="console_guide_title">維運常用指令與核心守護說明</h2><button id="btn_close_console_guide" type="button">關閉</button></div>
+        <div class="console-guide-body"><div class="guide-grid-2">
       <!-- 左卡：CLI Cheat Sheet -->
       <div class="guide-item">
         <div class="guide-item-title">
@@ -1075,6 +1236,9 @@
           <li><strong>日誌容量定期釋放</strong>：日誌由 <code>pm2-logrotate</code> 自動以 Gzip 壓縮，若遇進程密集輸出，可隨時點擊【<svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="5" width="16" height="15"/><path d="M3 5h18V2H3zM10 9h4"/></svg> 立即壓縮輪替】即刻釋放硬碟空間。</li>
           <li><strong>資安合規佐證</strong>：右上角【<svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2l8 3v6c0 5-3 8-8 11-5-3-8-6-8-11V5zM8 12l3 3 5-6"/></svg> 資安自檢】已支援動態受管服務識別，檢測完成後將於 <code>logs\</code> 匯出合格佐證報告供稽核備查。</li>
         </ul>
+      </div>
+    </div>
+        </div>
       </div>
     </div>
 

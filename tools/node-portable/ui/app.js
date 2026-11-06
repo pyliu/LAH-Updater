@@ -58,6 +58,8 @@ function setToast(msg, type = "normal") {
 
 function switchTab(tab) {
   currentTab = tab;
+  document.body.classList.toggle("install-mode", tab === "install");
+  document.body.classList.toggle("console-mode", tab === "console");
   $("tab_btn_install").classList.toggle("active", tab === "install");
   $("tab_btn_console").classList.toggle("active", tab === "console");
   $("pane_install").classList.toggle("active", tab === "install");
@@ -82,7 +84,41 @@ function switchTab(tab) {
 
 $("tab_btn_install").onclick = () => switchTab("install");
 $("tab_btn_console").onclick = () => switchTab("console");
+
+function setInlineLogExpanded(expanded) {
+  $("inline_log_card").classList.toggle("is-collapsed", !expanded);
+  $("btn_toggle_inline_log").setAttribute("aria-expanded", String(expanded));
+  $("btn_toggle_inline_log").textContent = expanded ? "收合日誌" : "展開日誌";
+}
+$("btn_toggle_inline_log").onclick = () => {
+  setInlineLogExpanded($("inline_log_card").classList.contains("is-collapsed"));
+};
+setInlineLogExpanded(window.innerHeight >= 600);
+
 $("btn_goto_console").onclick = () => switchTab("console");
+
+$("btn_install_guide").onclick = () => {
+  $("install_guide").classList.add("is-open");
+  $("install_guide").setAttribute("role", "dialog");
+  $("install_guide").setAttribute("aria-modal", "true");
+  $("install_guide").setAttribute("aria-label", "沙盒架構與部署說明");
+  $("btn_close_install_guide").focus();
+};
+$("btn_close_install_guide").onclick = () => {
+  $("install_guide").classList.remove("is-open");
+  $("install_guide").removeAttribute("role");
+  $("install_guide").removeAttribute("aria-modal");
+  $("btn_install_guide").focus();
+};
+document.addEventListener("keydown", (event) => {
+  if (!$("install_guide").classList.contains("is-open")) return;
+  if (event.key === "Escape") $("btn_close_install_guide").click();
+  if (event.key === "Tab") {
+    event.preventDefault();
+    $("btn_close_install_guide").focus();
+  }
+});
+
 
 function row(label, value, ok) {
   const mark = ok === undefined ? "" : ok ? "正常：" : "未就緒：";
@@ -180,6 +216,7 @@ async function refreshConsole(silent = false) {
 
     // 渲染受管業務系統清單（排除 pm2-logrotate 模組）
     const apps = (ov.processes || []).filter((p) => !p.is_module && p.name !== "pm2-logrotate");
+    if (!currentInlineProc && apps.length > 0) currentInlineProc = apps[0];
     const onlineApps = apps.filter((p) => p.status === "online").length;
     const countBadge = $("con_app_count");
     countBadge.textContent = `${onlineApps} / ${apps.length} 系統在線`;
@@ -187,17 +224,17 @@ async function refreshConsole(silent = false) {
 
     const tbody = $("pm2_apps_tbody");
     if (!ov.installed) {
-      tbody.innerHTML = `<tr><td colspan="9" style="text-align:center; padding: 26px; color:#b45309;">
+      tbody.innerHTML = `<div class="pm2-empty" style="color:#b45309;">
         警告：此目錄尚未安裝沙盒 Node.js 與 PM2，請先切換至「沙盒安裝與部署」分頁執行安裝。
-      </td></tr>`;
+      </div>`;
     } else if (ov.pm2_error && apps.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="9" style="text-align:center; padding: 24px; color:#64748b;">
+      tbody.innerHTML = `<div class="pm2-empty">
         目前尚無活躍進程或 PM2 守護進程待喚醒（可點擊上方「還原快照」或「啟動服務」喚醒）
-      </td></tr>`;
+      </div>`;
     } else if (apps.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="9" style="text-align:center; padding: 24px; color:#64748b;">
+      tbody.innerHTML = `<div class="pm2-empty">
         目前沙盒 PM2 尚無受管業務系統（可點擊「還原快照」載入 dump.pm2，或開啟「沙盒終端」啟動系統）
-      </td></tr>`;
+      </div>`;
     } else {
       tbody.innerHTML = apps
         .map((app) => {
@@ -206,23 +243,16 @@ async function refreshConsole(silent = false) {
           const toggleAction = isOnline ? "stop" : "start";
           const toggleLabel = isOnline ? "停止" : "啟動";
           const safeName = escapeHtml(app.name);
-          return `<tr>
-            <td class="mono">${app.pm_id}</td>
-            <td><strong>${safeName}</strong></td>
-            <td><span class="status-pill ${pillClass}">${escapeHtml(app.status)}</span></td>
-            <td class="mono">${app.pid || "-"}</td>
-            <td class="mono">${app.cpu.toFixed(1)}%</td>
-            <td class="mono">${formatBytes(app.memory)}</td>
-            <td class="mono">${isOnline ? formatUptime(app.uptime) : "-"}</td>
-            <td class="mono">${app.restarts}</td>
-            <td style="text-align:right;">
-              <div class="btn-group" style="justify-content:flex-end; gap:4px;">
+          const selected = currentInlineProc && currentInlineProc.name === app.name;
+          return `<div class="pm2-card${selected ? " active-row" : ""}" >
+            <div class="pm2-card-header"><button class="pm2-select pm2-card-name" aria-label="選取 ${safeName} 的日誌" aria-pressed="${!!selected}">${safeName}</button><span class="status-pill ${pillClass}">${escapeHtml(app.status)}</span></div>
+            <div class="pm2-card-details"><span>ID ${app.pm_id}</span><span>PID ${app.pid || "-"}</span><span>CPU ${app.cpu.toFixed(1)}%</span><span>記憶體 ${formatBytes(app.memory)}</span><span>運行 ${isOnline ? formatUptime(app.uptime) : "-"}</span><span>重啟 ${app.restarts}</span></div>
+            <div class="btn-group">
                 <button class="btn-sm" data-pm2-action="${toggleAction}" data-pm2-target="${safeName}">${toggleLabel}</button>
                 <button class="btn-sm btn-green" data-pm2-action="restart" data-pm2-target="${safeName}"><svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5M5 9a7 7 0 0112-2l3 5M19 15a7 7 0 01-12 2l-3-5"/></svg> 重啟</button>
                 <button class="btn-sm primary" data-pm2-log="${safeName}"><svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 2h8l4 4v16H6zM14 2v5h4M9 11h6M9 15h6"/></svg> 日誌</button>
-              </div>
-            </td>
-          </tr>`;
+            </div>
+          </div>`;
         })
         .join("");
     }
@@ -248,16 +278,17 @@ async function refreshConsole(silent = false) {
   }
 }
 
-// 綁定受管系統表格內的動態按鈕事件
+// 綁定受管系統卡片內的動態按鈕事件
 $("pm2_apps_tbody").onclick = async (e) => {
-  const row = e.target.closest("tr");
+  const row = e.target.closest(".pm2-card");
   if (row) {
-    document.querySelectorAll("#pm2_apps_tbody tr").forEach(r => r.classList.remove("active-row"));
+    document.querySelectorAll("#pm2_apps_tbody .pm2-card").forEach(r => { r.classList.remove("active-row"); r.querySelector(".pm2-select").setAttribute("aria-pressed", "false"); });
     row.classList.add("active-row");
+    row.querySelector(".pm2-select").setAttribute("aria-pressed", "true");
   }
 
   const btn = e.target.closest("button");
-  if (!btn) {
+  if (!btn || btn.classList.contains("pm2-select")) {
     // 點擊非按鈕區域：自動切換下方內嵌日誌
     const targetName = row?.querySelector("[data-pm2-target]")?.getAttribute("data-pm2-target")
                     || row?.querySelector("[data-pm2-log]")?.getAttribute("data-pm2-log");
@@ -381,6 +412,15 @@ $("btn_open_logs_dir").onclick = async () => {
   const rootDir = $("root_dir").value.trim();
   const res = await invoke("open_logs_folder", { rootDir });
   setToast(res.message, res.success ? "success" : "error");
+};
+
+$("btn_console_guide").onclick = () => {
+  $("modal_console_guide").classList.add("active");
+  $("btn_close_console_guide").focus();
+};
+$("btn_close_console_guide").onclick = () => {
+  $("modal_console_guide").classList.remove("active");
+  $("btn_console_guide").focus();
 };
 
 $("btn_open_log_modal").onclick = () => openLogModal("", null);
