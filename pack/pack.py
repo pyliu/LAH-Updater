@@ -222,16 +222,17 @@ def resolve_project_dirs(script_dir):
         r"d:\DEV\lah-workspace\lah-messenger-server",
         r"d:\DEV\lah-messenger-server",
     ]
-    node_candidates = [
-        "C:/AppServ/node",
-        "D:/AppServ/node",
-        os.path.join(workspace_dir, "node"),
-    ]
-
     api_dir = next((p for p in api_candidates if os.path.isdir(p)), api_candidates[0])
     api8_dir = next((p for p in api8_candidates if os.path.isdir(p)), api8_candidates[0])
     fe_dir = next((p for p in fe_candidates if os.path.isdir(p)), fe_candidates[0])
     messenger_dir = next((p for p in messenger_candidates if os.path.isdir(p)), messenger_candidates[0])
+
+    node_candidates = [
+        os.path.join(fe_dir, "node"),
+        "C:/AppServ/node",
+        "D:/AppServ/node",
+        os.path.join(workspace_dir, "node"),
+    ]
     node_dir = next((p for p in node_candidates if os.path.isdir(p)), node_candidates[0])
     return (
         os.path.realpath(api_dir),
@@ -308,8 +309,65 @@ def collect_package_files(base_dir, include_patterns, exclude_patterns):
     return matched_files
 
 
-def resolve_node16_path():
-    """尋找相容之 Node 16 目錄（優先自 NVM 或 AppServ），避免高版本 Node ABI 不相容問題"""
+def find_dist_node_zip(script_dir=None, fe_dir=None, workspace_dir=None):
+    """在 dist 目錄中尋找已存在的 node.zip（優先尋找 base/node.zip）"""
+    candidates = []
+    # 1. 透過 pack.py 所在之 LAH-Updater/pack 尋找 LAH-Updater/dist
+    base_pack_dir = os.path.abspath(script_dir or os.path.dirname(__file__))
+    updater_dir = os.path.dirname(base_pack_dir) if os.path.basename(base_pack_dir).lower() == "pack" else base_pack_dir
+    candidates.extend([
+        os.path.join(updater_dir, "dist", "base", "node.zip"),
+        os.path.join(updater_dir, "dist", "node.zip"),
+    ])
+    # 2. 透過 fe_dir 向上尋找鄰近的 LAH-Updater/dist 或工作區 dist
+    if fe_dir:
+        parent_fe = os.path.dirname(os.path.abspath(fe_dir))
+        candidates.extend([
+            os.path.join(parent_fe, "LAH-Updater", "dist", "base", "node.zip"),
+            os.path.join(parent_fe, "LAH-Updater", "dist", "node.zip"),
+            os.path.join(parent_fe, "dist", "base", "node.zip"),
+            os.path.join(parent_fe, "dist", "node.zip"),
+        ])
+    # 3. 透過 workspace_dir 尋找
+    if workspace_dir:
+        candidates.extend([
+            os.path.join(workspace_dir, "LAH-Updater", "dist", "base", "node.zip"),
+            os.path.join(workspace_dir, "LAH-Updater", "dist", "node.zip"),
+            os.path.join(workspace_dir, "dist", "base", "node.zip"),
+            os.path.join(workspace_dir, "dist", "node.zip"),
+        ])
+    for c in candidates:
+        if c and os.path.isfile(c):
+            return os.path.realpath(c)
+    return None
+
+
+def resolve_node16_path(fe_dir=None, script_dir=None):
+    """尋找相容之 Node 16 目錄（優先自原始碼目錄 fe_dir/node，若無則自 dist 解壓，再依序探測 NVM 與 AppServ）"""
+    # 1. 優先檢查原始碼目錄（LAH-FE）下的 node
+    if fe_dir:
+        fe_node_dir = os.path.join(fe_dir, "node")
+        if os.path.isfile(os.path.join(fe_node_dir, "node.exe")):
+            return fe_node_dir
+
+        # 2. 若原始碼目錄下無 node.exe，自動自 dist 目錄尋找 node.zip 解壓縮至原始碼目錄
+        dist_zip = find_dist_node_zip(script_dir=script_dir, fe_dir=fe_dir)
+        if dist_zip and os.path.isfile(dist_zip):
+            print(f"         [自動還原] 原始碼目錄未發現 node.exe，正在自 dist 解壓 {os.path.basename(dist_zip)} 至：{fe_node_dir}")
+            try:
+                with zipfile.ZipFile(dist_zip, "r") as zf:
+                    # 判斷壓縮檔內部第一層是否自帶 node/ 前綴
+                    has_node_prefix = any(name.replace("\\", "/").startswith("node/") for name in zf.namelist())
+                    target_extract = fe_dir if has_node_prefix else fe_node_dir
+                    os.makedirs(fe_node_dir, exist_ok=True)
+                    zf.extractall(target_extract)
+                if os.path.isfile(os.path.join(fe_node_dir, "node.exe")):
+                    print(f"         [自動還原] 成功解壓 Node.js 綠色環境至：{fe_node_dir}")
+                    return fe_node_dir
+            except Exception as e:
+                print(f"         [WARN] 解壓縮 {dist_zip} 失敗：{e}")
+
+    # 3. 備援探測：自 NVM 或系統/AppServ 尋找 Node 16
     candidates = []
     local_app_data = os.environ.get("LOCALAPPDATA", "")
     if local_app_data:
@@ -342,7 +400,7 @@ def run_fe_build(fe_dir):
     build_env = os.environ.copy()
     build_env["NODE_ENV"] = "production"
 
-    node16_dir = resolve_node16_path()
+    node16_dir = resolve_node16_path(fe_dir=fe_dir)
     if node16_dir:
         print(f"         [環境隔離] 自動切換至相容 Node 16 執行期：{node16_dir}")
         build_env["PATH"] = node16_dir + os.pathsep + build_env.get("PATH", "")
