@@ -561,6 +561,21 @@ pub fn apply_apache_security_hardening(conf_path: &Path, root_dir: &Path, log_fn
         log_fn("  ✓ Apache httpd.conf 已套用 mpm_winnt 記憶體回收規則 (MaxConnectionsPerChild 10000 / MaxMemFree 2048)", "success");
     }
 
+    // 6. Node2Shell (CVE-2026-111497 Brotli OOB Write) Mitigation
+    let node2shell_block = build_node2shell_mitigation_block();
+    let existing_node2shell_re = Regex::new(&format!(
+        r"(?s){}.*?{}",
+        regex::escape(NODE2SHELL_BEGIN),
+        regex::escape(NODE2SHELL_END)
+    ))
+    .unwrap();
+    if existing_node2shell_re.is_match(&content) {
+        content = existing_node2shell_re.replace(&content, NoExpand(&node2shell_block)).to_string();
+    } else {
+        content.push_str(&format!("\n{}\n", node2shell_block));
+        log_fn("  ✓ Apache httpd.conf 已套用 CVE-2026-111497 Node2Shell 標頭剝除防護", "success");
+    }
+
     let changed = content != orig;
     if changed {
         let _ = fs::write(conf_path, content);
@@ -573,6 +588,20 @@ const SENSITIVE_DENY_BEGIN: &str = "# === Sensitive Files Deny (.env / SQLite / 
 const SENSITIVE_DENY_END: &str = "# === End Sensitive Files Deny ===";
 const MPM_WINNT_BEGIN: &str = "# === LAH MPM WinNT Memory Governance ===";
 const MPM_WINNT_END: &str = "# === End LAH MPM WinNT Memory Governance ===";
+const NODE2SHELL_BEGIN: &str = "# === Node2Shell (CVE-2026-111497 Brotli OOB Write) Mitigation ===";
+const NODE2SHELL_END: &str = "# === End Node2Shell Mitigation ===";
+
+fn build_node2shell_mitigation_block() -> String {
+    format!(
+        "{NODE2SHELL_BEGIN}\n\
+<IfModule headers_module>\n\
+    <If \"%{{HTTP:Content-Encoding}} =~ /br/i\">\n\
+        RequestHeader unset Content-Encoding\n\
+    </If>\n\
+</IfModule>\n\
+{NODE2SHELL_END}"
+    )
+}
 
 fn build_mpm_winnt_block() -> String {
     format!(
@@ -650,6 +679,7 @@ pub fn is_security_hardened(root_dir: &Path) -> bool {
     content.contains(PHP2SHELL_END)
         && content.contains(SENSITIVE_DENY_END)
         && content.contains(MPM_WINNT_END)
+        && content.contains(NODE2SHELL_END)
         && content.contains("ServerTokens Prod")
 }
 
@@ -753,6 +783,9 @@ mod tests {
         assert_eq!(first.matches(SENSITIVE_DENY_END).count(), 1);
         assert_eq!(first.matches(MPM_WINNT_BEGIN).count(), 1);
         assert_eq!(first.matches(MPM_WINNT_END).count(), 1);
+        assert_eq!(first.matches(NODE2SHELL_BEGIN).count(), 1);
+        assert_eq!(first.matches(NODE2SHELL_END).count(), 1);
+        assert!(first.contains("RequestHeader unset Content-Encoding"));
         assert!(first.contains("MaxConnectionsPerChild 10000"));
         assert!(first.contains("MaxMemFree             2048"));
         assert!(first.contains(r#"<FilesMatch "(?i)^\.(?!env\.example$)">"#));
@@ -776,6 +809,8 @@ mod tests {
         let healed = fs::read_to_string(&conf_path).unwrap();
         assert_eq!(healed.matches(SENSITIVE_DENY_BEGIN).count(), 1);
         assert_eq!(healed.matches(MPM_WINNT_BEGIN).count(), 1);
+        assert_eq!(healed.matches(NODE2SHELL_BEGIN).count(), 1);
+        assert_eq!(healed.matches(NODE2SHELL_END).count(), 1);
         assert_eq!(healed, first);
 
         let _ = fs::remove_dir_all(&temp_root);
@@ -822,6 +857,32 @@ mod tests {
         // 套用資安加固
         apply_apache_security_hardening(&conf_path, &temp_root, &|_, _| {});
         assert!(is_security_hardened(&temp_root));
+
+        let _ = fs::remove_dir_all(&temp_root);
+    }
+
+    #[test]
+    fn test_node2shell_mitigation_injection_and_idempotency() {
+        let temp_root = std::env::temp_dir().join(format!("lah_test_node2shell_{}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()));
+        fs::create_dir_all(&temp_root).unwrap();
+        let conf_path = temp_root.join("httpd.conf");
+        fs::write(&conf_path, "ServerRoot \"C:/x\"\n").unwrap();
+
+        let (ok, changed) = apply_apache_security_hardening(&conf_path, &temp_root, &|_, _| {});
+        assert!(ok);
+        assert!(changed);
+
+        let content = fs::read_to_string(&conf_path).unwrap();
+        assert_eq!(content.matches(NODE2SHELL_BEGIN).count(), 1);
+        assert_eq!(content.matches(NODE2SHELL_END).count(), 1);
+        assert!(content.contains(r#"<If "%{HTTP:Content-Encoding} =~ /br/i">"#));
+        assert!(content.contains("RequestHeader unset Content-Encoding"));
+
+        // 二次執行保持等冪且不產生變更
+        let (ok2, changed2) = apply_apache_security_hardening(&conf_path, &temp_root, &|_, _| {});
+        assert!(ok2);
+        assert!(!changed2);
+        assert_eq!(fs::read_to_string(&conf_path).unwrap(), content);
 
         let _ = fs::remove_dir_all(&temp_root);
     }

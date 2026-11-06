@@ -1,5 +1,5 @@
 use crate::health::is_port_listening;
-use crate::services::{is_pm2_service_installed, is_service_running, start_service, stop_service};
+use crate::services::{grant_service_account_acls, is_pm2_service_installed, is_service_running, start_service, stop_service};
 use crate::system::{clean_and_prepend_path_string, run_cmd_hidden, run_cmd_hidden_in_dir, run_powershell};
 use regex::Regex;
 use std::fs;
@@ -851,6 +851,7 @@ pub fn ensure_winsw_service_files(
 pub fn setup_pm2_autostart(root_dir: &Path, log_fn: &dyn Fn(&str, &str)) -> (bool, String) {
     stop_and_remove_legacy_pm2_services(log_fn);
 
+    grant_service_account_acls(root_dir, log_fn);
     log_fn("⚙️ 正在設定 PM2 開機自啟動服務 (LAH_PM2_Service)...", "info");
 
     let exe_path = match ensure_winsw_service_files(root_dir, log_fn) {
@@ -1521,5 +1522,12 @@ mod tests {
             ),
             Pm2ServicePostUpdateAction::RegisterAndStart
         );
+    }
+
+    #[test]
+    fn test_lah_service_xml_contains_localservice() {
+        let xml = String::from_utf8_lossy(LAH_SERVICE_XML);
+        assert!(xml.contains("<user>LocalService</user>"));
+        assert!(xml.contains("<domain>NT AUTHORITY</domain>"));
     }
 }

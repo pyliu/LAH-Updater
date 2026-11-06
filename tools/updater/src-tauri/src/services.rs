@@ -181,6 +181,29 @@ pub fn install_apache_service(apache_dir: &Path, svc_name: &str, log_fn: &dyn Fn
     }
 }
 
+pub fn grant_service_account_acls(root_dir: &Path, log_fn: &dyn Fn(&str, &str)) {
+    log_fn("🔒 正在為 NT AUTHORITY\\LocalService 配置沙盒目錄最小權限 ACL...", "info");
+    let target_subdirs = ["node", ".pm2", "logs", "LAH-NUXTJS"];
+    for sub in &target_subdirs {
+        let dir = root_dir.join(sub);
+        if sub == &".pm2" || sub == &"logs" {
+            let _ = fs::create_dir_all(&dir);
+        }
+        if dir.exists() {
+            let dir_str = dir.to_string_lossy();
+            let (ok, _, err) = run_cmd_hidden(
+                "icacls.exe",
+                &[&dir_str, "/grant", "NT AUTHORITY\\LocalService:(OI)(CI)M", "/T", "/Q"],
+            );
+            if ok {
+                log_fn(&format!("  ✓ 已授予 LocalService 沙盒權限: {}", dir_str), "info");
+            } else {
+                log_fn(&format!("  ⚠️ 配置 LocalService 權限警告 ({}): {}", dir_str, err), "warning");
+            }
+        }
+    }
+}
+
 pub fn is_file_locked(filepath: &Path) -> bool {
     if !filepath.exists() {
         return false;

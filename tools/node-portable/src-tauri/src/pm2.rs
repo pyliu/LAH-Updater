@@ -658,6 +658,10 @@ fn build_service_xml(root_dir: &Path) -> String {
   <executable>{root}\\node\\node.exe</executable>\r\n\
   <arguments>\"{root}\\node\\service\\pm2_service_runner.js\"</arguments>\r\n\
   <workingdirectory>{root}</workingdirectory>\r\n\
+  <serviceaccount>\r\n\
+    <domain>NT AUTHORITY</domain>\r\n\
+    <user>LocalService</user>\r\n\
+  </serviceaccount>\r\n\
   <env name=\"PATH\" value=\"{root}\\node;%PATH%\" />\r\n\
   <env name=\"PM2_HOME\" value=\"{root}\\.pm2\" />\r\n\
   <logmode>roll-by-size</logmode>\r\n\
@@ -673,7 +677,31 @@ fn build_service_xml(root_dir: &Path) -> String {
     )
 }
 
+pub fn grant_service_account_acls(root_dir: &Path, log_fn: &dyn Fn(&str, &str)) {
+    log_fn("🔒 正在為 NT AUTHORITY\\LocalService 配置沙盒目錄最小權限 ACL...", "info");
+    let target_subdirs = ["node", ".pm2", "logs", "LAH-NUXTJS"];
+    for sub in &target_subdirs {
+        let dir = root_dir.join(sub);
+        if sub == &".pm2" || sub == &"logs" {
+            let _ = fs::create_dir_all(&dir);
+        }
+        if dir.exists() {
+            let dir_str = dir.to_string_lossy();
+            let (ok, _, err) = run_cmd_hidden(
+                "icacls.exe",
+                &[&dir_str, "/grant", "NT AUTHORITY\\LocalService:(OI)(CI)M", "/T", "/Q"],
+            );
+            if ok {
+                log_fn(&format!("  ✓ 已授予 LocalService 沙盒權限: {}", dir_str), "info");
+            } else {
+                log_fn(&format!("  ⚠️ 配置 LocalService 權限警告 ({}): {}", dir_str, err), "warning");
+            }
+        }
+    }
+}
+
 pub fn setup_pm2_service(root_dir: &Path, log_fn: &dyn Fn(&str, &str)) -> bool {
+    grant_service_account_acls(root_dir, log_fn);
     log_fn(&format!("⚙️ 正在註冊開機自啟動服務 ({})...", SERVICE_ID), "info");
     let service_dir = root_dir.join("node").join("service");
     if let Err(e) = fs::create_dir_all(&service_dir) {
@@ -779,5 +807,13 @@ mod tests {
         assert_eq!(conf["pm2-logrotate"]["compress"], serde_json::json!(true));
 
         let _ = fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn test_build_service_xml_contains_localservice() {
+        let tmp = Path::new("C:\\AppServ");
+        let xml = build_service_xml(tmp);
+        assert!(xml.contains("<user>LocalService</user>"));
+        assert!(xml.contains("<domain>NT AUTHORITY</domain>"));
     }
 }

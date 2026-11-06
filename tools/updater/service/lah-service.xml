@@ -6,6 +6,11 @@
   <arguments>C:\AppServ\node\service\service_runner.js</arguments>
   <workingdirectory>C:\AppServ</workingdirectory>
 
+  <serviceaccount>
+    <domain>NT AUTHORITY</domain>
+    <user>LocalService</user>
+  </serviceaccount>
+
   <env name="PATH" value="C:\AppServ\node;%PATH%" />
   <env name="PM2_HOME" value="C:\AppServ\.pm2" />
 
