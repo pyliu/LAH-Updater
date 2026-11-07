@@ -1,6 +1,6 @@
 [package]
 name = "lah-backuper"
-version = "0.1.2"
+version = "0.1.3"
 description = "LAH 系統重要資料備份與還原工具"
 edition = "2021"
 
