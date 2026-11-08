@@ -482,6 +482,43 @@ endLocal & goto #_undefined_# 2>NUL || title %COMSPEC% & SET \"PATH=%dp0%;%PATH%
         }
     }
 
+    // 2.5 修補 ProcessUtils.js (防禦離線環境下 pm2-io-bpm APM 模組缺失導致子程序啟動崩潰)
+    let process_utils_candidates = [
+        node_dir
+            .join("node_modules")
+            .join("pm2")
+            .join("lib")
+            .join("ProcessUtils.js"),
+        node_dir
+            .join("node_modules")
+            .join("pm2-logrotate")
+            .join("node_modules")
+            .join("pm2")
+            .join("lib")
+            .join("ProcessUtils.js"),
+    ];
+
+    for pu_file in &process_utils_candidates {
+        if !pu_file.is_file() {
+            continue;
+        }
+        if let Ok(mut pu_txt) = fs::read_to_string(pu_file) {
+            let orig = pu_txt.clone();
+            if !pu_txt.contains("catch (_bpmErr)")
+                && pu_txt.contains("const pmx = require('../modules/pm2-io-bpm')")
+            {
+                pu_txt = pu_txt.replace(
+                    "const pmx = require('../modules/pm2-io-bpm')",
+                    "let pmx;\n      try {\n        pmx = require('../modules/pm2-io-bpm');\n      } catch (_bpmErr) {\n        return;\n      }",
+                );
+            }
+            if pu_txt != orig {
+                let _ = fs::write(pu_file, pu_txt);
+                patched_any = true;
+            }
+        }
+    }
+
     // 3. 修補 Daemon.js (避免在 Windows 對 tcp:// 或 pipe 執行 fs.chmod 報錯)
     let daemon_file = node_dir
         .join("node_modules")
@@ -1555,5 +1592,27 @@ mod tests {
         let xml = String::from_utf8_lossy(LAH_SERVICE_XML);
         assert!(xml.contains("<user>LocalService</user>"));
         assert!(xml.contains("<domain>NT AUTHORITY</domain>"));
+    }
+
+    #[test]
+    fn test_ensure_portable_pm2_patched_process_utils() {
+        let tmp = std::env::temp_dir().join(format!("test_pu_patch_{}", std::process::id()));
+        let _ = fs::remove_dir_all(&tmp);
+        let node_lib = tmp.join("node").join("node_modules").join("pm2").join("lib");
+        fs::create_dir_all(&node_lib).unwrap();
+        let pu_file = node_lib.join("ProcessUtils.js");
+        let sample = "module.exports = {\n  injectModules: function() {\n    if (process.env.pmx !== 'false') {\n      const pmx = require('../modules/pm2-io-bpm')\n      let conf = {}\n";
+        fs::write(&pu_file, sample).unwrap();
+
+        assert!(ensure_portable_pm2_patched(&tmp, &|_, _| {}));
+        let patched = fs::read_to_string(&pu_file).unwrap();
+        assert!(patched.contains("catch (_bpmErr)"));
+
+        // 冪等性檢驗：重複執行不重複替換
+        assert!(ensure_portable_pm2_patched(&tmp, &|_, _| {}));
+        let double_patched = fs::read_to_string(&pu_file).unwrap();
+        assert_eq!(patched, double_patched);
+
+        let _ = fs::remove_dir_all(&tmp);
     }
 }

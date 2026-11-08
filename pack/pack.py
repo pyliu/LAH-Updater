@@ -175,7 +175,7 @@ FE_NODE_MODULES_EXCLUDES = NODE_MODULES_EXCLUDES + [
 NODE_EXCLUDES = [
     r"node\node_modules\.cache",
     r"node\service",
-    r"service",
+    r"node\service\*",
     r"*\.cache\*",
     "*.log",
     "*.tmp",
