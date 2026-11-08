@@ -106,14 +106,12 @@ FE_INCLUDES = [
     "dist",
     "content",
     "scheduler",
-    "scripts",
     "static",
     ".env.example",
     "ecosystem.config.js",
     "nuxt.config.js",
     "package.json",
     "README*",
-    "start.bat",
     "system_block.jpg",
 ]
 
