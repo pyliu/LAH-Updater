@@ -195,7 +195,7 @@ pub fn ensure_terminal_started(root_dir: &Path) -> Result<(), String> {
 
     // 印出沙盒歡迎標題
     let welcome = format!(
-        "\r\n\x1b[1;36m============================================================\x1b[0m\r\n\x1b[1;32m  LAH 智慧控管專屬沙盒終端 (Node 16 / PM2 / Apache 2.4 / OCI)\x1b[0m\r\n\x1b[90m  - 隔離安裝目錄 : {}\x1b[0m\r\n\x1b[90m  - 私有 Node 目錄: {}\x1b[0m\r\n\x1b[90m  - 私有 PM2 目錄 : {}\x1b[0m\r\n\x1b[90m  - 私有 Apache   : {}\x1b[0m\r\n\x1b[1;36m============================================================\x1b[0m\r\n\r\n",
+        "\r\n\x1b[1;36m============================================================\x1b[0m\r\n\x1b[1;32m  LAH 智慧控管專屬沙盒終端 (Node 26 / PM2 / Apache 2.4 / OCI)\x1b[0m\r\n\x1b[90m  - 隔離安裝目錄 : {}\x1b[0m\r\n\x1b[90m  - 私有 Node 目錄: {}\x1b[0m\r\n\x1b[90m  - 私有 PM2 目錄 : {}\x1b[0m\r\n\x1b[90m  - 私有 Apache   : {}\x1b[0m\r\n\x1b[1;36m============================================================\x1b[0m\r\n\r\n",
         root_dir.to_string_lossy(),
         node_dir.to_string_lossy(),
         pm2_home.to_string_lossy(),

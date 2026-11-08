@@ -69,16 +69,16 @@ pub fn verify_all_services_health(root_dir: &Path, apache_dir: Option<&Path>, lo
         }
     }
 
-    // 3. 前端網站 Port 8080 (LAH-NUXTJS)
-    let has_nuxt = root_dir.join("LAH-NUXTJS").is_dir();
+    // 3. 前端網站 Port 8080 (LAH-NUXTJS，由 Apache VirtualHost *:8080 靜態託管)
+    let has_nuxt = root_dir.join("LAH-NUXTJS").is_dir() && has_apache;
     if has_nuxt {
         if wait_for_port(8080, 5.0, "127.0.0.1") {
-            reports.push("  • 智慧管控前端網站 (Port 8080): 正常監聽 (Online)".to_string());
-            log_fn("  前端網站 (Port 8080) 連線正常！", "success");
+            reports.push("  • 智慧管控前端網站 (Apache Port 8080): 正常監聽 (Online)".to_string());
+            log_fn("  前端網站 (Apache Port 8080) 連線正常！", "success");
         } else {
             all_ok = false;
-            reports.push("  • 智慧管控前端網站 (Port 8080): 啟動中或離線 (Port 8080 未就緒)".to_string());
-            log_fn("  前端網站 (Port 8080) 仍在啟動中或離線。", "info");
+            reports.push("  • 智慧管控前端網站 (Apache Port 8080): 啟動中或離線 (Port 8080 未就緒)".to_string());
+            log_fn("  前端網站 (Apache Port 8080) 仍在啟動中或離線。", "info");
         }
     }
 

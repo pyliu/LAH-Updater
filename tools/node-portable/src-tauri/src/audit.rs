@@ -82,7 +82,7 @@ pub fn resolve_monitored_targets(root_dir: &Path) -> (String, Vec<(u16, String)>
     if has_lah || user_procs.is_empty() {
         let system_title = "智慧控管與監控系統".to_string();
         let targets = vec![
-            (8080, "LAH-FE 智慧管控前端服務 (Nuxt)".to_string()),
+            (8080, "LAH-FE 智慧管控前端服務 (Apache 靜態託管)".to_string()),
             (8081, "LAH-WSS 即時通訊 WebSocket 服務".to_string()),
             (8082, "LAH-WSS 即時通訊附件 HTTP 服務".to_string()),
         ];

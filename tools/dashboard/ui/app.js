@@ -3566,14 +3566,13 @@ const handleSaveConfig = async () => {
       );
     } else if (res.related_service === 'pm2:fe') {
       showConfirmModal(
-        '組態儲存成功 (JS 語法正確)',
-        `${res.message}\n\n此組態隸屬 PM2 前端與排程服務。\n是否立即重新啟動前端與排程進程 (LAH-FE / LAH-SCHEDULER) 以套用新設定？`,
+        '組態儲存成功 (語法正確)',
+        `${res.message}\n\n此組態隸屬前端與排程服務。\n是否立即重新啟動排程進程 (LAH-SCHEDULER) 以同步更新 runtime-config.js 與套用新設定？`,
         async () => {
-          showToast('正在重啟前端與排程進程...');
-          await invoke('restart_pm2_process', { target: 'LAH-FE' });
+          showToast('正在重啟排程進程 (LAH-SCHEDULER)...');
           await invoke('restart_pm2_process', { target: 'LAH-SCHEDULER' });
           triggerBurstPolling(8000, 1500);
-          showToast('已送出前端與排程重啟指令');
+          showToast('已送出 LAH-SCHEDULER 重啟與組態同步指令');
         }
       );
     } else if (res.related_service === 'pm2:wss') {

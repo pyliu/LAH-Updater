@@ -197,7 +197,7 @@ set \"ROOT_DIR=%ROOT_DIR:~0,-1%\"\r\n\
 set \"NODE_DIR=%ROOT_DIR%\\node\"\r\n\
 set \"PM2_HOME=%ROOT_DIR%\\.pm2\"\r\n\
 set \"PATH=%NODE_DIR%;%PATH%\"\r\n\
-title LAH 智慧控管專屬終端 (Node 16 / PM2 沙盒環境)\r\n\
+title LAH 智慧控管專屬終端 (Node 26 / PM2 沙盒環境)\r\n\
 echo ============================================================\r\n\
 echo   LAH 智慧控管專屬維運終端 (沙盒環境 - 零全域污染)\r\n\
 echo   - 隔離 Node 目錄: %NODE_DIR%\r\n\

@@ -661,6 +661,256 @@ const MPM_WINNT_BEGIN: &str = "# === LAH MPM WinNT Memory Governance ===";
 const MPM_WINNT_END: &str = "# === End LAH MPM WinNT Memory Governance ===";
 const NODE2SHELL_BEGIN: &str = "# === Node2Shell (CVE-2026-111497 Brotli OOB Write) Mitigation ===";
 const NODE2SHELL_END: &str = "# === End Node2Shell Mitigation ===";
+const FE_VHOST_BEGIN: &str = "# === LAH-FE Static VirtualHost (:8080) ===";
+const FE_VHOST_END: &str = "# === End LAH-FE Static VirtualHost ===";
+
+pub fn sync_fe_runtime_config(root_dir: &Path, log_fn: &dyn Fn(&str, &str)) -> bool {
+    let fe_dir = if root_dir.join("LAH-NUXTJS").is_dir() {
+        root_dir.join("LAH-NUXTJS")
+    } else if root_dir.join("LAH-FE").is_dir() {
+        root_dir.join("LAH-FE")
+    } else {
+        return false;
+    };
+
+    let mut env_map = serde_json::Map::new();
+    for env_candidate in &[fe_dir.join(".env"), fe_dir.join(".env.example")] {
+        if let Ok(raw) = fs::read_to_string(env_candidate) {
+            for line in raw.lines() {
+                let trimmed = line.trim();
+                if trimmed.is_empty() || trimmed.starts_with('#') {
+                    continue;
+                }
+                if let Some(eq_idx) = trimmed.find('=') {
+                    let key = trimmed[..eq_idx].trim();
+                    let mut val = trimmed[eq_idx + 1..].trim();
+                    if let Some(hash_idx) = val.find(" #") {
+                        val = val[..hash_idx].trim();
+                    }
+                    val = val.trim_matches(|c| c == '"' || c == '\'');
+                    if !key.is_empty() {
+                        env_map.insert(key.to_string(), serde_json::Value::String(val.to_string()));
+                    }
+                }
+            }
+            break;
+        }
+    }
+
+    let get_str = |k: &str, default: &str| -> String {
+        env_map
+            .get(k)
+            .and_then(|v| v.as_str())
+            .filter(|s| !s.is_empty())
+            .unwrap_or(default)
+            .to_string()
+    };
+    let get_bool = |k: &str| -> bool {
+        env_map
+            .get(k)
+            .and_then(|v| v.as_str())
+            .map(|s| s.eq_ignore_ascii_case("true") || s == "1")
+            .unwrap_or(false)
+    };
+    let get_f64 = |k: &str, default: f64| -> f64 {
+        env_map
+            .get(k)
+            .and_then(|v| v.as_str())
+            .and_then(|s| s.parse::<f64>().ok())
+            .unwrap_or(default)
+    };
+
+    let pkg_version = fs::read_to_string(fe_dir.join("package.json"))
+        .ok()
+        .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok())
+        .and_then(|v| v.get("version").and_then(|ver| ver.as_str()).map(|s| s.to_string()))
+        .unwrap_or_else(|| "1.0.0".to_string());
+
+    let is_dev = get_str("NODE_ENV", "production") != "production";
+    let runtime_cfg = serde_json::json!({
+        "isDev": is_dev,
+        "pkgVersion": pkg_version,
+        "websocketHost": get_str("WEBSOCKET_HOST", "127.0.0.1"),
+        "websocketPort": get_str("WEBSOCKET_PORT", "8081"),
+        "TestR": get_bool("TEST_RESULT"),
+        "monitor": {
+            "capacity": {
+                "threshold": get_f64("MONITOR_CAPACITY_THRESHOLD", 70.0)
+            },
+            "host": {
+                "L05": get_str("MONITOR_HOST_L05", "http://220.1.33.2:8080")
+            },
+            "srmas": {
+                "host": {
+                    "ip": get_str("SRMAS_HOST_IP", "220.1.34.253"),
+                    "port": get_str("SRMAS_HOST_PORT", "443")
+                },
+                "warning": {
+                    "cpu": {
+                        "temperature": get_f64("SRMAS_WARNING_CPU_TEMP", 70.0),
+                        "utilization": get_f64("SRMAS_WARNING_CPU_USAGE", 90.0)
+                    },
+                    "memory": {
+                        "utilization": get_f64("SRMAS_WARNING_RMA_USAGE", 95.0)
+                    },
+                    "disk": {
+                        "utilization": get_f64("SRMAS_WARNING_DISK_USAGE", 90.0)
+                    }
+                }
+            }
+        },
+        "axios": {
+            "browserBaseURL": ""
+        },
+        "rawEnv": env_map
+    });
+
+    let js_content = format!(
+        "// 自動由 .env 產出之執行期組態檔 (請勿手動修改，修改 .env 後由 LAH-SCHEDULER 或 LAH-Updater 自動同步)\nwindow.__LAH_CONFIG__ = {};\n",
+        serde_json::to_string_pretty(&runtime_cfg).unwrap_or_else(|_| "{}".to_string())
+    );
+
+    let dist_dir = fe_dir.join("dist");
+    let _ = fs::create_dir_all(&dist_dir);
+    let target_js = dist_dir.join("runtime-config.js");
+    let current = fs::read_to_string(&target_js).unwrap_or_default();
+    if current != js_content {
+        if fs::write(&target_js, &js_content).is_ok() {
+            log_fn(
+                &format!("  已同步前端執行期組態檔: {}", target_js.display()),
+                "success",
+            );
+            return true;
+        }
+    }
+    false
+}
+
+pub fn configure_apache_fe_static_vhost(
+    apache_dir: &Path,
+    root_dir: &Path,
+    log_fn: &dyn Fn(&str, &str),
+) -> (bool, bool) {
+    sync_fe_runtime_config(root_dir, log_fn);
+
+    let conf_path = apache_dir.join("conf").join("httpd.conf");
+    if !conf_path.is_file() {
+        return (false, false);
+    }
+
+    let Ok(mut content) = fs::read_to_string(&conf_path) else {
+        return (false, false);
+    };
+    let orig = content.clone();
+
+    let fe_dir = if root_dir.join("LAH-FE").is_dir() && !root_dir.join("LAH-NUXTJS").is_dir() {
+        root_dir.join("LAH-FE")
+    } else {
+        root_dir.join("LAH-NUXTJS")
+    };
+    let fe_dist_dir = fe_dir.join("dist");
+    let _ = fs::create_dir_all(&fe_dist_dir);
+    let _ = fs::create_dir_all(root_dir.join("www").join("api"));
+
+    let fe_dist_fwd = fe_dist_dir.to_string_lossy().replace('\\', "/");
+    let www_fwd = root_dir.join("www").to_string_lossy().replace('\\', "/");
+    let api_fwd = root_dir.join("LAH-API").to_string_lossy().replace('\\', "/");
+
+    // 1. 確保必要模組啟用
+    for m in &["headers_module", "rewrite_module", "alias_module"] {
+        let pat = format!(
+            r#"(?m)^\s*#\s*(LoadModule\s+{}\s+modules/mod_{}\.so)"#,
+            m,
+            m.trim_end_matches("_module")
+        );
+        if let Ok(re) = Regex::new(&pat) {
+            content = re.replace(&content, "$1").to_string();
+        }
+    }
+
+    // 2. 先移除區塊外可能散落的 Listen 8080，統一納入 FE_VHOST 標記區塊管理以維持等冪性
+    let existing_vhost_re = Regex::new(&format!(
+        r"(?s){}.*?{}",
+        regex::escape(FE_VHOST_BEGIN),
+        regex::escape(FE_VHOST_END)
+    ))
+    .unwrap();
+    let content_without_block = existing_vhost_re.replace_all(&content, "").to_string();
+    let re_stray_listen8080 = Regex::new(r#"(?m)^\s*Listen\s+(?:[0-9.]+:)?8080\s*\r?\n"#).unwrap();
+    if re_stray_listen8080.is_match(&content_without_block) {
+        content = re_stray_listen8080.replace_all(&content, "").to_string();
+    }
+
+    let vhost_block = format!(
+        "{FE_VHOST_BEGIN}\n\
+Listen 8080\n\
+<VirtualHost *:8080>\n\
+    ServerName localhost:8080\n\
+    DocumentRoot \"{fe_dist_fwd}\"\n\
+\n\
+    # 本機 PHP 7.4 (www) 與 PHP 8.5 (LAH-API) 路由別名映射\n\
+    Alias /api \"{www_fwd}/api\"\n\
+    Alias /img \"{www_fwd}\"\n\
+    Alias /legacy \"{www_fwd}\"\n\
+    Alias /LAH-API/api \"{api_fwd}/v1\"\n\
+    Alias /lah-api/api \"{api_fwd}/v1\"\n\
+    Alias /LAH-API \"{api_fwd}\"\n\
+    Alias /lah-api \"{api_fwd}\"\n\
+    Alias /get_user_img.php \"{api_fwd}/v1/get_user_img.php\"\n\
+    Alias /get_carousel_img.php \"{api_fwd}/v1/get_carousel_img.php\"\n\
+    Alias /get_blob_img.php \"{api_fwd}/v1/get_blob_img.php\"\n\
+    Alias /get_adm_reserve_pdf.php \"{api_fwd}/v1/get_adm_reserve_pdf.php\"\n\
+    Alias /get_reg_foreigner_pdf.php \"{api_fwd}/v1/get_reg_foreigner_pdf.php\"\n\
+    Alias /get_sur_destruction_pdf.php \"{api_fwd}/v1/get_sur_destruction_pdf.php\"\n\
+\n\
+    <IfModule rewrite_module>\n\
+        RewriteEngine On\n\
+        RewriteRule ^/(l05proxy|smsproxy|srmas-weathermap)/(.*)$ /api/proxy.php?_target=$1&_path=$2 [QSA,PT,L]\n\
+    </IfModule>\n\
+\n\
+    <Directory \"{fe_dist_fwd}\">\n\
+        Header set Access-Control-Allow-Origin \"*\"\n\
+        Options -Indexes +FollowSymLinks\n\
+        AllowOverride None\n\
+        Require all granted\n\
+        DirectoryIndex index.html\n\
+        <FilesMatch \"^(index\\.html|runtime-config\\.js)$\">\n\
+            <IfModule headers_module>\n\
+                Header set Cache-Control \"no-store, no-cache, must-revalidate, max-age=0\"\n\
+                Header set Pragma \"no-cache\"\n\
+            </IfModule>\n\
+        </FilesMatch>\n\
+        <IfModule rewrite_module>\n\
+            RewriteEngine On\n\
+            RewriteRule ^(l05proxy|smsproxy|srmas-weathermap)/(.*)$ /api/proxy.php?_target=$1&_path=$2 [QSA,L]\n\
+            RewriteCond %{{REQUEST_FILENAME}} !-f\n\
+            RewriteCond %{{REQUEST_FILENAME}} !-d\n\
+            RewriteCond %{{REQUEST_URI}} !^/(api|LAH-API|lah-api|img|legacy|l05proxy|smsproxy|srmas-weathermap|get_)\n\
+            RewriteRule ^ /index.html [L]\n\
+        </IfModule>\n\
+    </Directory>\n\
+</VirtualHost>\n\
+{FE_VHOST_END}"
+    );
+
+    if existing_vhost_re.is_match(&content) {
+        content = existing_vhost_re
+            .replace(&content, NoExpand(&vhost_block))
+            .to_string();
+    } else {
+        content.push_str(&format!("\n{}\n", vhost_block));
+        log_fn(
+            "  已向 Apache httpd.conf 掛載 LAH-FE 靜態網站 VirtualHost (*:8080) 與 SPA 路由規則",
+            "success",
+        );
+    }
+
+    let changed = content != orig;
+    if changed {
+        let _ = fs::write(&conf_path, content);
+    }
+    (true, changed)
+}
 
 fn build_node2shell_mitigation_block() -> String {
     format!(
@@ -1035,6 +1285,58 @@ fn test_node2shell_mitigation_injection_and_idempotency() {
             r#"CustomLog "|bin/rotatelogs.exe -l  {}/access.%Y.%m.%d.log 100M" combined"#,
             unified_logs_fwd
         )));
+
+        let _ = fs::remove_dir_all(&temp_root);
+    }
+
+    #[test]
+    fn test_configure_apache_fe_static_vhost_and_runtime_config_idempotent() {
+        let temp_root = std::env::temp_dir().join(format!(
+            "lah_test_fe_vhost_{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let apache_dir = temp_root.join("Apache24");
+        let conf_dir = apache_dir.join("conf");
+        let fe_dir = temp_root.join("LAH-NUXTJS");
+        fs::create_dir_all(&conf_dir).unwrap();
+        fs::create_dir_all(&fe_dir).unwrap();
+        fs::write(
+            fe_dir.join(".env"),
+            "WEBSOCKET_HOST=220.1.35.95\nWEBSOCKET_PORT=8081\nMONITOR_HOST_L05=http://220.1.33.2:8080\n",
+        )
+        .unwrap();
+        fs::write(fe_dir.join("package.json"), r#"{"version":"2.5.0"}"#).unwrap();
+
+        let conf_path = conf_dir.join("httpd.conf");
+        fs::write(
+            &conf_path,
+            "Define SRVROOT \"C:/AppServ/Apache24\"\nListen 80\n#LoadModule rewrite_module modules/mod_rewrite.so\nDocumentRoot \"C:/AppServ/www\"\n",
+        )
+        .unwrap();
+
+        let (ok, changed) = configure_apache_fe_static_vhost(&apache_dir, &temp_root, &|_, _| {});
+        assert!(ok);
+        assert!(changed);
+
+        let rt_js = fs::read_to_string(fe_dir.join("dist").join("runtime-config.js")).unwrap();
+        assert!(rt_js.contains("window.__LAH_CONFIG__"));
+        assert!(rt_js.contains("220.1.35.95"));
+        assert!(rt_js.contains("2.5.0"));
+
+        let conf1 = fs::read_to_string(&conf_path).unwrap();
+        assert_eq!(conf1.matches(FE_VHOST_BEGIN).count(), 1);
+        assert_eq!(conf1.matches(FE_VHOST_END).count(), 1);
+        assert_eq!(conf1.matches("Listen 8080").count(), 1);
+        assert!(conf1.contains("<VirtualHost *:8080>"));
+        assert!(conf1.contains("/api/proxy.php?_target=$1&_path=$2"));
+
+        let (ok2, changed2) = configure_apache_fe_static_vhost(&apache_dir, &temp_root, &|_, _| {});
+        assert!(ok2);
+        assert!(!changed2);
+        assert_eq!(fs::read_to_string(&conf_path).unwrap(), conf1);
 
         let _ = fs::remove_dir_all(&temp_root);
     }

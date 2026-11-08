@@ -51,15 +51,8 @@ const DEFAULT_PACKAGES = [
   {
     id: "lah_nuxtjs",
     name: "LAH-NUXTJS.zip",
-    title: "前端網站 更新包 (LAH-NUXTJS.zip)",
+    title: "前端網站 靜態更新包 (LAH-NUXTJS.zip)",
     rel_target: "LAH-NUXTJS",
-    is_base_env: false,
-  },
-  {
-    id: "lah_nuxtjs_modules",
-    name: "LAH-NUXTJS-node_modules.zip",
-    title: "└─ 前端網站 核心套件 (LAH-NUXTJS-node_modules.zip)",
-    rel_target: "LAH-NUXTJS\\node_modules",
     is_base_env: false,
   },
   {
@@ -88,7 +81,7 @@ const DEFAULT_PACKAGES = [
 const PKG_CATEGORIES = {
   base: ['apache24', 'php7', 'php85', 'vcredist', 'node'],
   patch: ['www', 'lah_api', 'lah_nuxtjs', 'messenger'],
-  node_modules: ['lah_nuxtjs_modules', 'messenger_modules'],
+  node_modules: ['messenger_modules'],
 };
 
 let state = {
@@ -546,7 +539,7 @@ document.addEventListener("DOMContentLoaded", () => {
   // 情境快選：原地升級 (精準勾選 PHP8.5 + VC++ + Node + LAH-API，並套用原機升級標準服務配置)
   document.getElementById("btn_preset_inplace_upgrade")?.addEventListener("click", () => {
     // 1. 精準勾選原地升級 4 大套件：php85, vcredist, node, lah_api
-    const inplaceIds = ["php85", "vcredist", "node", "lah_api"];
+    const inplaceIds = ["php85", "vcredist", "node", "www", "lah_api", "lah_nuxtjs"];
     state.packages.forEach((pkg) => {
       const shouldCheck = inplaceIds.includes(pkg.id) && pkg.exists;
       pkg.checked = shouldCheck;

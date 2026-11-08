@@ -273,7 +273,7 @@ set \"APACHE_DIR=%ROOT_DIR%\\Apache24\"\r\n\
 set \"OCI_DIR=%ROOT_DIR%\\instantclient_11_2\"\r\n\
 set \"PM2_HOME=%ROOT_DIR%\\.pm2\"\r\n\
 set \"PATH=%NODE_DIR%;%APACHE_DIR%\\bin;%OCI_DIR%;%PATH%\"\r\n\
-title LAH 智慧控管專屬終端 (Node 16 / PM2 / Apache 2.4 沙盒環境)\r\n\
+title LAH 智慧控管專屬終端 (Node 26 / PM2 / Apache 2.4 沙盒環境)\r\n\
 echo ============================================================\r\n\
 echo   LAH 智慧控管專屬維運終端 (沙盒環境 - 零全域污染)\r\n\
 echo   - 隔離 Node 目錄  : %NODE_DIR%\r\n\

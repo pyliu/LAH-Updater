@@ -38,7 +38,7 @@ LAH-Updater/
 │   │   ├── build.py / build.bat# 一鍵編譯發布腳本 (輸出至 dist/)
 │   │   └── README.md
 │   ├── node-portable/      # 智慧控管與監控系統 - Node 沙盒監管工具 (Tauri 2 / Rust)
-│   │   ├── src-tauri/      # Rust 核心 (Node 16.20.2 解壓、零全域污染沙盒隔離、WinSW 註冊、pm2-logrotate 預載)
+│   │   ├── src-tauri/      # Rust 核心 (Node 26.x 解壓、零全域污染沙盒隔離、WinSW 註冊、pm2-logrotate 預載)
 │   │   ├── ui/             # 純靜態 HTML/JS 介面 (無捲軸緊緻版面、Unicode 4.0 符號向下相容)
 │   │   ├── service/        # WinSW 服務模板與 pm2_service_runner.js
 │   │   ├── build.py / build.bat# 一鍵編譯發布腳本 (輸出至 dist/)
@@ -74,7 +74,7 @@ LAH-Updater/
 ### 3.3 雙層同名目錄防呆對齊 (`detect_strip_prefix`)
 解壓壓縮包時必須檢測頂層結構，若含有同名單一資料夾（例如 `www.zip` 內含 `www/`），自動剔除外層前綴對齊解壓，徹底防範雙層巢狀目錄。
 
-### 3.4 Node 16 與 PM2 零全域污染沙盒隔離與殘留模組淨化
+### 3.4 Node 26 與 PM2 零全域污染沙盒隔離與殘留模組淨化
 - **零全域環境變數污染**：工具嚴禁將 `<root_dir>\node` 或 `PM2_HOME` 寫入系統 (`HKLM`) 或使用者 (`HKCU`) 全域登錄檔，並於執行時主動清理舊版殘留之登錄檔路徑，確保一般 CMD 輸入 `node --version` 完全不受污染。日常維運統一使用自動生成於安裝根目錄之專屬沙盒終端 `lah-cmd.bat`。
 - **WinSW 服務實體路徑與私有變數綁定**：`lah-service.xml` (`LAH_PM2_Service`) 直接鎖定 `<root_dir>\node\node.exe` 與私有 `PM2_HOME = <root_dir>\.pm2`，杜絕外部全域 Node 22+ 升級干擾。
 - **殘留模組清除**：`wire_bundled_pm2_logrotate` 自動清除 `module_conf.json` 中之舊版 `@jessety/pm2-logrotate` 與磁碟不存在之幽靈模組，並繼承舊有輪替設定。

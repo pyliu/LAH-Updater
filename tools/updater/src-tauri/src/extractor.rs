@@ -115,7 +115,7 @@ pub const ALL_PACKAGE_SPECS: &[PackageSpec] = &[
     PackageSpec {
         id: "lah_nuxtjs",
         name: "LAH-NUXTJS.zip",
-        title: "前端網站 更新包 (LAH-NUXTJS.zip)",
+        title: "前端網站 靜態更新包 (LAH-NUXTJS.zip)",
         pattern: None,
         alt_names: &[],
         rel_target: "LAH-NUXTJS",
@@ -124,19 +124,6 @@ pub const ALL_PACKAGE_SPECS: &[PackageSpec] = &[
         is_base_env: false,
         is_nodejs: true,
         is_sub_package: false,
-    },
-    PackageSpec {
-        id: "lah_nuxtjs_modules",
-        name: "LAH-NUXTJS-node_modules.zip",
-        title: "└─ 前端網站 核心套件 (LAH-NUXTJS-node_modules.zip)",
-        pattern: None,
-        alt_names: &["LAH-FE-node_modules.zip", "lah-fe-node_modules.zip"],
-        rel_target: r"LAH-NUXTJS\node_modules",
-        expected_folder: "node_modules",
-        alt_folders: &["lah-nuxtjs-node_modules", "LAH-NUXTJS-node_modules", "lah-fe-node_modules", "LAH-FE-node_modules"],
-        is_base_env: false,
-        is_nodejs: true,
-        is_sub_package: true,
     },
     PackageSpec {
         id: "messenger",

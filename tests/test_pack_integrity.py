@@ -80,7 +80,7 @@ class TestPackIntegrity(unittest.TestCase):
                 """)
             # 建立一份故意漏掉 server-middleware 的待打包檔案清單（重現歷史線上事故）
             mock_files = [
-                (os.path.join(tmpdir, ".nuxt", "App.js"), ".nuxt/App.js"),
+                (os.path.join(tmpdir, "dist", "index.html"), "dist/index.html"),
                 (os.path.join(tmpdir, "nuxt.config.js"), "nuxt.config.js"),
                 (os.path.join(tmpdir, "ecosystem.config.js"), "ecosystem.config.js"),
             ]
@@ -120,12 +120,12 @@ class TestPackIntegrity(unittest.TestCase):
         """驗證 post-pack ZIP 校驗能攔截缺少中介軟體的破損更新包並自動刪除"""
         with tempfile.TemporaryDirectory() as tmpdir:
             test_zip = os.path.join(tmpdir, "corrupted-fe.zip")
-            # 建立一個缺少 server-middleware 的破損 ZIP
+            # 建立一個缺少 scheduler/server.js 與 dist/index.html 的破損 ZIP
             with zipfile.ZipFile(test_zip, "w") as zf:
                 zf.writestr("nuxt.config.js", "// mock")
                 zf.writestr("ecosystem.config.js", "// mock")
                 zf.writestr("package.json", "{}")
-                zf.writestr(".nuxt/dummy.txt", "dummy")
+                zf.writestr("dist/dummy.txt", "dummy")
             
             with self.assertRaises(PackIntegrityError) as ctx:
                 verify_zip_integrity(test_zip, "fe", self.fe_dir)

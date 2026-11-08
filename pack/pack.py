@@ -101,9 +101,9 @@ API8_EXCLUDES = [
     "run_tests.bat"
 ]
 
-# 對應 zip_fe.txt（基底目錄：LAH-FE）
+# 對應 zip_fe.txt（基底目錄：LAH-FE，靜態化後打包 dist/ 子目錄）
 FE_INCLUDES = [
-    ".nuxt",
+    "dist",
     "content",
     "scheduler",
     "scripts",
@@ -342,8 +342,8 @@ def find_dist_node_zip(script_dir=None, fe_dir=None, workspace_dir=None):
     return None
 
 
-def resolve_node16_path(fe_dir=None, script_dir=None):
-    """尋找相容之 Node 16 目錄（優先自原始碼目錄 fe_dir/node，若無則自 dist 解壓，再依序探測 NVM 與 AppServ）"""
+def resolve_build_node_path(fe_dir=None, script_dir=None):
+    """尋找編譯用 Node 目錄（優先自原始碼目錄 fe_dir/node，若無則自 dist 解壓，再探測 AppServ；皆無則回傳 None 沿用系統 PATH）"""
     # 1. 優先檢查原始碼目錄（LAH-FE）下的 node
     if fe_dir:
         fe_node_dir = os.path.join(fe_dir, "node")
@@ -367,15 +367,8 @@ def resolve_node16_path(fe_dir=None, script_dir=None):
             except Exception as e:
                 print(f"         [WARN] 解壓縮 {dist_zip} 失敗：{e}")
 
-    # 3. 備援探測：自 NVM 或系統/AppServ 尋找 Node 16
+    # 3. 備援探測：自 AppServ 尋找綠色 Node
     candidates = []
-    local_app_data = os.environ.get("LOCALAPPDATA", "")
-    if local_app_data:
-        nvm_dir = os.path.join(local_app_data, "nvm")
-        if os.path.isdir(nvm_dir):
-            for entry in sorted(os.listdir(nvm_dir), reverse=True):
-                if entry.startswith("v16.") and os.path.isdir(os.path.join(nvm_dir, entry)):
-                    candidates.append(os.path.join(nvm_dir, entry))
     candidates.extend([
         "C:/AppServ/node",
         "D:/AppServ/node",
@@ -387,9 +380,9 @@ def resolve_node16_path(fe_dir=None, script_dir=None):
 
 
 def run_fe_build(fe_dir):
-    """進入 LAH-FE 執行 yarn build 並等待完成"""
+    """進入 LAH-FE 執行 yarn generate 產出純靜態網站 (dist/) 並等待完成"""
     print("-" * 60)
-    print(f"[Step 1] 正在執行前端編譯 (yarn build)...")
+    print(f"[Step 1] 正在執行前端靜態編譯 (yarn generate)...")
     print(f"         目標目錄：{fe_dir}")
     print("-" * 60)
 
@@ -400,25 +393,31 @@ def run_fe_build(fe_dir):
     build_env = os.environ.copy()
     build_env["NODE_ENV"] = "production"
 
-    node16_dir = resolve_node16_path(fe_dir=fe_dir)
-    if node16_dir:
-        print(f"         [環境隔離] 自動切換至相容 Node 16 執行期：{node16_dir}")
-        build_env["PATH"] = node16_dir + os.pathsep + build_env.get("PATH", "")
+    # Nuxt 2 / Webpack 4 於 Node 17+ 需 OpenSSL legacy provider (md4 雜湊)
+    node_opts = build_env.get("NODE_OPTIONS", "")
+    if "--openssl-legacy-provider" not in node_opts:
+        build_env["NODE_OPTIONS"] = (node_opts + " --openssl-legacy-provider").strip()
+
+    build_node_dir = resolve_build_node_path(fe_dir=fe_dir)
+    if build_node_dir:
+        print(f"         [環境隔離] 自動切換至綠色 Node 執行期：{build_node_dir}")
+        build_env["PATH"] = build_node_dir + os.pathsep + build_env.get("PATH", "")
 
     start_time = time.time()
-    ret = subprocess.run("yarn build", cwd=fe_dir, env=build_env, shell=True)
+    ret = subprocess.run("yarn generate", cwd=fe_dir, env=build_env, shell=True)
     elapsed = time.time() - start_time
 
     if ret.returncode != 0:
-        print(f"[ERROR] LAH-FE `yarn build` 執行失敗（回傳碼：{ret.returncode}），已中止後續打包！")
+        print(f"[ERROR] LAH-FE `yarn generate` 執行失敗（回傳碼：{ret.returncode}），已中止後續打包！")
         return False
 
-    nuxt_dir = os.path.join(fe_dir, ".nuxt")
-    if not os.path.isdir(nuxt_dir):
-        print(f"[ERROR] 編譯完成後找不到 .nuxt 目錄：{nuxt_dir}")
+    dist_dir = os.path.join(fe_dir, "dist")
+    dist_index = os.path.join(dist_dir, "index.html")
+    if not os.path.isdir(dist_dir) or not os.path.isfile(dist_index):
+        print(f"[ERROR] 編譯完成後找不到靜態輸出 dist/index.html：{dist_index}")
         return False
 
-    print(f"[OK] 前端 `yarn build` 編譯完成（耗時 {elapsed:.1f} 秒）。")
+    print(f"[OK] 前端 `yarn generate` 靜態編譯完成（耗時 {elapsed:.1f} 秒）。")
     return True
 
 
@@ -543,12 +542,12 @@ def verify_zip_integrity(zip_path, package_type, base_dir=None):
 
     missing = []
     if package_type == "fe":
-        for req in ["nuxt.config.js", "ecosystem.config.js", "package.json"]:
+        for req in ["dist/index.html", "ecosystem.config.js", "package.json"]:
             if req.lower() not in lower_names:
                 missing.append(req)
-        has_nuxt = any(n.startswith(".nuxt/") for n in lower_names)
-        if not has_nuxt:
-            missing.append(".nuxt 目錄")
+        has_dist = any(n.startswith("dist/") for n in lower_names)
+        if not has_dist:
+            missing.append("dist 目錄")
         if base_dir:
             required_deps, _ = extract_nuxt_runtime_dependencies(base_dir)
             for dep in required_deps:
@@ -608,14 +607,19 @@ def prepare_server_prod_modules(messenger_dir, stage_name="lah-wss-prod-modules"
         if ret.returncode != 0:
             print(f"[WARN] yarn 安裝失敗（回傳碼 {ret.returncode}），退回完整打包。")
             return None
-        # 複製 better-sqlite3 已編譯之原生模組
-        native_src = os.path.join(src_mod, "better-sqlite3", "build")
-        native_dst = os.path.join(stage, "node_modules", "better-sqlite3", "build")
-        if os.path.isdir(os.path.join(stage, "node_modules", "better-sqlite3")):
-            if not os.path.isfile(os.path.join(native_src, "Release", "better_sqlite3.node")):
-                print("[WARN] 來源 node_modules 缺少 better_sqlite3.node，退回完整打包。")
+        # 複製 better-sqlite3 已編譯或預編譯之原生模組 (build/ 或 prebuilds/)
+        bs_src = os.path.join(src_mod, "better-sqlite3")
+        bs_dst = os.path.join(stage, "node_modules", "better-sqlite3")
+        if os.path.isdir(bs_dst):
+            has_build = os.path.isfile(os.path.join(bs_src, "build", "Release", "better_sqlite3.node"))
+            has_prebuilds = os.path.isdir(os.path.join(bs_src, "prebuilds"))
+            if not has_build and not has_prebuilds:
+                print("[WARN] 來源 node_modules 缺少 better-sqlite3 原生二進位檔，退回完整打包。")
                 return None
-            shutil.copytree(native_src, native_dst, dirs_exist_ok=True)
+            if has_build:
+                shutil.copytree(os.path.join(bs_src, "build"), os.path.join(bs_dst, "build"), dirs_exist_ok=True)
+            if has_prebuilds:
+                shutil.copytree(os.path.join(bs_src, "prebuilds"), os.path.join(bs_dst, "prebuilds"), dirs_exist_ok=True)
         return stage
     except Exception as e:
         print(f"[WARN] 產生精簡 node_modules 發生例外：{e}，退回完整打包。")
@@ -842,17 +846,17 @@ def prompt_interactive_targets():
     print("  【單項更新包】")
     print("    1. LAH-API (PHP7)  後端更新包   (www.zip)")
     print("    2. LAH-API (PHP8)  後端更新包   (LAH-API.zip)")
-    print("    3. LAH-FE 前端網站 (含 yarn build) (LAH-NUXTJS.zip)")
+    print("    3. LAH-FE 前端靜態網站 (含 yarn generate) (LAH-NUXTJS.zip)")
     print("    4. 即時通訊伺服器               (lah-messenger-server.zip)")
-    print("    5. 前端網站 核心套件 (node_modules) (LAH-NUXTJS-node_modules.zip)")
+    print("    5. [已退役] 前端網站 核心套件 (靜態化後零相依) (LAH-NUXTJS-node_modules.zip)")
     print("    6. 即時通訊 核心套件 (node_modules) (lah-messenger-server-node_modules.zip)")
     print("    7. Node.js  綠色環境 (含 logrotate) (node.zip)")
     print("    8. VC++ 核心程式庫 (x64)          (vcredist-x64.zip)")
     print()
     print("  【常用組合快捷】")
     print("    A. 常規程式碼更新包 (1 + 2 + 3 + 4)")
-    print("    B. 僅相依環境套件包 (5 + 6 + 7 + 8)")
-    print("    C. 全套完整大包     (1 至 8 全部打包)")
+    print("    B. 僅相依環境套件包 (6 + 7 + 8)")
+    print("    C. 全套完整大包     (1 + 2 + 3 + 4 + 6 + 7 + 8)")
     print()
     print("    Q. 離開程式")
     print()
@@ -919,7 +923,7 @@ def prompt_interactive_targets():
                 do_messenger = True
                 valid = True
             elif tok == "B":
-                do_fe_modules = True
+                do_fe_modules = False
                 do_server_modules = True
                 do_node = True
                 do_vcredist = True
@@ -929,7 +933,7 @@ def prompt_interactive_targets():
                 do_api8 = True
                 do_fe = True
                 do_messenger = True
-                do_fe_modules = True
+                do_fe_modules = False
                 do_server_modules = True
                 do_node = True
                 do_vcredist = True
@@ -1009,7 +1013,7 @@ def main():
         do_api8 = False
         do_fe = False
         do_messenger = False
-        do_fe_modules = True
+        do_fe_modules = args.fe_modules
         do_server_modules = True
         do_node = False
         do_vcredist = False
@@ -1042,7 +1046,7 @@ def main():
             do_api8 = args.api8_only
             do_fe = args.fe_only
             do_messenger = args.messenger_only
-            do_fe_modules = args.fe_modules or args.with_modules
+            do_fe_modules = args.fe_modules
             do_server_modules = args.server_modules or args.with_modules
             do_node = args.do_node_pkg or args.with_node
             do_vcredist = args.vcredist_only or args.with_vcredist
@@ -1051,7 +1055,7 @@ def main():
             do_api8 = True
             do_fe = True
             do_messenger = True
-            do_fe_modules = args.with_modules
+            do_fe_modules = args.fe_modules
             do_server_modules = args.with_modules
             do_node = args.with_node
             vcredist_zip_path = os.path.join(base_dir, "vcredist-x64.zip")

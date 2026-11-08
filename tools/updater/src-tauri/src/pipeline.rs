@@ -53,7 +53,9 @@ where
 
     let svc_name = query_apache_service().unwrap_or_else(|| LAH_WEB_SERVICE_NAME.to_string());
     let has_base_env_update = selected_pkgs.iter().any(|p| p.is_base_env);
-    let has_apache_app_update = selected_pkgs.iter().any(|p| p.id == "www" || p.id == "lah_api");
+    let has_apache_app_update = selected_pkgs
+        .iter()
+        .any(|p| p.id == "www" || p.id == "lah_api" || p.id == "lah_nuxtjs");
     let should_stop_apache = options.restart_apache || has_base_env_update || has_apache_app_update;
     let mut apache_was_stopped = false;
 
@@ -169,6 +171,7 @@ where
 
     // 解壓後立即進行巢狀目錄防護檢查與自癒攤平
     auto_flatten_nested_dirs(&root_path, &log_event);
+    cleanup_legacy_fe_ssr_dirs(&root_path, &log_event);
 
     // 若有更新 apache24 或未選取 vcredist，自動探測並解壓獨立 VC++ 執行期套件
     let has_apache_update = selected_pkgs.iter().any(|p| p.id == "apache24");
@@ -251,7 +254,14 @@ where
         }
         if has_apache_conf {
             configure_apache_fcgi_proxy(&apache_tgt, &root_path, if php85_tgt.is_dir() { Some(&php85_tgt) } else { None }, &log_event);
+            configure_apache_fe_static_vhost(&apache_tgt, &root_path, &log_event);
+        } else {
+            sync_fe_runtime_config(&root_path, &log_event);
         }
+    } else if has_apache_conf {
+        configure_apache_fe_static_vhost(&apache_tgt, &root_path, &log_event);
+    } else {
+        sync_fe_runtime_config(&root_path, &log_event);
     }
 
     // =========================================================================
@@ -388,6 +398,7 @@ where
     // 1. 雙層巢狀目錄自癒攤平
     set_prog(10, "正在檢查目錄結構...");
     auto_flatten_nested_dirs(&root_path, &log_event);
+    cleanup_legacy_fe_ssr_dirs(&root_path, &log_event);
     sync_vcredist_dlls_to_php(&root_path, &log_event);
 
     // 2. 確保環境檔存在並執行跨目錄路徑重定位
@@ -422,7 +433,14 @@ where
         }
         if has_apache_conf {
             configure_apache_fcgi_proxy(&apache_tgt, &root_path, if php85_tgt.is_dir() { Some(&php85_tgt) } else { None }, &log_event);
+            configure_apache_fe_static_vhost(&apache_tgt, &root_path, &log_event);
+        } else {
+            sync_fe_runtime_config(&root_path, &log_event);
         }
+    } else if has_apache_conf {
+        configure_apache_fe_static_vhost(&apache_tgt, &root_path, &log_event);
+    } else {
+        sync_fe_runtime_config(&root_path, &log_event);
     }
 
     // 5. 套用資安強化
@@ -508,6 +526,31 @@ where
         error_message: None,
         dashboard_deployed,
         dashboard_exe_path: dashboard_exe.map(|p| p.to_string_lossy().to_string()),
+    }
+}
+
+fn cleanup_legacy_fe_ssr_dirs(root_path: &Path, log_event: &dyn Fn(&str, &str)) {
+    for folder in ["LAH-NUXTJS", "LAH-FE"] {
+        let fe_dir = root_path.join(folder);
+        if !fe_dir.join("dist").join("index.html").is_file() {
+            continue;
+        }
+        let mut removed = Vec::new();
+        for obs in [".nuxt", "server-middleware", "node_modules"] {
+            let obs_dir = fe_dir.join(obs);
+            if obs_dir.is_dir() && fs::remove_dir_all(&obs_dir).is_ok() {
+                removed.push(obs);
+            }
+        }
+        if !removed.is_empty() {
+            log_event(
+                &format!(
+                    "  [靜態化清理] 已自動清除 {folder} 舊版 SSR 殘留目錄 ({})",
+                    removed.join(", ")
+                ),
+                "info",
+            );
+        }
     }
 }
 

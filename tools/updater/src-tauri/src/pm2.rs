@@ -941,6 +941,16 @@ pub fn sanitize_ecosystem_config(eco_path: &Path) {
     let Ok(content) = fs::read_to_string(eco_path) else {
         return;
     };
+    if let Some(parent) = eco_path.parent() {
+        if parent.join("dist").join("index.html").is_file()
+            && content.contains("LAH-FE")
+            && content.contains("LAH-SCHEDULER")
+        {
+            let clean_eco = "module.exports = {\r\n  apps: [{\r\n    name: 'LAH-SCHEDULER',\r\n    cwd: __dirname,\r\n    exec_mode: 'fork',\r\n    instances: 1,\r\n    script: './scheduler/server.js',\r\n    max_memory_restart: '500M',\r\n    out_file: '../logs/lah-scheduler-out.log',\r\n    error_file: '../logs/lah-scheduler-err.log',\r\n    merge_logs: true,\r\n    log_date_format: 'YYYY-MM-DD HH:mm:ss Z',\r\n    autorestart: true,\r\n    max_restarts: 10,\r\n    min_uptime: '5s',\r\n    restart_delay: 3000\r\n  }]\r\n}\r\n";
+            let _ = fs::write(eco_path, clean_eco);
+            return;
+        }
+    }
     if content.contains("cwd:") {
         return;
     }
@@ -996,7 +1006,7 @@ pub fn audit_and_ensure_pm2_services(
         }
     }
 
-    // 2. 定義 3 大生態系設定檔與所屬服務
+    // 2. 定義 3 大生態系設定檔與所屬服務 (LAH-FE 已移交 Apache :8080 靜態託管，PM2 僅保留 LAH-SCHEDULER)
     struct EcosystemDef {
         title: &'static str,
         apps: &'static [&'static str],
@@ -1012,8 +1022,8 @@ pub fn audit_and_ensure_pm2_services(
                 .join("ecosystem.config.js")],
         },
         EcosystemDef {
-            title: "智慧管控前端網站 (LAH-FE / LAH-SCHEDULER)",
-            apps: &["LAH-FE", "LAH-SCHEDULER"],
+            title: "智慧管控前端排程服務 (LAH-SCHEDULER)",
+            apps: &["LAH-SCHEDULER"],
             candidates: vec![
                 root_dir.join("LAH-NUXTJS").join("ecosystem.config.js"),
                 root_dir.join("LAH-FE").join("ecosystem.config.js"),
@@ -1033,6 +1043,16 @@ pub fn audit_and_ensure_pm2_services(
     ];
 
     let mut need_save = false;
+
+    // 若舊版 PM2 仍殘留 LAH-FE (Nuxt SSR)，主動刪除以釋放 Port 8080 交由 Apache 靜態託管
+    if managed_apps.remove("LAH-FE").is_some() {
+        log_fn(
+            "偵測到舊版 PM2 殘留 [LAH-FE] 進程，正在移除以將 Port 8080 移交 Apache 靜態託管...",
+            "info",
+        );
+        let _ = run_cmd_hidden(&pm2_str, &["delete", "LAH-FE", "--no-color"]);
+        need_save = true;
+    }
 
     for eco in &core_ecosystems {
         let eco_path_opt = eco.candidates.iter().find(|p| p.is_file());
@@ -1157,7 +1177,6 @@ pub fn audit_and_ensure_pm2_services(
     let mut all_healthy = true;
     for app_name in &[
         "LAH-WSS",
-        "LAH-FE",
         "LAH-SCHEDULER",
         "lah-api-v85",
         "pm2-logrotate",
@@ -1175,7 +1194,7 @@ pub fn audit_and_ensure_pm2_services(
     }
 
     if all_healthy {
-        log_fn("全部 5 大核心服務與模組皆已成功在線運作！", "success");
+        log_fn("全部 4 大 PM2 核心服務與模組皆已成功在線運作！", "success");
     } else {
         log_fn(
             "警告：部分核心服務未能順利在線，請檢視上方日誌輸出或終端機 pm2 status。",
@@ -1223,19 +1242,22 @@ pub fn idempotent_reconstruct_pm2_services(
     struct EcosystemDef {
         title: &'static str,
         candidates: Vec<PathBuf>,
+        only_app: Option<&'static str>,
     }
 
     let core_ecosystems = [
         EcosystemDef {
             title: "即時通訊伺服器 (LAH-WSS)",
             candidates: vec![root_dir.join("lah-messenger-server").join("ecosystem.config.js")],
+            only_app: None,
         },
         EcosystemDef {
-            title: "智慧管控前端網站 (LAH-FE / LAH-SCHEDULER)",
+            title: "智慧管控前端排程服務 (LAH-SCHEDULER)",
             candidates: vec![
                 root_dir.join("LAH-NUXTJS").join("ecosystem.config.js"),
                 root_dir.join("LAH-FE").join("ecosystem.config.js"),
             ],
+            only_app: Some("LAH-SCHEDULER"),
         },
         EcosystemDef {
             title: "現代化後端 API (lah-api-v85)",
@@ -1243,6 +1265,7 @@ pub fn idempotent_reconstruct_pm2_services(
                 root_dir.join("LAH-API").join("ecosystem.config.js"),
                 root_dir.join("LAH-API").join("API").join("ecosystem.config.js"),
             ],
+            only_app: None,
         },
     ];
 
@@ -1259,7 +1282,11 @@ pub fn idempotent_reconstruct_pm2_services(
         log_fn(&format!("正在以標準配置啟動 [{}]：{}...", eco.title, eco_path.display()), "info");
         let eco_str = eco_path.to_string_lossy().to_string();
         let eco_dir = eco_path.parent().unwrap_or(root_dir);
-        let (start_ok, stdout, stderr) = run_cmd_hidden_in_dir(&pm2_str, &["start", &eco_str, "--no-color"], eco_dir);
+        let (start_ok, stdout, stderr) = if let Some(only_name) = eco.only_app {
+            run_cmd_hidden_in_dir(&pm2_str, &["start", &eco_str, "--only", only_name, "--no-color"], eco_dir)
+        } else {
+            run_cmd_hidden_in_dir(&pm2_str, &["start", &eco_str, "--no-color"], eco_dir)
+        };
         if start_ok || stdout.contains("✓") {
             log_fn(&format!("  成功掛載並啟動 [{}]！", eco.title), "success");
         } else {
@@ -1328,7 +1355,6 @@ pub fn idempotent_reconstruct_pm2_services(
     let mut all_healthy = true;
     for app_name in &[
         "LAH-WSS",
-        "LAH-FE",
         "LAH-SCHEDULER",
         "lah-api-v85",
         "pm2-logrotate",

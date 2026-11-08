@@ -246,19 +246,31 @@ function resurrectAndEnsureServices() {
     log(`呼叫 pm2 resurrect 失敗: ${e.message}`, 'ERROR');
   }
 
-  // 取得目前在線列表
+  // 取得目前在線列表，並主動清理已退役的舊版 LAH-FE (Nuxt SSR) 進程以釋放 Port 8080 供 Apache 靜態託管
   const onlineApps = {};
+  let hasLegacyFe = false;
   try {
     const jres = spawnSync(PM2_BIN, ['jlist'], { encoding: 'utf8', windowsHide: true, timeout: 15000 });
     if (jres.status === 0 && jres.stdout.trim()) {
       const list = JSON.parse(jres.stdout.trim());
       for (const item of list) {
-        if (item.name && item.pm2_env && item.pm2_env.status === 'online') {
+        if (item.name === 'LAH-FE') {
+          hasLegacyFe = true;
+        } else if (item.name && item.pm2_env && item.pm2_env.status === 'online') {
           onlineApps[item.name] = true;
         }
       }
     }
   } catch (e) {}
+
+  let needSave = false;
+  if (hasLegacyFe) {
+    log('偵測到舊版 PM2 殘留 [LAH-FE] 進程，正在移除以釋放 Port 8080 交由 Apache 靜態託管...', 'INFO');
+    try {
+      spawnSync(PM2_BIN, ['delete', 'LAH-FE', '--no-color'], { encoding: 'utf8', windowsHide: true, timeout: 15000 });
+      needSave = true;
+    } catch (e) {}
+  }
 
   const ecosystems = [
     {
@@ -267,8 +279,8 @@ function resurrectAndEnsureServices() {
       paths: [path.join(TARGET_ROOT, 'lah-messenger-server', 'ecosystem.config.js')]
     },
     {
-      title: 'LAH-FE / LAH-SCHEDULER',
-      apps: ['LAH-FE', 'LAH-SCHEDULER'],
+      title: 'LAH-SCHEDULER',
+      apps: ['LAH-SCHEDULER'],
       paths: [
         path.join(TARGET_ROOT, 'LAH-NUXTJS', 'ecosystem.config.js'),
         path.join(TARGET_ROOT, 'LAH-FE', 'ecosystem.config.js')
@@ -283,8 +295,6 @@ function resurrectAndEnsureServices() {
       ]
     }
   ];
-
-  let needSave = false;
 
   for (const eco of ecosystems) {
     const validPath = eco.paths.find(p => fs.existsSync(p));
@@ -356,7 +366,7 @@ function resurrectAndEnsureServices() {
       spawnSync(PM2_BIN, ['save', '--force', '--no-color'], { windowsHide: true, timeout: 15000 });
     } catch (e) {}
   } else {
-    log('✨ 受控服務巡檢完成，所有核心程序 (LAH-FE, LAH-SCHEDULER, LAH-WSS, lah-api-v85, pm2-logrotate) 均在線運行中！', 'SUCCESS');
+    log('✨ 受控服務巡檢完成，所有核心程序 (LAH-SCHEDULER, LAH-WSS, lah-api-v85, pm2-logrotate) 均在線運行中！', 'SUCCESS');
   }
 }
 
@@ -520,7 +530,7 @@ function watchdogCheck() {
         if (item.name) apps[item.name] = (item.pm2_env && item.pm2_env.status) || 'unknown';
       }
 
-      const required = ['LAH-FE', 'LAH-SCHEDULER', 'LAH-WSS', 'lah-api-v85', 'pm2-logrotate'];
+      const required = ['LAH-SCHEDULER', 'LAH-WSS', 'lah-api-v85', 'pm2-logrotate'];
       const offline = required.filter(a => apps[a] !== 'online');
 
       if (offline.length > 0) {
