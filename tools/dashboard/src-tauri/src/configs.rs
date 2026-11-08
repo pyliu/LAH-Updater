@@ -151,7 +151,7 @@ pub fn list_core_configs(root_dir: &Path) -> Vec<ConfigFileInfo> {
         ),
         (
             "pm2_fe_ecosystem",
-            "PM2 前端與排程進程組態 (LAH-NUXTJS/ecosystem.config.js)",
+            "PM2 排程進程組態 (LAH-SCHEDULER / ecosystem.config.js)",
             fe_ecosystem,
             "pm2:fe",
         ),

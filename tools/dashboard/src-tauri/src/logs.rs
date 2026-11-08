@@ -84,8 +84,6 @@ pub fn list_available_logs(root_dir: &Path) -> Vec<LogFileInfo> {
     let api_logs_dir = logs_dir.join("api");
 
     let before_api_targets = [
-        ("fe_out", "LAH-FE 前端標準輸出", &logs_dir, "fe_out", ".log"),
-        ("fe_err", "LAH-FE 前端錯誤日誌", &logs_dir, "fe_err", ".log"),
         (
             "wss_out",
             "LAH-WSS 即時通標準輸出",
