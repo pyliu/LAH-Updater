@@ -53,7 +53,7 @@ REPO_META = [
     {
         "id": "LAH-FE",
         "name": "智慧管控系統前端監控平台 (LAH-FE)",
-        "service_alert": "⚠️ 【前端監控更新】涉及 Web 介面或排程引擎更新，請確認 PM2 進程 LAH-FE 與 LAH-SCHEDULER 正常運行 (Port 8080)。"
+        "service_alert": "⚠️ 【前端監控更新】涉及 Web 介面或排程引擎更新，請確認 Apache 靜態站台 (Port 8080) 與 PM2 進程 LAH-SCHEDULER 正常運行。"
     },
     {
         "id": "lah-messenger-server",
@@ -82,6 +82,7 @@ def resolve_project_dirs(script_dir: str) -> Tuple[str, str, Dict[str, str]]:
         candidate_root = os.path.dirname(updater_dir)
 
     repos = {
+        "workspace": candidate_root,
         "LAH-Updater": updater_dir,
         "LAH-API": os.path.join(candidate_root, "LAH-API"),
         "LAH-FE": os.path.join(candidate_root, "LAH-FE"),
@@ -371,21 +372,19 @@ def write_release_notes_files(
     version_str: str,
     release_date_raw: datetime.date
 ) -> List[str]:
-    """將歷史版本檔與標準更新說明檔寫入 dist/"""
+    """將單一整潔之標準更新說明檔寫入 dist/（避免多檔分散堆疊）"""
     os.makedirs(dist_dir, exist_ok=True)
     written_files = []
 
-    date_compact = release_date_raw.strftime("%Y%m%d")
-    clean_ver = version_str if version_str.startswith("v") else f"v{version_str}"
+    # 清理舊有分散之歷史日期前綴 txt 檔
+    for item in os.listdir(dist_dir):
+        if "系統更新說明" in item and item != "系統更新說明.txt" and item.endswith(".txt"):
+            try:
+                os.remove(os.path.join(dist_dir, item))
+            except OSError:
+                pass
 
-    # 1. 歷史版本存檔 (例如: 20261103_系統更新說明_v1.9.9.txt)
-    history_filename = f"{date_compact}_系統更新說明_{clean_ver}.txt"
-    history_path = os.path.join(dist_dir, history_filename)
-    with open(history_path, "w", encoding="utf-8", newline="") as f:
-        f.write(content)
-    written_files.append(history_path)
-
-    # 2. 標準覆蓋檔案 (dist/系統更新說明.txt)
+    # 標準單一覆蓋檔案 (dist/系統更新說明.txt)
     standard_path = os.path.join(dist_dir, "系統更新說明.txt")
     with open(standard_path, "w", encoding="utf-8", newline="") as f:
         f.write(content)
@@ -399,8 +398,9 @@ def commit_release_anchor(
     version_str: str,
     repos_dict: Dict[str, str]
 ) -> dict:
-    """將當前 5 大子專案之 HEAD Commit Hash 寫入 .release_anchor.json"""
+    """將當前各專案之 HEAD Commit Hash 與最後打包日期寫入 .release_anchor.json 與 LAST_PACK_DATE.txt"""
     now = datetime.datetime.now().astimezone()
+    today_str = now.strftime("%Y-%m-%d")
     anchors = {}
     for repo_id, repo_path in repos_dict.items():
         head = get_repo_head(repo_path)
@@ -410,13 +410,24 @@ def commit_release_anchor(
     data = {
         "version": version_str.lstrip("vV"),
         "released_at": now.isoformat(),
+        "last_packed_date": today_str,
+        "last_packed_at": now.isoformat(),
         "anchors": anchors
     }
 
-    os.makedirs(os.path.dirname(os.path.abspath(anchor_file)), exist_ok=True)
+    anchor_dir = os.path.dirname(os.path.abspath(anchor_file))
+    os.makedirs(anchor_dir, exist_ok=True)
     with open(anchor_file, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
         f.write("\n")
+
+    # 同步落盤純文字最後打包日期檔案，便利維運人員與批次腳本隨手檢視
+    txt_path = os.path.join(anchor_dir, "LAST_PACK_DATE.txt")
+    try:
+        with open(txt_path, "w", encoding="utf-8") as f:
+            f.write(f"{today_str}\n")
+    except Exception:
+        pass
 
     return data
 
@@ -451,13 +462,16 @@ def generate_notes(
     anchor_data = load_anchor_data(anchor_path)
     old_anchors = anchor_data.get("anchors", {}) if anchor_data else {}
     last_release_str = anchor_data.get("released_at", "") if anchor_data else ""
+    last_packed_date = anchor_data.get("last_packed_date", "") if anchor_data else ""
 
-    # 決定涵蓋週期起點字串
+    # 決定涵蓋週期起點字串 (優先採用上次記錄之打包斷點日期)
     if since:
         start_date_str = since
     elif days:
         d = datetime.date.today() - datetime.timedelta(days=days)
         start_date_str = d.strftime("%Y-%m-%d")
+    elif last_packed_date:
+        start_date_str = last_packed_date
     elif last_release_str:
         try:
             dt = datetime.datetime.fromisoformat(last_release_str)

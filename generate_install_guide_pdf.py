@@ -467,18 +467,18 @@ HTML_CONTENT = f"""<!DOCTYPE html>
       <h1 class="cover-title">桃園市各地政事務所<br>智慧控管與監控系統 (LAH)</h1>
       <div class="cover-subtitle">伺服器端安裝與版本升級標準操作手冊 (SOP)</div>
       <div class="cover-desc">
-        本手冊專為各地政事務所資訊系統管理師編寫，詳述智慧控管伺服器端於「原機版本升級 (In-place Upgrade)」與「全新伺服器安裝 (Clean Install)」兩種實務情境之標準作業程序。內容完整涵蓋事前 VM 快照防禦、關鍵 SQLite 資料庫封裝備份、Node/PM2 零全域污染沙盒隔離架構（自動附帶專屬維運終端 lah-cmd.bat 與 Node 沙盒監管工具）、Apache mpm_winnt 雙層記憶體防護閘與 24/7 自動日誌生命週期治理、安裝歷程自動留存（install.log 5MB 輪替）、五大服務連接埠原生高速巡檢（GetExtendedTcpTable 秒級探測）及異常雙重還原防線。
+        本手冊專為各地政事務所資訊系統管理師編寫，詳述智慧控管伺服器端於「原機版本升級 (In-place Upgrade)」與「全新伺服器安裝 (Clean Install)」兩種實務情境之標準作業程序。內容完整涵蓋事前 VM 快照防禦、關鍵 SQLite 資料庫封裝備份、前端純靜態 SPA 轉型（由 Apache :8080 直接託管 dist/ 並免除前端 node_modules）、綠色可攜 Node.js v26 LTS (v26.13.0) 與 PM2 7.1.0 零全域污染沙盒隔離架構（附帶專屬維運終端 lah-cmd.bat 與 Node 沙盒監管工具）、Apache mpm_winnt 雙層記憶體防護閘與 24/7 自動日誌生命週期治理、安裝歷程自動留存（install.log 5MB 輪替）、五大服務連接埠原生高速巡檢（GetExtendedTcpTable 秒級探測）及異常雙重還原防線。
       </div>
     </div>
 
     <div class="cover-highlights">
       <div class="highlight-card">
         <h4>⚡ 情境一：原機版本升級</h4>
-        <p>針對現正穩定運行之主機快速完成補丁更新、漏洞修補與 PHP 8.5 雙軌佈署，保留現有 Apache/PHP 7 核心環境並自動套用 mpm_winnt 記憶體防護閘。</p>
+        <p>針對現正穩定執行之主機一鍵升級前端純靜態 SPA、Node.js v26 LTS、即時通與 PHP 8.5 雙軌核心，完整保留既有 Apache/PHP 7 與 OCI8 驅動並自動注入 :8080 靜態 VirtualHost。</p>
       </div>
       <div class="highlight-card green">
         <h4>🛡️ 情境二：全新伺服器安裝</h4>
-        <p>乾淨虛擬機建置或原機環境重灌，搭配「自動移除工具」徹底清除殘留，並全選更新包（node_modules 生產相依瘦身至 251MB）與一鍵掛載還原歷史資料庫。</p>
+        <p>乾淨虛擬機建置或原機環境重灌，搭配「自動移除工具」徹底清除殘留，全選 10 大更新包（前端免裝 node_modules，即時通套件僅 8.6 MB）並一鍵掛載還原歷史資料庫。</p>
       </div>
       <div class="highlight-card amber">
         <h4>🔒 關鍵資料防護備份</h4>
@@ -493,9 +493,9 @@ HTML_CONTENT = f"""<!DOCTYPE html>
     <div>
       <div class="cover-meta">
         <div class="meta-item"><strong>文件編號：</strong><span>LAH-OPS-SOP-202611</span></div>
-        <div class="meta-item"><strong>發布日期：</strong><span>2026 年 11 月 5 日 (v1.9.9 全子系統效能調優、Node沙盒監管與指標優先儀表板升級修訂版)</span></div>
+        <div class="meta-item"><strong>發布日期：</strong><span>2026 年 11 月 8 日 (v2.0.0 前端純靜態 Apache 託管、Node.js v26 LTS 升級與全自動相依解耦修訂版)</span></div>
         <div class="meta-item"><strong>適用系統：</strong><span>智慧控管與監控系統 (LAH)</span></div>
-        <div class="meta-item"><strong>維運工具：</strong><span>LAH-Updater v1.9.9 (Rust 核心，含自動安裝更新引擎、Node 沙盒監管工具與指標優先管理儀表板)</span></div>
+        <div class="meta-item"><strong>維運工具：</strong><span>LAH-Updater v2.0.0 (Rust 核心，含自動安裝更新引擎 v0.1.9、管理儀表板 v0.1.9、Node 沙盒監管 v0.1.5、備份還原 v0.1.4 與自動移除 v0.1.3)</span></div>
         <div class="meta-item"><strong>適用單位：</strong><span>桃園市各地政事務所 資訊小組</span></div>
         <div class="meta-item"><strong>保密等級：</strong><span>內部維運限閱 (內部專用)</span></div>
       </div>
@@ -566,17 +566,17 @@ HTML_CONTENT = f"""<!DOCTYPE html>
       <tr>
         <td><code>base\\</code> (基礎環境包)</td>
         <td>基礎組件</td>
-        <td>內含 Apache 2.4（已內建 mpm_winnt 雙層記憶體防護閘、FastCGI 轉發優化與敏感檔案存取阻斷）、PHP 7.4、PHP 8.5 FastCGI（雙通道橋接機制）及綠色可攜版 Node.js 16 執行期環境。</td>
+        <td>內含 Apache 2.4（已內建 mpm_winnt 雙層記憶體防護閘、:8080 純靜態前端 VirtualHost、FastCGI 轉發與敏感檔案存取阻斷）、PHP 7.4、PHP 8.5 FastCGI（雙通道橋接機制）及綠色可攜版 Node.js 26 (v26.13.0 LTS + PM2 7.1.0) 執行期環境。</td>
       </tr>
       <tr>
         <td><code>node_modules\\</code> (核心套件包)</td>
         <td>套件相依</td>
-        <td>內含前端 (LAH-NUXTJS) 與即時通伺服器 (lah-messenger-server) 預編譯套件；全面精簡 devDependencies，前端解壓體積由 823MB 降至 251MB。</td>
+        <td>僅需部署即時通伺服器預編譯套件 (<code>lah-messenger-server-node_modules.zip</code>，含 Node 26 原生 <code>better-sqlite3 v13</code>，約 8.6 MB)。前端網站已轉型為純靜態 SPA 與零依賴排程器，正式環境完全免除前端 <code>node_modules</code>。</td>
       </tr>
       <tr>
         <td><code>patch\\</code> (程式補丁包)</td>
         <td>業務程式</td>
-        <td>收納 LAH-API (後端靜態圖檔快速路徑與 SQLite 解耦)、LAH-NUXTJS (離線 ExcelJS、雙軌路由代理保護)、即時通服務端及桌面端 (虛擬網卡過濾、單一公務 IP 探測、八所動態漫遊容錯)。</td>
+        <td>收納 <code>www.zip</code> (PHP 7 後端與白名單 cURL 代理 <code>proxy.php</code>)、<code>LAH-API.zip</code> (PHP 8.5 雙軌後端)、<code>LAH-NUXTJS.zip</code> (純靜態 <code>dist/</code>、<code>runtime-config.js</code> 動態組態與零依賴排程器) 及 <code>lah-messenger-server.zip</code>。</td>
       </tr>
 
     </tbody>
@@ -675,11 +675,11 @@ HTML_CONTENT = f"""<!DOCTYPE html>
       </tr>
       <tr>
         <td><code>Apache24/conf/</code></td>
-        <td><strong>網頁伺服器設定：</strong>包含 Apache 主設定檔 <code>httpd.conf</code>、各所專用憑證與 <code>mpm_winnt</code> 記憶體防護閘設定。</td>
+        <td><strong>網頁伺服器設定：</strong>包含 Apache 主設定檔 <code>httpd.conf</code>（含 :80 主站台與 :8080 靜態前端 VirtualHost；跨目錄還原時自動校準路徑並補齊靜態站台）、各所憑證與 <code>mpm_winnt</code> 記憶體防護閘設定。</td>
       </tr>
       <tr>
         <td><code>LAH-NUXTJS/</code></td>
-        <td><strong>前端系統環境：</strong>智慧管控前端網頁站台之在地化環境參數與客製化設定。</td>
+        <td><strong>前端系統環境：</strong>智慧管控前端之在地化 <code>.env</code> 環境參數（還原後自動重新產出 <code>dist/runtime-config.js</code>，並自動自 <code>.pm2/dump.pm2</code> 剔除已退役之舊版 <code>LAH-FE</code> 進程）。</td>
       </tr>
       <tr>
         <td><code>lah-cmd.bat</code></td>
@@ -704,7 +704,7 @@ HTML_CONTENT = f"""<!DOCTYPE html>
   </div>
 
   <h2>🚀 4. 情境一：原機版本升級操作步驟 (In-Place Upgrade)</h2>
-  <p><strong>適用時機：</strong>現有主機已正常運行舊版智慧控管系統，本次目的為升級前端、補丁後端漏洞，並<strong>無縫引入 PHP 8.5 雙軌架構</strong>，保留現有機台原有 Apache 與 PHP 7 基礎環境。</p>
+  <p><strong>適用時機：</strong>現有主機已正常運作舊版智慧控管系統，本次目的為<strong>升級前端純靜態 SPA（Apache :8080 託管）、升級可攜 Node.js v26 LTS 環境與 PHP 8.5 雙軌後端</strong>，同時完整保留現有機台原有 Apache 主程式與 PHP 7 / OCI8 基礎環境。</p>
 
   <div class="screenshot-card avoid-break">
     <img src="{img_upgrade}" alt="升級更新工作選項勾選圖解">
@@ -728,9 +728,9 @@ HTML_CONTENT = f"""<!DOCTYPE html>
     </div>
     <p>為避免覆蓋現有機台正常運作之 Apache 與 PHP 7 設定，於上方情境快選列直接點擊 <strong>「🔄 原地升級」</strong> 按鈕（對齊圖 2 紅框標註），系統將自動完成最佳化配置：</p>
     <ul>
-      <li><strong style="color: #059669;">【自動精準勾選】</strong> <strong>原機升級 4 大核心包</strong>：<code>PHP 8.5 FastCGI (php85.zip)</code>、<code>VC++ 執行期相依套件</code>、<code>Node.js 綠色執行環境 (node.zip)</code> 與 <code>後端 API 補丁包 (LAH-API.zip)</code>，左下角顯示「已選取 4 個系統安裝包」。</li>
-      <li><strong style="color: #dc2626;">【自動排除干擾】</strong> 取消勾選 <strong>Apache 2.4</strong>、<strong>PHP 7.4</strong> 與 <strong>node_modules</strong>，完整保留機台原有穩定 Apache 設定、PHP 7.4 環境與 OCI8 驅動。</li>
-      <li><strong style="color: #059669;">【自動服務配置】</strong> 自動保持勾選<strong>自動註冊 Web/PM2 為 Windows 服務</strong>、<strong>套用資安強化配置（含 mpm_winnt 雙層記憶體防護閘）</strong>及<strong>更新後自動重啟</strong>。</li>
+      <li><strong style="color: #059669;">【自動精準勾選】</strong> <strong>原機升級 8 大核心包</strong>：<code>PHP 8.5 FastCGI (php85.zip)</code>、<code>VC++ 執行期相依套件</code>、<code>Node.js 26 綠色環境 (node.zip)</code>、<code>後端 PHP7/PHP8 更新包 (www.zip / LAH-API.zip)</code>、<code>前端靜態更新包 (LAH-NUXTJS.zip)</code> 以及 <code>即時通訊伺服器與核心套件 (lah-messenger-server.zip / node_modules)</code>。</li>
+      <li><strong style="color: #dc2626;">【自動排除干擾】</strong> 取消勾選 <strong>Apache 2.4 (Apache24.zip)</strong> 與 <strong>PHP 7.4 (php7.zip)</strong>，完整保留機台原有穩定 Apache、PHP 7.4 與 OCI8 驅動（管線將自動於既有 <code>httpd.conf</code> 注入 :8080 靜態 VirtualHost，並清理已退役之 <code>LAH-NUXTJS/node_modules</code> 與舊 PM2 <code>LAH-FE</code> 進程）。</li>
+      <li><strong style="color: #059669;">【自動服務配置】</strong> 自動保持勾選<strong>自動註冊 Web/PM2 為 Windows 服務</strong>、<strong>套用資安強化配置（含 mpm_winnt 雙層記憶體防護閘與 :8080 靜態站台同步）</strong>及<strong>更新後自動重啟 Web 與 PM2 服務</strong>。</li>
     </ul>
   </div>
 
@@ -829,7 +829,7 @@ HTML_CONTENT = f"""<!DOCTYPE html>
     </div>
     <p>以系統管理員身分執行 <strong><code>智慧控管與監控系統 - 自動安裝與更新工具.exe</code></strong>：</p>
     <ul>
-      <li>點擊 <strong>「🌟 全新安裝」</strong> 或 <strong>「全選」</strong> 按鈕，確保基礎環境包（Apache、PHP7、PHP85、Node）、核心套件包（node_modules 生產相依精簡版）與程式更新補丁包<strong>全數打勾</strong>。</li>
+      <li>點擊 <strong>「🌟 全新安裝」</strong> 或 <strong>「全選」</strong> 按鈕，確保基礎環境包（Apache、PHP7、PHP85、VC++、Node 26）、即時通核心套件包（<code>lah-messenger-server-node_modules.zip</code>）與業務更新補丁包（<code>www</code>、<code>LAH-API</code>、<code>LAH-NUXTJS</code>、<code>lah-messenger-server</code>）<strong>全數打勾（共 10 個安裝包）</strong>。</li>
       <li><strong style="color: #0369a1;">【全新安裝核心關鍵】</strong> 勾選 <strong>「從備份檔案還原資料庫與系統設定」</strong>。</li>
       <li>點擊其右側 <strong>「瀏覽...」</strong> 按鈕，選取步驟一所備份的 ZIP 檔（例如 <code>D:\\DEV\\_LAH_Backup_20261105_091435.zip</code>）。</li>
       <li>點擊右下角 <strong>「🚀 開始執行更新作業」</strong>。</li>
@@ -841,7 +841,7 @@ HTML_CONTENT = f"""<!DOCTYPE html>
       <span class="step-number green">4</span>
       <span class="step-title">步驟四：等待管線全自動佈署完成</span>
     </div>
-    <p>更新引擎將自動完成：① 解壓 Apache 與 PHP 7/8.5 ➔ ② 解壓前端與即時通依賴庫（生產相依精簡至 251MB） ➔ ③ 釋放最新業務程式碼 ➔ ④ 掛載還原備份之 SQLite 資料庫與 Oracle 驅動 ➔ ⑤ 註冊 Windows 原生服務、套用 mpm_winnt 雙層記憶體防護閘、配置開機自啟並產出 lah-cmd.bat 終端 ➔ ⑥ 自動同步部署管理儀表板至安裝根目錄並建立桌面捷徑 ➔ ⑦ 完整歷程即時寫入 <code>install.log</code> ➔ ⑧ 全系統服務啟動與健康巡檢。</p>
+    <p>更新引擎將自動完成：① 解壓 Apache、PHP 7/8.5 與 Node.js 26 ➔ ② 解壓即時通生產依賴庫（僅 8.6 MB，前端已免除 node_modules） ➔ ③ 釋放最新業務程式碼與純靜態前端 <code>dist/</code> ➔ ④ 掛載還原備份之 SQLite 資料庫與 Oracle 驅動（自動生成 <code>runtime-config.js</code> 並淨化舊 PM2 清單） ➔ ⑤ 註冊 Windows 原生服務、注入 :8080 靜態 VirtualHost 與 mpm_winnt 記憶體防護閘、產出 <code>lah-cmd.bat</code> 終端 ➔ ⑥ 自動同步部署管理儀表板至安裝根目錄並建立桌面捷徑 ➔ ⑦ 完整歷程即時寫入 <code>install.log</code> ➔ ⑧ 全系統服務啟動與健康巡檢。</p>
   </div>
 
   <div class="page-footer-note">
@@ -887,8 +887,8 @@ HTML_CONTENT = f"""<!DOCTYPE html>
       <tr>
         <td><strong>Port 8080</strong></td>
         <td>LAH-FE 智慧管控前端</td>
-        <td>PM2 守護 (Nuxt 2)</td>
-        <td><span class="badge badge-ok">[OK] LISTENING</span> 智慧監控管理儀表板，支援 API 雙軌切換與離線 ExcelJS。</td>
+        <td>Apache 靜態託管 (LAH_Web_Service)</td>
+        <td><span class="badge badge-ok">[OK] LISTENING</span> 由 Apache VirtualHost 直接託管 <code>LAH-NUXTJS/dist</code> 純靜態 SPA，支援 <code>runtime-config.js</code> 動態組態與 <code>proxy.php</code> 內網代理。</td>
       </tr>
       <tr>
         <td><strong>Port 8081</strong></td>
@@ -995,7 +995,7 @@ HTML_CONTENT = f"""<!DOCTYPE html>
       </tr>
       <tr>
         <td rowspan="2" style="font-weight:700; background:#ecfdf5; text-align:center;">執行更新</td>
-        <td><span class="chk-box"></span> <strong>情境一 (原機升級)：</strong>以「自動安裝與更新工具」執行，點選「原地升級」快選（確認精準選取 4 大升級包、保留 Apache/PHP7 既有設定並套用 mpm_winnt 記憶體防護閘）。</td>
+        <td><span class="chk-box"></span> <strong>情境一 (原機升級)：</strong>以「自動安裝與更新工具」執行，點選「原地升級」快選（確認選取 8 大升級包、保留 Apache/PHP7 既有環境並自動注入 :8080 靜態 VirtualHost 與 mpm_winnt 記憶體防護閘）。</td>
         <td>□ 符合 □ 走情境二</td>
         <td></td>
       </tr>

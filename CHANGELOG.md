@@ -6,6 +6,32 @@
 
 ## [未發布]
 
+### 🚀 前端純靜態 Apache 託管、可攜 Node.js v26 LTS 升級與維運工具鏈全面對齊 (ADR 0025)
+
+- **修改目的**：
+  - 將 `LAH-FE`（`LAH-NUXTJS`）由 Node.js SSR 架構轉型為純靜態 SPA（`target: 'static'`，預編譯 `dist/`），直接由 Apache 2.4（`LAH_Web_Service`）於 Port `8080` VirtualHost 託管，徹底消除正式環境對前端 `node_modules`（原解壓約 823 MB）與 Node.js SSR 程序之執行期依賴。
+  - 將 `dist/base/node.zip` 可攜執行環境由 Node.js `v16.20.2`（已 EoL）全面升級至 **Node.js `v26.13.0` LTS** 與 **PM2 `7.1.0`**，從根源消弭舊版 Node 16 資安弱點與 CVE-2026-111497（Node2Shell）風險。
+  - 對齊 `updater`、`dashboard`、`node-portable`、`backuper`、`uninstaller` 與安裝操作手冊（SOP HTML / PDF）之跨目錄還原、卸載與巡檢邊界。
+- **具體修改項目**：
+  - `dist/base/node.zip` & `dist/node_modules/lah-messenger-server-node_modules.zip`：
+    - 替換為官方 Windows x64 `Node.js v26.13.0` + `npm 11.20.0` + `pm2 7.1.0`（保留 Windows Loopback TCP `42681`/`42682` 沙盒通訊修補與 `NPM.js` 容錯防禦）+ `pm2-logrotate 3.0.0` + `yarn 1.22.22`。
+    - 即時通伺服器 `better-sqlite3` 升級至 `v13.0.3`（Node 26 ABI `141` 原生預編譯），並封裝於 `lah-messenger-server-node_modules.zip`（約 8.6 MB）。
+  - `pack/pack.py`：
+    - 打包 `LAH-NUXTJS.zip` 時改為收納預編譯之 `dist/`、`static/runtime-config.js` 與零外部相依之 `scheduler/`；預設不再產出 `LAH-NUXTJS-node_modules.zip`。
+  - `tools/updater` (`v0.1.9`)：
+    - `apache_conf.rs`：新增 `configure_apache_fe_static_vhost`，於 `httpd.conf` 自動注入 `# === LAH-FE Static VirtualHost (:8080) ===` 區塊（含 `/api`、`/LAH-API` Alias、`proxy.php` RewriteRule、SPA History Fallback 與 `index.html`/`runtime-config.js` 禁快取標頭），並實作 `sync_fe_runtime_config` 由 `LAH-NUXTJS/.env` 自動產出 `dist/runtime-config.js`。
+    - `pm2.rs` & `extractor.rs`：於 `idempotent_reconstruct_pm2_services` 自動停止並剔除已退役之 `LAH-FE` PM2 進程、僅掛載 `LAH-SCHEDULER`，並自動清理目標機台殘留之 `LAH-NUXTJS/node_modules`。
+  - `tools/dashboard` (`v0.1.9`) & `tools/node-portable` (`v0.1.5`)：
+    - 受管 PM2 進程清單收斂為 `LAH-WSS`、`LAH-SCHEDULER`、`lah-api-v85`；於組態編輯器儲存 `LAH-NUXTJS/.env` 時自動同步更新 `dist/runtime-config.js`。
+  - `tools/backuper` (`v0.1.4`) & `tools/uninstaller` (`v0.1.3`)：
+    - `restore.rs`：還原後自動跨目錄校準或補齊 `:8080` 靜態 VirtualHost、重新生成 `dist/runtime-config.js`，並自 `.pm2/dump.pm2` 剔除舊版 `LAH-FE`。
+    - `uninstaller/src-tauri/src/apache_conf.rs`：勾選移除前端（`do_remove_fe`）且保留 Apache 時，自動自 `httpd.conf` 移除 `:8080` VirtualHost 區塊。
+  - `generate_install_guide_pdf.py` & `INSTALLATION.html` & `generate_readme_html.py`：
+    - 全面更新伺服器安裝與升級操作手冊（HTML 與 8 頁標準 A4 PDF）。
+- **相容性與驗證**：
+  - 全系列 Tauri 2 工具通過 `cargo test --lib` 並完成 Release 編譯發布至 `dist/`。
+
+
 ### 🚀 Apache 統一日誌儲存庫歸集與 24/7 全自動日誌生命週期治理 (ADR 0022)
 
 - **修改目的**：

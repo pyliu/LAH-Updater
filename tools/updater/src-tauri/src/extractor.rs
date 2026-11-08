@@ -154,7 +154,7 @@ pub const ALL_PACKAGE_SPECS: &[PackageSpec] = &[
     PackageSpec {
         id: "node",
         name: "node.zip",
-        title: "Node.js 綠色執行環境 (node.zip)",
+        title: "Node.js v26 綠色執行環境 (node.zip)",
         pattern: None,
         alt_names: &[],
         rel_target: "node",

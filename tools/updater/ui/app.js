@@ -72,7 +72,7 @@ const DEFAULT_PACKAGES = [
   {
     id: "node",
     name: "node.zip",
-    title: "Node.js 綠色執行環境 (node.zip)",
+    title: "Node.js v26 綠色執行環境 (node.zip)",
     rel_target: "node",
     is_base_env: true,
   },
@@ -396,11 +396,17 @@ async function scanEnvironment(isInitial = false) {
       chkSecurity.parentElement.title = "";
     }
 
-    if (res.pm2_installed) {
-      document.getElementById("chk_restart_pm2").checked = res.pm2_running;
-      document.getElementById("lbl_restart_pm2").textContent = `更新後重新啟動 PM2 服務 (${res.pm2_daemon_info})`;
+    const chkRestartPm2 = document.getElementById("chk_restart_pm2");
+    const lblRestartPm2 = document.getElementById("lbl_restart_pm2");
+    if (res.pm2_installed || res.pm2_service_installed) {
+      const isPm2Alive = res.pm2_service_running || res.pm2_running;
+      chkRestartPm2.checked = isPm2Alive;
+      lblRestartPm2.textContent = `更新後重新啟動 PM2 服務 [LAH_PM2_Service] (${isPm2Alive ? "運行中" : "已停止"})`;
+      chkRestartPm2.parentElement.title = `目前環境狀態: ${res.pm2_daemon_info}；更新時將套用勾選之 Node.js v26 綠色環境`;
     } else {
-      document.getElementById("lbl_restart_pm2").textContent = "更新後重新啟動 PM2 服務 (本機未安裝)";
+      chkRestartPm2.checked = false;
+      lblRestartPm2.textContent = "更新後重新啟動 PM2 服務 [LAH_PM2_Service] (未安裝)";
+      chkRestartPm2.parentElement.title = "";
     }
 
     // 備份包自動帶入
@@ -539,7 +545,7 @@ document.addEventListener("DOMContentLoaded", () => {
   // 情境快選：原地升級 (精準勾選 PHP8.5 + VC++ + Node + LAH-API，並套用原機升級標準服務配置)
   document.getElementById("btn_preset_inplace_upgrade")?.addEventListener("click", () => {
     // 1. 精準勾選原地升級 4 大套件：php85, vcredist, node, lah_api
-    const inplaceIds = ["php85", "vcredist", "node", "www", "lah_api", "lah_nuxtjs"];
+    const inplaceIds = ["php85", "vcredist", "node", "www", "lah_api", "lah_nuxtjs", "messenger", "messenger_modules"];
     state.packages.forEach((pkg) => {
       const shouldCheck = inplaceIds.includes(pkg.id) && pkg.exists;
       pkg.checked = shouldCheck;
@@ -563,7 +569,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (autoPm2) autoPm2.checked = true;
     if (security) security.checked = true;
     if (restartApache) restartApache.checked = true;
-    if (restartPm2) restartPm2.checked = false;
+    if (restartPm2) restartPm2.checked = true;
     if (restoreBackup) restoreBackup.checked = false;
     if (backupRow) backupRow.style.display = "none";
 

@@ -170,7 +170,7 @@ pub fn probe_http_port(port: u16, service_name: &str) -> PortAuditResult {
             leaked.push(trimmed.to_string());
         } else if lower.starts_with("server:") && (lower.contains("node") || lower.contains("express")) {
             leaked.push(trimmed.to_string());
-        } else if lower.contains("node.js") || lower.contains("16.20.2") {
+        } else if lower.contains("node.js") || lower.contains("16.20.2") || lower.contains("26.13.0") {
             leaked.push(trimmed.to_string());
         }
     }

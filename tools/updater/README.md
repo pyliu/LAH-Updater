@@ -5,7 +5,7 @@
 ## 核心功能與更新範圍
 
 1. **多模組套件自動對齊解壓 (Smart Extractor)**：
-   - 支援 11 大更新壓縮包（`Apache24.zip`, `vcredist-x64.zip`, `php7.zip`, `php85.zip`, `www.zip`, `LAH-API.zip`, `LAH-NUXTJS.zip`, `LAH-NUXTJS-node_modules.zip`, `lah-messenger-server.zip`, `lah-messenger-server-node_modules.zip`, `node.zip` 以及 `*更新說明*.txt`）。
+   - 支援 10 大更新壓縮包（`Apache24.zip`, `vcredist-x64.zip`, `php7.zip`, `php85.zip`, `www.zip`, `LAH-API.zip`, `LAH-NUXTJS.zip`, `lah-messenger-server.zip`, `lah-messenger-server-node_modules.zip`, `node.zip` 以及 `*更新說明*.txt`）。
    - **分流目錄優先搜尋**：基礎服務優先至 `base/`、程式更新包優先至 `patch/`、依賴套件包優先至 `node_modules/` 探測，若無則自動平滑回退至執行目錄與既有搜尋路徑。
    - 內建智慧頂層目錄對齊機制（`detect_strip_prefix`），自動去除 Apache Lounge 等多餘一層資料夾。
    - Zip Slip 安全跨越防護與檔案鎖定檢查。
@@ -42,11 +42,11 @@
 自動更新工具與常駐守護服務透過四重隔離機制保證受管程式之執行期穩定性：
 
 1. **Windows 服務層級硬鎖定（`LAH_PM2_Service`）**
-   WinSW 服務設定檔 `lah-service.xml` 直接將執行檔路徑絕對指定為 `<根目錄>\node\node.exe`，並將 `<根目錄>\node` 注入服務程序的私有 `PATH` 最前端。無論作業系統全域環境變數如何變更，背景服務啟動必定使用可攜版 Node.js 16.20.2。
+   WinSW 服務設定檔 `lah-service.xml` 直接將執行檔路徑絕對指定為 `<根目錄>\node\node.exe`，並將 `<根目錄>\node` 注入服務程序的私有 `PATH` 最前端。無論作業系統全域環境變數如何變更，背景服務啟動必定使用可攜版 Node.js v26.13.0。
 2. **命令列執行檔硬鎖定（`pm2.cmd`）**
    可攜版 `node\pm2.cmd` 腳本透過 `%~dp0` 強制鎖定 `SET "_prog=%dp0%\node.exe"` 與 `SET "PATH=%dp0%;%PATH%"`。手動於命令提示字元輸入 `pm2` 時，必定透過可攜版 Node.js 啟動 PM2 CLI。
 3. **PM2 守護進程與子程序解譯器繼承（`process.execPath`）**
-   PM2 Daemon 在 `Client.js` 中透過 `process.execPath` 啟動，鎖定為可攜版 `node.exe`。PM2 孵化業務子程序時（`ForkMode.js` 與 `ClusterMode.js`），預設解譯器 `"node"` 會自動解析為當前 Daemon 自身的 `process.execPath`，直接繼承可攜版 Node.js 16.20.2，絕不呼叫系統全域的 `C:\Program Files\nodejs\node.exe`。
+   PM2 Daemon 在 `Client.js` 中透過 `process.execPath` 啟動，鎖定為可攜版 `node.exe`。PM2 孵化業務子程序時（`ForkMode.js` 與 `ClusterMode.js`），預設解譯器 `"node"` 會自動解析為當前 Daemon 自身的 `process.execPath`，直接繼承可攜版 Node.js v26.13.0，絕不呼叫系統全域的 `C:\Program Files\nodejs\node.exe`。
 4. **專屬沙盒維運終端 (`lah-cmd.bat`) 與 60 秒常駐守護自癒**
    本系統不污染全域環境變數，統一於安裝根目錄自動產出 `lah-cmd.bat`。常駐背景服務 `service_runner.js` 每 60 秒檢查一次 PM2 Daemon 的實體執行路徑，若發現被外部非可攜版 Node 意外搶佔，會自動強制終止並以可攜版 Node 重新喚醒。
 

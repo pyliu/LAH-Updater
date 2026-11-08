@@ -38,9 +38,20 @@ pub fn execute_uninstall_workflow(
         }
     }
 
-    // 若未移除 Apache，但移除了 PHP 7 或 PHP 8.5，自動清理 httpd.conf 中的轉發或載入設定
-    if !options.do_remove_apache && (options.do_remove_php7 || options.do_remove_php85) {
-        clean_apache_php_configuration(&root_path, options.do_remove_php7, options.do_remove_php85, &log_fn);
+    // 若未移除 Apache，但移除了 PHP 7、PHP 8.5、LAH-API 或前端 LAH-NUXTJS，自動清理 httpd.conf 中的轉發、載入或 VirtualHost 設定
+    if !options.do_remove_apache
+        && (options.do_remove_php7
+            || options.do_remove_php85
+            || options.do_remove_api
+            || options.do_remove_fe)
+    {
+        clean_apache_php_configuration(
+            &root_path,
+            options.do_remove_php7,
+            options.do_remove_php85 || options.do_remove_api,
+            options.do_remove_fe,
+            &log_fn,
+        );
     }
 
     // 階段 3：終止 PM2 與背景殘留進程

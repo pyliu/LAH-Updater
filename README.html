@@ -531,7 +531,7 @@
         <span class="badge badge-emerald">Nuxt 2 (Vue 2)</span>
         <span class="badge badge-purple">PHP 7.3 & PHP 8.5</span>
         <span class="badge badge-amber">Oracle 9i & SQLite 3</span>
-        <span class="badge badge-blue">可攜 Node 16.20.2 & PM2</span>
+        <span class="badge badge-blue">可攜 Node 26.13.0 & PM2 7.1.0</span>
         <span class="badge badge-emerald">100% 離線純靜態手冊</span>
       </div>
     </header>
@@ -602,7 +602,7 @@
   <g filter="url(#shadow)">
     <rect x="70" y="120" width="370" height="62" rx="8" fill="url(#clientGrad)" stroke="#60a5fa" stroke-width="1" />
     <text x="85" y="144" fill="#ffffff" font-size="15" font-weight="700">LAH-FE 智慧管控前端</text>
-    <text x="85" y="166" fill="#bfdbfe" font-size="11">Nuxt 2 (Vue 2) / BootstrapVue / 內建 lah-messenger-*.vue 元件群 (Port 8080)</text>
+    <text x="85" y="166" fill="#bfdbfe" font-size="11">Nuxt 2 純靜態 SPA (Apache :8080 託管 dist/) / 內建 lah-messenger-*.vue 元件群</text>
   </g>
 
   <!-- lah-messenger 桌面端節點 -->
@@ -814,7 +814,7 @@
         <h3 style="color: var(--accent-cyan); margin-bottom: 10px;">智慧控管與監控系統 - 自動安裝與更新工具 (updater)</h3>
         <p style="font-size: 0.92rem; color: var(--text-light); margin-bottom: 14px;">
           執行檔產物：<code>dist/智慧控管與監控系統 - 自動安裝與更新工具.exe</code> (約 11.86 MB)<br>
-          核心職責：一鍵覆蓋更新應用、自動配置 Web 沙盒服務 (LAH_Web_Service)、VC++ 依賴補齊、PHP 7.4 / PHP 8.5 FCGI Proxy、套用資安加固、接管可攜 Node 16 與 PM2 零全域污染沙盒服務 (LAH_PM2_Service)。
+          核心職責：一鍵覆蓋更新應用、自動配置 Web 沙盒服務 (LAH_Web_Service，含 :80 主站台與 :8080 純靜態前端 VirtualHost)、VC++ 依賴補齊、PHP 7.4 / PHP 8.5 FCGI Proxy、套用資安加固、接管可攜 Node 26 與 PM2 7.1.0 零全域污染沙盒服務 (LAH_PM2_Service)。
         </p>
 
         <div class="diagram-container">
@@ -962,7 +962,7 @@ ode 等雙層</text>
         <h3 style="color: var(--accent-purple); margin-bottom: 10px;">智慧控管與監控系統 - Node 沙盒監管工具 (node-portable)</h3>
         <p style="font-size: 0.92rem; color: var(--text-light); margin-bottom: 14px;">
           執行檔產物：<code>dist/智慧控管與監控系統 - Node 沙盒監管工具.exe</code> (約 11.50 MB)<br>
-          核心職責：專注於極速離線安裝綠色版 Node.js 16.20.2 與 PM2 5.3.1，採零全域污染沙盒隔離模式，建立開機自啟 WinSW 系統服務 (<code>PM2_Portable_Service</code>)，並掛載 <code>pm2-logrotate</code>。
+          核心職責：專注於極速離線安裝綠色版 Node.js 26.13.0 LTS 與 PM2 7.1.0，採零全域污染沙盒隔離模式，建立開機自啟 WinSW 系統服務 (<code>LAH_PM2_Service</code>)，並掛載 <code>pm2-logrotate</code>。
         </p>
 
         <div class="grid-2">
@@ -1064,7 +1064,7 @@ python tools/node-portable/build.py</code>
   <text x="120" y="301" text-anchor="middle" fill="#e2e8f0" font-size="11">Apache24 / PHP7 / 85</text>
 
   <rect x="45" y="320" width="150" height="32" rx="6" fill="#0f172a" stroke="#334155" />
-  <text x="120" y="341" text-anchor="middle" fill="#e2e8f0" font-size="11">Node 16.20.2 綠色環境</text>
+  <text x="120" y="341" text-anchor="middle" fill="#e2e8f0" font-size="11">Node 26.13.0 綠色環境</text>
 
   <!-- 中間左：pack.py 打包器 -->
   <rect x="250" y="180" width="110" height="90" rx="10" fill="#0369a1" stroke="#38bdf8" stroke-width="1.5" />
@@ -1088,14 +1088,14 @@ python tools/node-portable/build.py</code>
   <!-- node_modules 目錄 -->
   <rect x="415" y="200" width="210" height="70" rx="6" fill="#0f172a" stroke="#a855f7" />
   <text x="425" y="218" fill="#c084fc" font-size="11" font-weight="700">📁 dist/node_modules/ (核心依賴套件)</text>
-  <text x="425" y="236" fill="#94a3b8" font-size="10">LAH-NUXTJS-node_modules.zip</text>
+  <text x="425" y="236" fill="#94a3b8" font-size="10">(前端已轉純靜態，免 node_modules)</text>
   <text x="425" y="252" fill="#94a3b8" font-size="10">lah-messenger-server-node_modules.zip</text>
 
   <!-- base 目錄 -->
   <rect x="415" y="280" width="210" height="85" rx="6" fill="#0f172a" stroke="#10b981" />
   <text x="425" y="298" fill="#34d399" font-size="11" font-weight="700">📁 dist/base/ (基礎執行環境包)</text>
   <text x="425" y="316" fill="#94a3b8" font-size="10">Apache24.zip, php7.zip, php85.zip</text>
-  <text x="425" y="332" fill="#94a3b8" font-size="10">node.zip (可攜 Node 16.20.2 + PM2)</text>
+  <text x="425" y="332" fill="#94a3b8" font-size="10">node.zip (可攜 Node 26.13.0 + PM2 7.1)</text>
   <text x="425" y="348" fill="#6ee7b7" font-size="9">⭐ node-portable 亦優先讀取此處</text>
 
   <!-- pack.py 到 dist 分流連線 -->
@@ -1120,7 +1120,7 @@ python tools/node-portable/build.py</code>
   <text x="805" y="298" text-anchor="middle" fill="#ffffff" font-size="14" font-weight="700">目標正式伺服器</text>
   <text x="805" y="320" text-anchor="middle" fill="#a7f3d0" font-size="12">C:\AppServ 或 D:\DEV</text>
   <text x="805" y="342" text-anchor="middle" fill="#d1fae5" font-size="10">Apache 2.4 (mod_php + FCGI API Proxy)</text>
-  <text x="805" y="360" text-anchor="middle" fill="#d1fae5" font-size="10">PM2 WinSW 系統服務 (LAH-FE, LAH-WSS, Sched)</text>
+  <text x="805" y="360" text-anchor="middle" fill="#d1fae5" font-size="10">PM2 WinSW 服務 (LAH-WSS, LAH-SCHEDULER, API-v85)</text>
 
   <!-- updater 到 目標伺服器 連線 -->
   <path d="M 805 235 L 805 270" stroke="#34d399" stroke-width="2.5" marker-end="url(#flowArrow)" />
@@ -1172,11 +1172,11 @@ python tools/sms-env-editor/build.py</code>
           <div>
             <h4 style="color: #ffffff; margin-bottom: 8px;">🌟 核心功能與視圖架構</h4>
             <ul class="project-detail-list">
-              <li><strong>雙軌服務控管：</strong>統一管控 Windows 服務層（<code>LAH_Web_Service</code>、<code>LAH_PM2_Service</code>）與 PM2 進程層（<code>LAH-FE</code>、<code>LAH-WSS</code>、<code>LAH-SCHEDULER</code>、<code>lah-api-v85</code>），支援個別啟動/停止/重啟與頂部一鍵全域重啟。</li>
+              <li><strong>雙軌服務控管：</strong>統一管控 Windows 服務層（<code>LAH_Web_Service</code> [含 :80 與 :8080 靜態前端]、<code>LAH_PM2_Service</code>）與 PM2 進程層（<code>LAH-WSS</code>、<code>LAH-SCHEDULER</code>、<code>lah-api-v85</code>），支援個別啟動/停止/重啟與頂部一鍵全域重啟。</li>
               <li><strong>即時串流日誌：</strong>自動探測全系統各模組日誌，支援 Auto-Tail 動態追蹤、關鍵字即時篩選、清空畫面與以記事本直接開啟實體日誌檔案。</li>
               <li><strong>指標與健康探針：</strong>四大核心 KPI（CPU、記憶體、26px 雙向流量彩色明細、安裝磁碟進度條）水平齊平對齊，LAH 服務群組記憶體占用微型卡單排滾動呈現，外加五大關鍵連接埠（80, 8080, 8081, 8082, 8085）即時 TCP 心跳檢查。</li>
               <li><strong>核心組態編輯器：</strong>免翻目錄直接編輯 Apache、PHP、環境變數 <code>.env</code> 與三大 PM2 進程組態（<code>ecosystem.config.js</code>），具備強制單排緊湊工具列、自動時間戳備份、一鍵還原、Apache 與 PM2 (<code>node -c</code>) 雙軌語法預檢防護，以及 <code>.env.example</code> 雙欄範本即時比對。</li>
-              <li><strong>沙盒終端機：</strong>內建純離線 xterm.js 專業虛擬終端與 Node 16 / PM2 / Apache 2.4 / OCI 私有環境。支援直接鍵盤鍵入、歷史指令、快捷工具列，以及 UTF-8 與 CP950 (Big5 繁體中文) 雙向聯動編碼切換。</li>
+              <li><strong>沙盒終端機：</strong>內建純離線 xterm.js 專業虛擬終端與 Node 26 / PM2 7.1.0 / Apache 2.4 / OCI 私有環境。支援直接鍵盤鍵入、歷史指令、快捷工具列，以及 UTF-8 與 CP950 (Big5 繁體中文) 雙向聯動編碼切換。</li>
               <li><strong>快捷維運箱：</strong>一鍵喚醒 <code>lah-cmd.bat</code> 沙盒終端、前端入口、Apache 組態語法驗證（<code>httpd -t</code>）與日誌目錄。</li>
             </ul>
           </div>
@@ -1235,7 +1235,7 @@ python tools/dashboard/build.py</code>
               <td><code>LAH-NUXTJS.zip</code></td>
               <td><code>&lt;root&gt;\LAH-NUXTJS</code></td>
               <td><code>LAH-NUXTJS</code></td>
-              <td>智慧管控前端應用原始碼與 Nuxt 編譯產物（高頻更新）</td>
+              <td>智慧管控前端純靜態 <code>dist/</code> 編譯產物、<code>runtime-config.js</code> 與零依賴 <code>scheduler/</code>（高頻更新，免 <code>node_modules</code>）</td>
             </tr>
             <tr>
               <td><code>dist/patch/</code></td>
@@ -1244,14 +1244,7 @@ python tools/dashboard/build.py</code>
               <td><code>lah-messenger-server</code></td>
               <td>即時通訊 WebSocket / HTTP 附件伺服器原始碼（中頻更新）</td>
             </tr>
-            <tr>
-              <td><code>dist/node_modules/</code></td>
-              <td><code>LAH-NUXTJS-node_modules.zip</code></td>
-              <td><code>&lt;root&gt;\LAH-NUXTJS
-ode_modules</code></td>
-              <td><code>node_modules</code></td>
-              <td>前端網站核心依賴套件（體積較大，低頻更新）</td>
-            </tr>
+
             <tr>
               <td><code>dist/node_modules/</code></td>
               <td><code>lah-messenger-server-node_modules.zip</code></td>
@@ -1287,7 +1280,7 @@ ode_modules</code></td>
               <td><code>&lt;root&gt;
 ode</code></td>
               <td><code>node</code></td>
-              <td>Node.js 16.20.2 綠色版 + PM2 + pm2-logrotate（可攜環境）</td>
+              <td>Node.js 26.13.0 LTS 綠色版 + PM2 7.1.0 + pm2-logrotate 3.0.0（可攜環境）</td>
             </tr>
           </tbody>
         </table>
@@ -1324,7 +1317,7 @@ ode</code></td>
   <rect width="960" height="380" rx="16" fill="url(#isoBg)" stroke="#334155" stroke-width="1.5" />
 
   <text x="480" y="34" text-anchor="middle" fill="#f8fafc" font-size="18" font-weight="700">
-    可攜式 Node.js 16 與系統全域升級 四重安全隔離機制
+    可攜式 Node.js 26 LTS 與系統全域環境 四重安全隔離機制
   </text>
   <text x="480" y="54" text-anchor="middle" fill="#94a3b8" font-size="12">
     即使外部因弱點掃描強制升級至 Node.js 22+，智慧控管系統仍能 100% 穩定自立運行
@@ -1373,11 +1366,11 @@ ode</code></td>
   <text x="790" y="130" text-anchor="middle" fill="#6ee7b7" font-size="11">(&lt;root_dir&gt; = C:\AppServ 或 D:\DEV)</text>
 
   <rect x="675" y="150" width="230" height="50" rx="6" fill="#0f172a" stroke="#334155" />
-  <text x="690" y="172" fill="#e2e8f0" font-size="12" font-weight="600">可攜 Node.js v16.20.2</text>
-  <text x="690" y="190" fill="#34d399" font-size="10">路徑: &lt;root&gt;\node (完整相容 Nuxt2)</text>
+  <text x="690" y="172" fill="#e2e8f0" font-size="12" font-weight="600">可攜 Node.js v26.13.0 LTS</text>
+  <text x="690" y="190" fill="#34d399" font-size="10">路徑: &lt;root&gt;\node (零 CVE 現代化核心)</text>
 
   <rect x="675" y="215" width="230" height="50" rx="6" fill="#0f172a" stroke="#334155" />
-  <text x="690" y="237" fill="#e2e8f0" font-size="12" font-weight="600">PM2 v5.3.1 + pm2-logrotate</text>
+  <text x="690" y="237" fill="#e2e8f0" font-size="12" font-weight="600">PM2 v7.1.0 + pm2-logrotate</text>
   <text x="690" y="255" fill="#34d399" font-size="10">隨附預裝、自動 gzip 壓縮輪替</text>
 
   <rect x="675" y="280" width="230" height="50" rx="6" fill="#0f172a" stroke="#334155" />
@@ -1385,14 +1378,14 @@ ode</code></td>
   <text x="690" y="320" fill="#34d399" font-size="10">由 WinSW 守護，開機全自動拉起</text>
 </svg>
 
-        <div class="diagram-caption">圖 4：可攜式 Node.js 16.20.2 與全域升級四重隔離機制防護架構</div>
+        <div class="diagram-caption">圖 4：可攜式 Node.js 26.13.0 LTS 與全域環境四重隔離機制防護架構</div>
       </div>
 
       <div class="grid-2">
         <div class="project-card">
           <h4 style="color: var(--accent-cyan); margin-bottom: 8px;">隔離 1：WinSW 服務實體絕對路徑綁定</h4>
           <p style="font-size: 0.88rem; color: var(--text-light);">
-            在 <code>lah_pm2_service.xml</code> 中，服務執行器直接鎖定為 <code>&lt;root_dir&gt;\node\node.exe</code> 與 <code>&lt;root_dir&gt;\node\node_modules\pm2\bin\pm2</code>。作業系統開機啟動服務時，直接載入該專屬執行檔，絕不透過全域 <code>PATH</code> 尋找，即使全域 Node 升級至 v22，服務依舊穩定運行於 v16。
+            在 <code>lah_pm2_service.xml</code> 中，服務執行器直接鎖定為 <code>&lt;root_dir&gt;\node\node.exe</code> 與 <code>&lt;root_dir&gt;\node\node_modules\pm2\bin\pm2</code>。作業系統開機啟動服務時，直接載入該專屬執行檔，絕不透過全域 <code>PATH</code> 尋找，完全獨立於主機全域 Node 環境，確保服務穩定運作於可攜版 Node 26 LTS。
           </p>
         </div>
 
