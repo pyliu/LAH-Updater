@@ -5,6 +5,7 @@ pub mod install;
 pub mod pm2;
 pub mod system;
 pub mod types;
+pub mod uninstall;
 
 use std::fs;
 use std::path::PathBuf;
@@ -13,6 +14,56 @@ use types::{
     CommandActionResult, ConsoleOverview, InstallOptions, InstallReport, LogContentResult,
     LogFileInfo, LogPayload, ProgressPayload, ScanSummary, SecurityAuditReport,
 };
+
+#[tauri::command]
+async fn preview_uninstall(root_dir: String) -> Result<uninstall::RemovalPlan, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let _guard = uninstall::preview_operation_guard()?;
+        uninstall::preview(&root_dir)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn run_uninstall(app: AppHandle, plan: uninstall::RemovalPlan) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let _guard = uninstall::operation_guard()?;
+        let result = uninstall::execute(
+            plan,
+            &|message, level| {
+                let _ = app.emit(
+                    "log",
+                    LogPayload {
+                        message: message.into(),
+                        level: level.into(),
+                    },
+                );
+            },
+            &|percent, message| {
+                let _ = app.emit(
+                    "progress",
+                    ProgressPayload {
+                        percent,
+                        message: message.into(),
+                    },
+                );
+            },
+        );
+        if let Err(error) = &result {
+            let _ = app.emit(
+                "log",
+                LogPayload {
+                    level: "error".into(),
+                    message: error.clone(),
+                },
+            );
+        }
+        result
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
 
 fn resolve_root(root_dir: &str) -> PathBuf {
     if root_dir.trim().is_empty() {
@@ -65,6 +116,7 @@ async fn run_security_audit(root_dir: String) -> Result<SecurityAuditReport, Str
 #[tauri::command]
 async fn run_install(app: AppHandle, options: InstallOptions) -> Result<InstallReport, String> {
     tauri::async_runtime::spawn_blocking(move || {
+        let _guard = uninstall::operation_guard()?;
         let app_log = app.clone();
         let log_fn = move |msg: &str, level: &str| {
             let _ = app_log.emit(
@@ -85,27 +137,41 @@ async fn run_install(app: AppHandle, options: InstallOptions) -> Result<InstallR
                 },
             );
         };
-        install::execute_install(options, &log_fn, &progress_fn)
+        Ok(install::execute_install(options, &log_fn, &progress_fn))
     })
     .await
-    .map_err(|e| e.to_string())
+    .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
-async fn set_header_protection(root_dir: String, pm_id: u32, enabled: bool, expected_exec_path: String) -> Result<CommandActionResult, String> {
+async fn set_header_protection(
+    root_dir: String,
+    pm_id: u32,
+    enabled: bool,
+    expected_exec_path: String,
+) -> Result<CommandActionResult, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        header_protection::set(&resolve_root(&root_dir), pm_id, enabled, &expected_exec_path)
-    }).await.map_err(|e| e.to_string())?
+        let _guard = uninstall::operation_guard()?;
+        header_protection::set(
+            &resolve_root(&root_dir),
+            pm_id,
+            enabled,
+            &expected_exec_path,
+        )
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
 async fn get_console_overview(root_dir: String) -> Result<ConsoleOverview, String> {
     tauri::async_runtime::spawn_blocking(move || {
+        let _guard = uninstall::operation_guard()?;
         let root = resolve_root(&root_dir);
-        console::get_console_overview(&root)
+        Ok(console::get_console_overview(&root))
     })
     .await
-    .map_err(|e| e.to_string())
+    .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
@@ -115,11 +181,12 @@ async fn pm2_process_action(
     target: String,
 ) -> Result<CommandActionResult, String> {
     tauri::async_runtime::spawn_blocking(move || {
+        let _guard = uninstall::operation_guard()?;
         let root = resolve_root(&root_dir);
-        console::pm2_process_action(&root, &action, &target)
+        Ok(console::pm2_process_action(&root, &action, &target))
     })
     .await
-    .map_err(|e| e.to_string())
+    .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
@@ -128,31 +195,34 @@ async fn pm2_service_action(
     action: String,
 ) -> Result<CommandActionResult, String> {
     tauri::async_runtime::spawn_blocking(move || {
+        let _guard = uninstall::operation_guard()?;
         let root = resolve_root(&root_dir);
-        console::pm2_service_action(&root, &action)
+        Ok(console::pm2_service_action(&root, &action))
     })
     .await
-    .map_err(|e| e.to_string())
+    .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
 async fn repair_logrotate(root_dir: String) -> Result<CommandActionResult, String> {
     tauri::async_runtime::spawn_blocking(move || {
+        let _guard = uninstall::operation_guard()?;
         let root = resolve_root(&root_dir);
-        console::repair_or_restart_logrotate(&root)
+        Ok(console::repair_or_restart_logrotate(&root))
     })
     .await
-    .map_err(|e| e.to_string())
+    .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
 async fn trigger_logrotate_now(root_dir: String) -> Result<CommandActionResult, String> {
     tauri::async_runtime::spawn_blocking(move || {
+        let _guard = uninstall::operation_guard()?;
         let root = resolve_root(&root_dir);
-        console::trigger_logrotate_now(&root)
+        Ok(console::trigger_logrotate_now(&root))
     })
     .await
-    .map_err(|e| e.to_string())
+    .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
@@ -183,6 +253,12 @@ fn open_logs_folder(root_dir: String) -> CommandActionResult {
 
 #[tauri::command]
 fn open_lah_cmd(root_dir: String) -> CommandActionResult {
+    let Ok(_guard) = uninstall::operation_guard() else {
+        return CommandActionResult {
+            success: false,
+            message: "另一項沙盒作業正在執行。".into(),
+        };
+    };
     let root = resolve_root(&root_dir);
     console::open_lah_cmd(&root)
 }
@@ -197,6 +273,8 @@ pub fn run() {
             check_root_dir,
             run_security_audit,
             run_install,
+            preview_uninstall,
+            run_uninstall,
             get_console_overview,
             set_header_protection,
             pm2_process_action,

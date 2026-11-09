@@ -8,7 +8,10 @@ let currentTab = "console";
 let installTabAvailable = null;
 let consolePollTimer = null;
 let lastOverview = null;
+let consoleRefresh = null;
 let currentLogProcess = null;
+let uninstallPlan = null;
+let operationKind = "install";
 
 async function initAdminStatus() {
   const badge = $("admin_badge");
@@ -57,6 +60,7 @@ function setToast(msg, type = "normal") {
 }
 
 function switchTab(tab) {
+  if (isBusy) return;
   if (tab === "install" && installTabAvailable !== true) {
     tab = "console";
   }
@@ -76,7 +80,7 @@ function switchTab(tab) {
   if (tab === "console") {
     const refreshed = refreshConsole();
     consolePollTimer = setInterval(() => {
-      if ($("chk_auto_refresh").checked && !isBusy) {
+      if ($("chk_auto_refresh").checked && !isBusy && !$("modal_progress").classList.contains("active")) {
         refreshConsole(true);
       }
     }, 4000);
@@ -160,7 +164,13 @@ async function rescan(isInitial = false) {
   }
 }
 
-async function refreshConsole(silent = false) {
+function refreshConsole(silent = false) {
+  if (consoleRefresh) return consoleRefresh;
+  consoleRefresh = loadConsole(silent).finally(() => { consoleRefresh = null; });
+  return consoleRefresh;
+}
+
+async function loadConsole(silent = false) {
   const rootDir = $("root_dir").value.trim();
   if (!silent) {
     setToast("正在同步沙盒 Node / PM2 狀態...");
@@ -386,6 +396,7 @@ $("btn_svc_stop").onclick = (e) => executeServiceAction("stop", e.currentTarget)
 $("btn_svc_restart").onclick = (e) => executeServiceAction("restart", e.currentTarget);
 
 $("btn_open_cmd").onclick = async () => {
+  if (isBusy) return;
   const rootDir = $("root_dir").value.trim();
   const res = await invoke("open_lah_cmd", { rootDir });
   setToast(res.message, res.success ? "success" : "error");
@@ -658,7 +669,8 @@ $("btn_modal_back").onclick = () => {
   if (isBusy) return;
   $("modal_progress").classList.remove("active");
   $("btn_exit").disabled = false;
-  rescan();
+  if (operationKind === "uninstall") switchTab("console");
+  else rescan();
 };
 
 $("btn_modal_to_console").onclick = () => {
@@ -669,6 +681,10 @@ $("btn_modal_to_console").onclick = () => {
 };
 
 $("btn_start").onclick = async () => {
+  if (isBusy) return;
+  operationKind = "install";
+  $("operation_title").textContent = "安裝進行中...";
+  $("btn_modal_back").textContent = "返回安裝設定";
   const rootDir = $("root_dir").value.trim();
   if (!rootDir) {
     alert("請輸入安裝根目錄！");
@@ -709,6 +725,82 @@ $("btn_start").onclick = async () => {
     $("btn_modal_back").style.display = "inline-block";
     $("btn_close_modal").disabled = false;
     $("btn_close_modal").textContent = "關閉離開";
+  }
+};
+
+
+$("btn_uninstall").onclick = async () => {
+  if (isBusy) return;
+  isBusy = true;
+  uninstallPlan = null;
+  $("btn_confirm_uninstall").disabled = true;
+  $("btn_cancel_uninstall").disabled = true;
+  $("uninstall_detail").textContent = "正在檢查目錄、服務與受影響程序...";
+  $("modal_uninstall").classList.add("active");
+  try {
+    if (consoleRefresh) await consoleRefresh;
+    const plan = await invoke("preview_uninstall", { rootDir: $("root_dir").value.trim() });
+    uninstallPlan = plan;
+    const list = values => `<ul>${values.map(value => `<li>${escapeHtml(value)}</li>`).join("")}</ul>`;
+    $("uninstall_detail").innerHTML = `
+      <p><b>目標目錄：</b>${escapeHtml(plan.root_dir)}</p>
+      <p>移除後，使用這套 Node／PM2 的應用會停止運作。重裝並還原快照後才能恢復。</p>
+      <b>解除服務</b>${list(plan.service_installed ? ["PM2_Portable_Service"] : ["此沙盒未註冊服務"])}
+      <b>將停止的程序（含受管應用與子程序）</b>${list(plan.processes.length ? plan.processes.map(p => `${p.name} · PID ${p.pid} · ${p.executable}`) : ["目前沒有使用此沙盒的程序"])}
+      <p>程序清單為預覽當下的狀態。確認後會重新盤點，停止屬於此沙盒的程序。</p>
+      <b>移除</b>${list(plan.remove)}
+      <p>node 目錄會整個刪除；若曾自行放入應用或資料，請先搬出，再重新預覽。</p>
+      <b>保留</b>${list(plan.preserve)}
+      <p>保留既有快照，不會自動覆寫為目前程序清單。工具執行檔會保留，方便日後重新安裝。</p>
+      ${plan.blockers.length ? `<div role="alert" style="color:#b91c1c;"><b>目前無法移除</b>${list(plan.blockers)}</div>` : ""}`;
+    $("btn_confirm_uninstall").disabled = plan.blockers.length > 0;
+    $(plan.blockers.length ? "btn_cancel_uninstall" : "btn_confirm_uninstall").focus();
+  } catch (error) {
+    $("uninstall_detail").textContent = `無法預覽移除：${error}`;
+  } finally {
+    $("btn_cancel_uninstall").disabled = false;
+    if ($("btn_confirm_uninstall").disabled) $("btn_cancel_uninstall").focus();
+  }
+};
+
+$("btn_cancel_uninstall").onclick = () => {
+  if ($("btn_cancel_uninstall").disabled) return;
+  $("modal_uninstall").classList.remove("active");
+  uninstallPlan = null;
+  isBusy = false;
+  $("btn_uninstall").focus();
+};
+
+$("btn_confirm_uninstall").onclick = async () => {
+  if (!uninstallPlan || $("btn_confirm_uninstall").disabled) return;
+  const plan = uninstallPlan;
+  uninstallPlan = null;
+  operationKind = "uninstall";
+  $("btn_confirm_uninstall").disabled = true;
+  $("modal_uninstall").classList.remove("active");
+  $("operation_title").textContent = "沙盒移除作業";
+  $("btn_modal_back").textContent = "返回控制台";
+  $("btn_modal_back").style.display = "none";
+  $("btn_modal_to_console").style.display = "none";
+  $("btn_close_modal").disabled = true;
+  $("log_box").innerHTML = "";
+  $("progress_bar").value = 0;
+  $("percent_text").textContent = "0.0%";
+  $("status_text").textContent = "重新檢查移除範圍...";
+  $("modal_progress").classList.add("active");
+  try {
+    const message = await invoke("run_uninstall", { plan });
+    $("status_text").textContent = message;
+    currentInlineProc = null;
+    lastOverview = null;
+    $("inline_log_box").textContent = "沙盒已移除；既有日誌仍保留在原目錄。";
+  } catch (error) {
+    appendLog(`移除已停止：${error}`, "error");
+    $("status_text").textContent = `移除未完成：${error}`;
+  } finally {
+    isBusy = false;
+    $("btn_modal_back").style.display = "inline-block";
+    $("btn_close_modal").disabled = false;
   }
 };
 

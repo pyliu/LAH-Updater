@@ -956,6 +956,7 @@
     <div class="header-right">
       <button id="btn_audit" class="btn-green btn-sm"><svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2l8 3v6c0 5-3 8-8 11-5-3-8-6-8-11V5zM8 12l3 3 5-6"/></svg> 資安自檢</button>
       <div id="admin_badge" class="admin-badge not-admin">檢測權限中...</div>
+      <button id="btn_uninstall" class="btn-sm btn-warn" type="button">移除安裝</button>
     </div>
   </div>
 
@@ -1249,6 +1250,17 @@
     </div>
   </div>
 
+  <div id="modal_uninstall" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="uninstall_title">
+    <div class="modal-content" style="max-height:calc(100vh - 32px);">
+      <div class="modal-header"><h2 id="uninstall_title">移除沙盒安裝</h2></div>
+      <div id="uninstall_detail" style="overflow-y:auto; min-height:0; line-height:1.65; overflow-wrap:anywhere; user-select:text;"></div>
+      <div class="footer-bar" style="margin-top:12px; gap:8px;">
+        <button id="btn_cancel_uninstall" type="button">取消</button>
+        <button id="btn_confirm_uninstall" class="danger" style="background:#b91c1c; border-color:#991b1b;" type="button" disabled>確認移除</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ==================== 彈窗 1：安裝進度視窗 ==================== -->
   <div id="modal_progress" class="modal-overlay">
     <div class="modal-content">
@@ -1263,7 +1275,7 @@
             <path d="M176 82 L228 100 L190 142 Z" fill="#5eead4"/>
             <path d="M336 430 L284 412 L322 370 Z" fill="#0ea5e9"/>
           </svg>
-        <span>安裝進行中...</span>
+        <span id="operation_title">安裝進行中...</span>
       </h2></div>
       <div class="progress-wrap">
         <div class="progress-info"><span id="status_text">準備中...</span><span id="percent_text">0.0%</span></div>
