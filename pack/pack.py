@@ -340,18 +340,44 @@ def find_dist_node_zip(script_dir=None, fe_dir=None, workspace_dir=None):
     return None
 
 
-def resolve_build_node_path(fe_dir=None, script_dir=None):
-    """尋找編譯用 Node 目錄（優先自原始碼目錄 fe_dir/node，若無則自 dist 解壓，再探測 AppServ；皆無則回傳 None 沿用系統 PATH）"""
-    # 1. 優先檢查原始碼目錄（LAH-FE）下的 node
+def get_global_node_version():
+    """檢查系統全域 PATH 是否存在可用之 node 執行檔並回傳其版本字串（例如 'v26.12.1'），若無或執行異常則回傳 None"""
+    try:
+        node_path = shutil.which("node")
+        if not node_path:
+            return None
+        ret = subprocess.run([node_path, "-v"], capture_output=True, text=True, timeout=5)
+        if ret.returncode == 0:
+            ver = ret.stdout.strip()
+            if ver.startswith("v"):
+                return ver
+    except Exception:
+        pass
+    return None
+
+
+def resolve_build_node_path(fe_dir=None, script_dir=None, force_portable=False):
+    """尋找前端編譯用 Node 執行期目錄（預設優先檢測全域 Node；若未安裝或指定 force_portable 則回退至綠色環境）"""
+    # 1. 預設模式：優先檢測系統全域 Node.js
+    if not force_portable:
+        global_ver = get_global_node_version()
+        if global_ver:
+            print(f"         [環境偵測] 偵測到全域 Node.js ({global_ver})，優先採用系統環境編譯。")
+            return None
+
+    if force_portable:
+        print("         [環境切換] 已指定強制使用綠色 Node.js 執行期。")
+
+    # 2. 備援方案或強制綠色環境：檢查原始碼目錄（LAH-FE）下的 node
     if fe_dir:
         fe_node_dir = os.path.join(fe_dir, "node")
         if os.path.isfile(os.path.join(fe_node_dir, "node.exe")):
             return fe_node_dir
 
-        # 2. 若原始碼目錄下無 node.exe，自動自 dist 目錄尋找 node.zip 解壓縮至原始碼目錄
+        # 3. 若原始碼目錄下無 node.exe，自動自 dist 目錄尋找 node.zip 解壓縮至原始碼目錄作為備援防線
         dist_zip = find_dist_node_zip(script_dir=script_dir, fe_dir=fe_dir)
         if dist_zip and os.path.isfile(dist_zip):
-            print(f"         [自動還原] 原始碼目錄未發現 node.exe，正在自 dist 解壓 {os.path.basename(dist_zip)} 至：{fe_node_dir}")
+            print(f"         [自動還原] 系統未發現全域 Node，正在自 dist 解壓 {os.path.basename(dist_zip)} 至：{fe_node_dir}")
             try:
                 with zipfile.ZipFile(dist_zip, "r") as zf:
                     # 判斷壓縮檔內部第一層是否自帶 node/ 前綴
@@ -365,7 +391,7 @@ def resolve_build_node_path(fe_dir=None, script_dir=None):
             except Exception as e:
                 print(f"         [WARN] 解壓縮 {dist_zip} 失敗：{e}")
 
-    # 3. 備援探測：自 AppServ 尋找綠色 Node
+    # 4. 備援探測：自 AppServ 尋找綠色 Node
     candidates = []
     candidates.extend([
         "C:/AppServ/node",
@@ -377,7 +403,7 @@ def resolve_build_node_path(fe_dir=None, script_dir=None):
     return None
 
 
-def run_fe_build(fe_dir):
+def run_fe_build(fe_dir, use_portable_node=False):
     """進入 LAH-FE 執行 yarn generate 產出純靜態網站 (dist/) 並等待完成"""
     print("-" * 60)
     print(f"[Step 1] 正在執行前端靜態編譯 (yarn generate)...")
@@ -396,7 +422,7 @@ def run_fe_build(fe_dir):
     if "--openssl-legacy-provider" not in node_opts:
         build_env["NODE_OPTIONS"] = (node_opts + " --openssl-legacy-provider").strip()
 
-    build_node_dir = resolve_build_node_path(fe_dir=fe_dir)
+    build_node_dir = resolve_build_node_path(fe_dir=fe_dir, force_portable=use_portable_node)
     if build_node_dir:
         print(f"         [環境隔離] 自動切換至綠色 Node 執行期：{build_node_dir}")
         build_env["PATH"] = build_node_dir + os.pathsep + build_env.get("PATH", "")
@@ -978,6 +1004,7 @@ def main():
     parser.add_argument("--vcredist-only", action="store_true", help="僅打包 VC++ 核心程式庫 (vcredist-x64.zip)")
     parser.add_argument("--with-vcredist", action="store_true", help="常規打包時一併打包 VC++ 核心程式庫 (vcredist-x64.zip)")
     parser.add_argument("--no-notes", action="store_true", help="略過自動生成系統更新說明文件與發布錨點更新")
+    parser.add_argument("--use-portable-node", action="store_true", help="強制使用可攜式 Node.js 綠色環境進行前端編譯（預設優先採用系統全域 Node）")
     parser.add_argument("--output-dir", default=None, help="指定輸出基底目錄（預設為專案根目錄之 dist 目錄，自動分流至 patch/、node_modules/ 與 base/）")
     args = parser.parse_args()
 
@@ -1066,7 +1093,8 @@ def main():
     print(f"LAH-API (PHP8)         來源：{api8_dir}")
     print(f"LAH-FE                 來源：{fe_dir}")
     print(f"lah-messenger-server   來源：{messenger_dir}")
-    print(f"Node.js (綠色環境)     來源：{node_dir}")
+    node_status = node_dir if os.path.isdir(node_dir) else f"{node_dir} (備援)"
+    print(f"Node.js (綠色環境)     來源：{node_status}")
     print(f"ZIP 輸出基底目錄            ：{output_base_dir}")
     print(f"  ├─ 程式更新包 (patch)     ：{patch_dir}")
     print(f"  ├─ 核心依賴包 (node_modules)：{node_modules_dir}")
@@ -1085,7 +1113,7 @@ def main():
 
     # 1. 前端 yarn build
     if do_fe and not args.skip_build:
-        if not run_fe_build(fe_dir):
+        if not run_fe_build(fe_dir, use_portable_node=args.use_portable_node):
             sys.exit(1)
 
     # 2. 打包 LAH-API (PHP7) -> patch/www.zip
