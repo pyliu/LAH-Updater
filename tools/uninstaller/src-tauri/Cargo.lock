@@ -1642,7 +1642,7 @@ dependencies = [
 
 [[package]]
 name = "lah-uninstaller"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "chrono",
  "regex",

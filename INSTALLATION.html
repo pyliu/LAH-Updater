@@ -739,9 +739,9 @@
       <div>
         <div class="cover-meta">
           <div class="meta-item"><strong>文件編號：</strong><span>LAH-OPS-SOP-202611</span></div>
-          <div class="meta-item"><strong>發布日期：</strong><span>2026 年 11 月 8 日 (v2.0.0 前端純靜態 Apache 託管、Node.js v26 LTS 升級與全自動相依解耦修訂版)</span></div>
+          <div class="meta-item"><strong>發布日期：</strong><span>2026 年 11 月 9 日 (v2.0.0 前端純靜態 Apache 託管、Node.js v26 LTS 升級與維運工具鏈全面校準修訂版)</span></div>
           <div class="meta-item"><strong>適用系統：</strong><span>智慧控管與監控系統 (LAH)</span></div>
-          <div class="meta-item"><strong>維運工具：</strong><span>LAH-Updater v2.0.0 (Rust 核心，含自動安裝更新引擎 v0.1.9、管理儀表板 v0.1.9、Node 沙盒監管 v0.1.5、備份還原 v0.1.4 與自動移除 v0.1.3)</span></div>
+          <div class="meta-item"><strong>維運工具：</strong><span>LAH-Updater v2.0.0 (Rust 核心，含自動安裝更新引擎 v0.2.0、管理儀表板 v0.2.0、Node 沙盒監管 v0.1.6、備份與還原工具 v0.1.5 與自動移除工具 v0.1.4)</span></div>
           <div class="meta-item"><strong>適用單位：</strong><span>桃園市各地政事務所 資訊小組</span></div>
           <div class="meta-item"><strong>保密等級：</strong><span>內部維運限閱 (內部專用)</span></div>
         </div>
@@ -924,7 +924,7 @@
         </tr>
         <tr>
           <td><code>LAH-NUXTJS/</code></td>
-          <td><strong>前端系統環境：</strong>智慧管控前端之在地化 <code>.env</code> 環境參數（還原後自動重新產出 <code>dist/runtime-config.js</code>，並自動自 <code>.pm2/dump.pm2</code> 剔除已退役之舊版 <code>LAH-FE</code> 進程）。</td>
+          <td><strong>前端系統環境：</strong>智慧管控前端之在地化 <code>.env</code> 環境參數（還原後自動重新產出 <code>dist/runtime-config.js</code>，並自動自 <code>.pm2/dump.pm2</code> 剔除已退役之舊版 <code>LAH-FE</code> 行程）。</td>
         </tr>
         <tr>
           <td><code>lah-cmd.bat</code></td>
@@ -974,7 +974,7 @@
       <p>為避免覆蓋現有機台正常運作之 Apache 與 PHP 7 設定，於上方情境快選列直接點擊 <strong>「🔄 原地升級」</strong> 按鈕（對齊圖 2 紅框標註），系統將自動完成最佳化配置：</p>
       <ul>
         <li><strong style="color: #059669;">【自動精準勾選】</strong> <strong>原機升級 8 大核心包</strong>：<code>PHP 8.5 FastCGI (php85.zip)</code>、<code>VC++ 執行期相依套件</code>、<code>Node.js 26 綠色環境 (node.zip)</code>、<code>後端 PHP7/PHP8 更新包 (www.zip / LAH-API.zip)</code>、<code>前端靜態更新包 (LAH-NUXTJS.zip)</code> 以及 <code>即時通訊伺服器與核心套件 (lah-messenger-server.zip / node_modules)</code>。</li>
-        <li><strong style="color: #dc2626;">【自動排除干擾】</strong> 取消勾選 <strong>Apache 2.4 (Apache24.zip)</strong> 與 <strong>PHP 7.4 (php7.zip)</strong>，完整保留機台原有穩定 Apache、PHP 7.4 與 OCI8 驅動（管線將自動於既有 <code>httpd.conf</code> 注入 :8080 靜態 VirtualHost，並清理已退役之 <code>LAH-NUXTJS/node_modules</code> 與舊 PM2 <code>LAH-FE</code> 進程）。</li>
+        <li><strong style="color: #dc2626;">【自動排除干擾】</strong> 取消勾選 <strong>Apache 2.4 (Apache24.zip)</strong> 與 <strong>PHP 7.4 (php7.zip)</strong>，完整保留機台原有穩定 Apache、PHP 7.4 與 OCI8 驅動（管線將自動於既有 <code>httpd.conf</code> 注入 :8080 靜態 VirtualHost，並清理已退役之 <code>LAH-NUXTJS/node_modules</code> 與舊 PM2 <code>LAH-FE</code> 行程）。</li>
         <li><strong style="color: #059669;">【自動服務配置】</strong> 自動保持勾選<strong>自動註冊 Web/PM2 為 Windows 服務</strong>、<strong>套用資安強化配置（含 mpm_winnt 雙層記憶體防護閘與 :8080 靜態站台同步）</strong>及<strong>更新後自動重啟 Web 與 PM2 服務</strong>。</li>
       </ul>
     </div>
@@ -1029,7 +1029,7 @@
       <p>以系統管理員身分開啟 <strong><code>智慧控管與監控系統 - 自動移除工具.exe</code></strong>：</p>
       <ol style="margin: 3px 0 0 16px; padding: 0; line-height: 1.6;">
         <li>確認系統安裝根目錄路徑（工具支援多磁碟動態偵測，亦可手動瀏覽變更）。</li>
-        <li>保持預設<strong>「全選」</strong>所有清理項（安全卸載 Windows 服務、終止所有進程含 php-cgi、徹底清除登錄檔殘留與清空目錄）。</li>
+        <li>保持預設<strong>「全選」</strong>所有清理項（安全卸載 Windows 服務、終止所有行程（含 php-cgi）、徹底清除登錄檔殘留與清空目錄）。</li>
         <li>點擊 <strong>「🚨 開始執行移除作業」</strong> 按鈕。</li>
         <li>於彈出之確認對話框中點選 <strong>「確認並立即執行移除」</strong>，等待進度完成並關閉工具。</li>
       </ol>
@@ -1105,14 +1105,14 @@
     </div>
 
     <h2>🩺 7. 系統完成驗證與健康巡檢標準</h2>
-    <p>更新管線結束後會自動彈現「連接埠健康巡檢報告」。管理師亦可開啟 CMD / PowerShell 執行 <code>netstat -ano</code>，確認以下 <strong>五大關鍵服務連接埠皆為 [OK] 運行中</strong>：</p>
+    <p>更新管線結束後會自動彈現「連接埠健康巡檢報告」。管理師亦可開啟 CMD / PowerShell 執行 <code>netstat -ano</code>，確認以下 <strong>五大關鍵服務連接埠皆為 [OK] 運作中</strong>：</p>
 
     <table>
       <thead>
         <tr>
           <th style="width: 13%;">服務埠號</th>
           <th style="width: 22%;">服務名稱</th>
-          <th style="width: 20%;">守護進程 / 架構</th>
+          <th style="width: 20%;">守護行程 / 架構</th>
           <th>驗證判定合格標準</th>
         </tr>
       </thead>
@@ -1153,8 +1153,8 @@
     <h3>🖥️ 一站式維運管理儀表板驗證 (LAH-Dashboard)</h3>
     <ol style="margin: 2px 0 6px 16px; padding: 0; line-height: 1.6;">
       <li>更新完成後，可直接於更新完成對話框點擊 <strong>「📊 開啟管理儀表板」</strong>，或雙擊桌面捷徑 <strong>「智慧控管與監控系統 - 管理儀表板」</strong>。</li>
-      <li><strong>服務監控（分頁一）：</strong>確認 Windows 系統服務層 (<code>LAH_Web_Service</code> [同時託管 :80 與 :8080 靜態前端]、<code>LAH_PM2_Service</code>) 與 PM2 應用進程層 (<code>LAH-WSS</code>、<code>LAH-SCHEDULER</code>、<code>lah-api-v85</code>) 全數呈現綠燈 <strong>[執行中]</strong>。支援頂部「一鍵重啟全部」，並提供脈衝輪詢即時呈現重啟進度。</li>
-      <li><strong>動態日誌（分頁二）：</strong>各受管進程支援即時串流日誌 (Auto-Tail)，支援關鍵字即時篩選，亦可一鍵以 Windows 記事本開啟實體日誌檔案。</li>
+      <li><strong>服務監控（分頁一）：</strong>確認 Windows 系統服務層 (<code>LAH_Web_Service</code> [同時託管 :80 與 :8080 靜態前端]、<code>LAH_PM2_Service</code>) 與 PM2 應用行程層 (<code>LAH-WSS</code>、<code>LAH-SCHEDULER</code>、<code>lah-api-v85</code>) 全數呈現綠燈 <strong>[執行中]</strong>。支援頂部「一鍵重啟全部」，並提供脈衝輪詢即時呈現重啟進度。</li>
+      <li><strong>動態日誌（分頁二）：</strong>各受管行程支援即時串流日誌 (Auto-Tail)，支援關鍵字即時篩選，亦可一鍵以 Windows 記事本開啟實體日誌檔案。</li>
       <li><strong>系統指標與探針（分頁三）：</strong>提供 60 秒 CPU / 記憶體負載趨勢折線圖、網路雙向傳輸流量圖、LAH 服務群組記憶體占用排名卡片、磁碟空間與五大通訊埠 (80, 8080, 8081, 8082, 8085) 即時 TCP 心跳探針。</li>
       <li><strong>核心組態編輯器（分頁四）：</strong>免進檔案總管翻找，直接檢視與編輯 Apache (<code>httpd.conf</code> / <code>httpd-vhosts.conf</code>)、PHP (<code>php.ini</code>)、後端 API (<code>www/.env</code>) 與前端 (<code>LAH-NUXTJS/.env</code>，儲存時自動同步重新產出 <code>dist/runtime-config.js</code>) 等設定。具備自動時間戳備份、一鍵還原、Apache 語法預檢防呆，以及 <code>.env.example</code> 雙欄範本即時比對。</li>
       <li><strong>沙盒終端機（分頁五）：</strong>內建純離線 xterm.js 專業虛擬終端與 Node.js v26 / PM2 7.1.0 / Apache 2.4 / OCI 私有環境。支援直接打字、鍵盤退格、歷史指令、快捷常用指令，以及「UTF-8」與「CP950 (Big5 繁體中文)」雙向聯動編碼切換。</li>
@@ -1215,7 +1215,7 @@
       <thead>
         <tr>
           <th style="width: 14%;">作業階段</th>
-          <th style="width: 60%;">具體檢核作業項目</th>
+          <th style="width: 60%;">具體檢核作業細項</th>
           <th style="width: 14%;">執行狀態</th>
           <th style="width: 12%;">確認簽核</th>
         </tr>
@@ -1255,7 +1255,7 @@
           <td></td>
         </tr>
         <tr>
-          <td><span class="chk-box"></span> <strong>情境二 (全新安裝)：</strong>原機已徹底清理進程與服務，更新工具<strong>全選並選取備份 ZIP</strong>。</td>
+          <td><span class="chk-box"></span> <strong>情境二 (全新安裝)：</strong>原機已徹底清理行程與服務，更新工具<strong>全選並選取備份 ZIP</strong>。</td>
           <td>□ 符合 □ 走情境一</td>
           <td></td>
         </tr>
@@ -1266,7 +1266,7 @@
           <td></td>
         </tr>
         <tr>
-          <td><span class="chk-box"></span> <strong>管理儀表板：</strong>確認桌面已建立捷徑，開啟確認首頁 CPU/RAM 資源折線圖、記憶體排名與 Apache/PM2 各服務進程全數綠燈。</td>
+          <td><span class="chk-box"></span> <strong>管理儀表板：</strong>確認桌面已建立捷徑，開啟確認首頁 CPU/RAM 資源折線圖、記憶體排名與 Apache/PM2 各服務行程全數綠燈。</td>
           <td>□ 測試正常</td>
           <td></td>
         </tr>

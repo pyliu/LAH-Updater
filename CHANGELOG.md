@@ -20,9 +20,9 @@
     - 打包 `LAH-NUXTJS.zip` 時改為收納預編譯之 `dist/`、`static/runtime-config.js` 與零外部相依之 `scheduler/`；預設不再產出 `LAH-NUXTJS-node_modules.zip`。
   - `tools/updater` (`v0.1.9`)：
     - `apache_conf.rs`：新增 `configure_apache_fe_static_vhost`，於 `httpd.conf` 自動注入 `# === LAH-FE Static VirtualHost (:8080) ===` 區塊（含 `/api`、`/LAH-API` Alias、`proxy.php` RewriteRule、SPA History Fallback 與 `index.html`/`runtime-config.js` 禁快取標頭），並實作 `sync_fe_runtime_config` 由 `LAH-NUXTJS/.env` 自動產出 `dist/runtime-config.js`。
-    - `pm2.rs` & `extractor.rs`：於 `idempotent_reconstruct_pm2_services` 自動停止並剔除已退役之 `LAH-FE` PM2 進程、僅掛載 `LAH-SCHEDULER`，並自動清理目標機台殘留之 `LAH-NUXTJS/node_modules`。
+    - `pm2.rs` & `extractor.rs`：於 `idempotent_reconstruct_pm2_services` 自動停止並剔除已退役之 `LAH-FE` PM2 行程、僅掛載 `LAH-SCHEDULER`，並自動清理目標機台殘留之 `LAH-NUXTJS/node_modules`。
   - `tools/dashboard` (`v0.1.9`) & `tools/node-portable` (`v0.1.5`)：
-    - 受管 PM2 進程清單收斂為 `LAH-WSS`、`LAH-SCHEDULER`、`lah-api-v85`；於組態編輯器儲存 `LAH-NUXTJS/.env` 時自動同步更新 `dist/runtime-config.js`。
+    - 受管 PM2 行程清單收斂為 `LAH-WSS`、`LAH-SCHEDULER`、`lah-api-v85`；於組態編輯器儲存 `LAH-NUXTJS/.env` 時自動同步更新 `dist/runtime-config.js`。
   - `tools/backuper` (`v0.1.4`) & `tools/uninstaller` (`v0.1.3`)：
     - `restore.rs`：還原後自動跨目錄校準或補齊 `:8080` 靜態 VirtualHost、重新生成 `dist/runtime-config.js`，並自 `.pm2/dump.pm2` 剔除舊版 `LAH-FE`。
     - `uninstaller/src-tauri/src/apache_conf.rs`：勾選移除前端（`do_remove_fe`）且保留 Apache 時，自動自 `httpd.conf` 移除 `:8080` VirtualHost 區塊。
@@ -242,15 +242,15 @@
 - **相容性說明**：
   - 組態讀取、儲存與語法預檢功能完全保持相容。
 
-### 🖥️ 管理儀表板核心組態編輯器新增 PM2 進程組態與 node -c 語法預檢防護
+### 🖥️ 管理儀表板核心組態編輯器新增 PM2 行程組態與 node -c 語法預檢防護
 
 - **修改目的**：
-  - 支援管理人員直接於儀表板編輯三大核心 PM2 進程設定檔，無須手動深入各專案目錄。
-  - 儲存前自動執行 JavaScript 語法預檢，阻斷因人為筆誤或語法錯誤造成守護進程崩潰之風險。
+  - 支援管理人員直接於儀表板編輯三大核心 PM2 行程設定檔，無須手動深入各專案目錄。
+  - 儲存前自動執行 JavaScript 語法預檢，阻斷因人為筆誤或語法錯誤造成守護行程崩潰之風險。
   - 儲存後依組態類型提供分流精確重啟提示，避免全域非必要重啟。
 - **具體修改項目**：
   - `tools/dashboard/src-tauri/src/configs.rs`：
-    - 新增三大進程組態項目：前端與排程（`LAH-NUXTJS/ecosystem.config.js`）、即時通訊（`lah-messenger-server/ecosystem.config.js`）與 API FastCGI（`LAH-API/ecosystem.config.js`）。
+    - 新增三大行程組態項目：前端與排程（`LAH-NUXTJS/ecosystem.config.js`）、即時通訊（`lah-messenger-server/ecosystem.config.js`）與 API FastCGI（`LAH-API/ecosystem.config.js`）。
     - 於 `save_core_config` 加入 PM2 ecosystem 偵測，儲存前調用 `node -c` 預檢語法，失敗時回傳具體行號與錯誤訊息並阻擋儲存。
   - `tools/dashboard/ui/app.js`：
     - 依組態種類分流提示重啟目標，支援個別重啟前端、即時通、API FastCGI 或 Apache。
@@ -301,7 +301,7 @@
 
 - **修改目的**：
   - 將安裝磁碟剩餘空間移至第一排與 CPU、記憶體、網路即時流量並列顯示，提升第一排核心系統健康指標之完整性與對稱性。
-  - 將 LAH 服務群組記憶體占用改為第二排全寬單排獨立呈現，各進程重構為「緊湊直立微型卡」且單排不換行，支援平滑水平滾動，提升多進程辨識度與視覺層次。
+  - 將 LAH 服務群組記憶體占用改為第二排全寬單排獨立呈現，各行程重構為「緊湊直立微型卡」且單排不換行，支援平滑水平滾動，提升多行程辨識度與視覺層次。
 - **具體修改項目**：
   - `tools/dashboard/ui/index.html`：
     - 將第一排網格改為 `.metrics-row-4`，把「安裝磁碟剩餘空間」卡片移至第一排右側。
@@ -380,18 +380,18 @@
 
 - **修改目的**：
   - 提供系統管理員一站式檢視與編輯常見服務組態（Apache httpd.conf、PHP php.ini、各子專案 .env 等）之能力，解決以往需手動尋找深層目錄與文字編輯之痛點，並內建語法防呆與自動備份。
-  - 將第三分頁之系統指標升級為 Windows 工作管理員效能風格，即時呈現實體網路收發速率、LAH 服務群組實體記憶體總占用量與進程排行清單，並透過純原生 Canvas 繪製 60 秒即時平滑波形趨勢圖。
+  - 將第三分頁之系統指標升級為 Windows 工作管理員效能風格，即時呈現實體網路收發速率、LAH 服務群組實體記憶體總占用量與行程排行清單，並透過純原生 Canvas 繪製 60 秒即時平滑波形趨勢圖。
 - **具體修改項目**：
   - **核心組態編輯器 (第四分頁)**：
     - 預載 10 大核心組態快速選單：Apache 核心與虛擬主機、PHP 7.3/8.5 php.ini、後端 API www/.env、前端網站 LAH-NUXTJS/.env、即時通 lah-messenger-server/.env、WinSW 服務 XML 等，並支援「📂 自訂檔案...」。
     - 內建 .env.example 雙欄對照比對檢視視圖：自動偵測同目錄下之範本檔，提供展開唯讀窗格、一鍵複製範本與防呆套用至編輯區。
     - 多重安全防護機制：儲存時自動產生備份（自動保留最新 5 份）；提供歷史備份下拉選單與還原功能；Apache 組態儲存自動執行 httpd.exe -t 語法預檢防呆，語法錯誤彈窗告警並提供一鍵自動還原。
-    - 智慧關聯重啟提示：組態變更儲存成功後，依據檔案屬性主動彈窗詢問是否立即重啟 Apache 系統服務或關聯 PM2 應用進程。
+    - 智慧關聯重啟提示：組態變更儲存成功後，依據檔案屬性主動彈窗詢問是否立即重啟 Apache 系統服務或關聯 PM2 應用行程。
     - 編輯器操作增強：Tab 鍵插入 4 空格、Ctrl + S 快速儲存、自動換行切換開關、未儲存變更標籤與切換防呆。
   - **Windows 效能風格系統指標 (第三分頁)**：
     - 純原生 HTML5 Canvas 繪製 60 秒平滑趨勢折線圖（CPU 青色、記憶體紫色、網路雙色），微暗網格背景與漸層半透明填充，退至背景自動休眠。
     - 網路即時流量探測：後端呼叫原生 Win32 GetIfTable2（iphlpapi.dll），微秒級採集實體網卡之接收（下載）與傳送（上傳）速率，動態自適應波形圖。
-    - LAH 服務群組記憶體卡片：後端使用內核級 NtQuerySystemInformation 枚舉所有 Apache httpd.exe 實體記憶體，並結合 PM2 進程記憶體，呈報總占用量、佔系統實體記憶體百分比及進程占比長條清單。
+    - LAH 服務群組記憶體卡片：後端使用內核級 NtQuerySystemInformation 枚舉所有 Apache httpd.exe 實體記憶體，並結合 PM2 行程記憶體，呈報總占用量、佔系統實體記憶體百分比及行程占比長條清單。
     - 兩排結構化格狀佈局：第一排核心動態折線圖，第二排服務記憶體與磁碟空間。
   - **日誌壓縮輪替根本修復**：
     - 後端實作原生 Rust Gzip 壓縮歸檔與空間釋放（替代無效之 pm2-logrotate rotate action），清空日誌後通知 PM2 重整。
@@ -424,11 +424,11 @@
 ### 🖥️ 新增「智慧控管與監控系統 - 管理儀表板」原生維運工具 (tools/dashboard)
 
 - **修改目的**：
-  - 為現場與遠端維運人員打造全方位、免安裝、隨點即開的單一執行檔原生儀表板（基於 Tauri 2 / Rust + 原生純 HTML/CSS/JS 前端），整合 Windows 系統服務監控與控制、PM2 應用進程層控管、動態即時日誌檢視、主機資源即時狀態與五大連接埠 TCP 健康探針，消除日常維運需要繁瑣切換工作管理員、服務管理員與終端機之痛點。
+  - 為現場與遠端維運人員打造全方位、免安裝、隨點即開的單一執行檔原生儀表板（基於 Tauri 2 / Rust + 原生純 HTML/CSS/JS 前端），整合 Windows 系統服務監控與控制、PM2 應用行程層控管、動態即時日誌檢視、主機資源即時狀態與五大連接埠 TCP 健康探針，消除日常維運需要繁瑣切換工作管理員、服務管理員與終端機之痛點。
 - **具體功能與架構**：
   - **雙軌分層服務監控與重啟**：
     - Windows 服務層：管控 `LAH_Web_Service`（Apache 2.4）與 `LAH_PM2_Service`（PM2 Daemon）。
-    - PM2 進程層：管控 `LAH-FE`（Port 8080）、`LAH-WSS`（Port 8081/8082）、`LAH-SCHEDULER`（排程）與 `lah-api-v85`（PHP 8.5 FastCGI Port 8085）。
+    - PM2 行程層：管控 `LAH-FE`（Port 8080）、`LAH-WSS`（Port 8081/8082）、`LAH-SCHEDULER`（排程）與 `lah-api-v85`（PHP 8.5 FastCGI Port 8085）。
     - 支援個別服務啟動、停止、重啟，並具備頂部安全防呆之「一鍵重啟全部服務」。
   - **即時日誌檢視器**：
     - 自動探測全系統各模組日誌（前端、即時通、排程、PHP 8.5、Apache access/error、WinSW 與 pm2-logrotate）。
@@ -462,7 +462,7 @@
   - `tools/updater/src-tauri/src/pipeline.rs`：
     - 於 `execute_update_pipeline` 與 `apply_system_configurations` 完成階段加入管理儀表板探測、部署與桌面捷徑建立管線。
   - `tools/updater/src-tauri/src/lib.rs`：
-    - 新增 `launch_dashboard` Tauri 指令，支援從完成視窗直接拉起安裝根目錄之儀表板進程。
+    - 新增 `launch_dashboard` Tauri 指令，支援從完成視窗直接拉起安裝根目錄之儀表板行程。
   - `tools/updater/ui/index.html` & `tools/updater/ui/app.js`：
     - 完成視窗新增「📊 開啟管理儀表板」操作按鈕，偵測到儀表板部署成功時動態顯示，點選可立即開啟程式。
 - **相容性說明**：
@@ -554,7 +554,7 @@
 
 - **修改目的**：
   - 徹底解決 Apache 2.4 原生使用 `httpd.exe -k install` 註冊系統服務引發之全域 SCM 侵入、名稱衝突以及對全域 PATH（如 Instant Client）與 VC++ Redistributable 之外部依賴。
-  - 將服務名稱命名為 `LAH_Web_Service`，改由自帶之 WinSW 服務核心 (`lah-web-service.exe`) 進行進程沙盒守護，將 `PATH` 限縮於服務內部，達到 100% 零全域環境變數污染。
+  - 將服務名稱命名為 `LAH_Web_Service`，改由自帶之 WinSW 服務核心 (`lah-web-service.exe`) 進行行程沙盒守護，將 `PATH` 限縮於服務內部，達到 100% 零全域環境變數污染。
   - 支援舊版 Apache 服務（`Apache2.4` / `Apache24`）自動無縫卸載接管，防範開機雙服務競爭 Port 80。
   - 遵循「不修改網路下載之官方原生 Apache ZIP 包」原則，將 Visual C++ 2015–2022 轉散發 DLL 獨立封裝為 `vcredist-x64.zip`，透過檔名工具鏈解析（如 `VS18`、`VS17`、`VC15`）自動解壓並同步補齊至 `Apache24/bin`、`php7/` 與 `php85/` 目錄。
 - **具體修改項目**：
@@ -655,17 +655,17 @@
 
 - **修改目的**：
   - 巡查並全面對齊 `uninstaller` 與 `backuper` 至最新版 FastCGI 雙軌架構、零全域污染沙盒與多磁碟動態安裝環境。
-  - 徹底解決舊版自動移除工具遺漏卸載 `PM2_Portable_Service`、未清理殘留 `php-cgi.exe` 進程、未自登錄檔（HKLM/HKCU）抹除 `PM2_HOME` 等歷史脫節問題。
-  - 升級備份還原工具：將專屬維運終端腳本 `lah-cmd.bat` 納入重要備份清單；還原進程防鎖檢查同步納入 `php-cgi.exe`；實作還原後自動校準 `httpd.conf` 路徑機制，防止跨磁碟還原時因舊路徑覆蓋導致 Apache 崩潰。
+  - 徹底解決舊版自動移除工具遺漏卸載 `PM2_Portable_Service`、未清理殘留 `php-cgi.exe` 行程、未自登錄檔（HKLM/HKCU）抹除 `PM2_HOME` 等歷史脫節問題。
+  - 升級備份還原工具：將專屬維運終端腳本 `lah-cmd.bat` 納入重要備份清單；還原行程防鎖檢查同步納入 `php-cgi.exe`；實作還原後自動校準 `httpd.conf` 路徑機制，防止跨磁碟還原時因舊路徑覆蓋導致 Apache 崩潰。
   - 兩工具全面移植 `detect_default_root_dir` 動態偵測邏輯，廢除 UI 硬編碼 `C:\AppServ`，支援非 C 槽（如 `D:\AppServ`）隨選即用。
 - **具體修改項目**：
   - **自動移除工具 (`uninstaller/`)**：
     - `src-tauri/src/services.rs`：`uninstall_lah_pm2_service` 同步納入 `LAH_PM2_Service` (lah-service.exe) 與 `PM2_Portable_Service` (pm2-service.exe)，並以 `sc.exe query` + `sc.exe delete` 備援。
-    - `src-tauri/src/process.rs`：終止進程全面涵蓋 `php-cgi*.exe`、`httpd*.exe`、`node*.exe`（含 Daemon.js、God.js、runner）與 `pm2.exe`。
+    - `src-tauri/src/process.rs`：終止行程全面涵蓋 `php-cgi*.exe`、`httpd*.exe`、`node*.exe`（含 Daemon.js、God.js、runner）與 `pm2.exe`。
     - `src-tauri/src/autostart.rs`：在 `remove_paths_from_environment` 徹底清除 HKLM 與 HKCU 中殘留之 `PM2_HOME`、`PM2_INSTALL_DIRECTORY` 與 `PM2_SERVICE_DIRECTORY`，並廣播 `WM_SETTINGCHANGE`。
     - `src-tauri/src/cleaner.rs`：移除 Node 項目中同步納入 `.pm2` 目錄與專屬維運腳本 `lah-cmd.bat` 的主動清理。
     - `src-tauri/src/system.rs` & `lib.rs`：實作 `detect_default_root_dir` 並透過 Tauri 命令 `detect_root_dir` 暴露給前端，通過 2 項單元測試。
-    - `ui/app.js` & `ui/index.html`：初始化時非同步動態填入偵測路徑，更新各項服務與進程之繁體中文描述文字。
+    - `ui/app.js` & `ui/index.html`：初始化時非同步動態填入偵測路徑，更新各項服務與行程之繁體中文描述文字。
   - **備份與還原工具 (`backuper/`)**：
     - `src-tauri/Cargo.toml`：新增 `regex = "1"` 與 `winreg = "0.56"` 依賴。
     - `src-tauri/src/backup.rs`：`BACKUP_ITEMS` 擴充納入 `("lah-cmd.bat", "lah-cmd.bat")`。
@@ -777,7 +777,7 @@
     - 遍歷 `module-db-v2`，若在 `.pm2\modules` 與 `node\node_modules` 均未發現模組 `package.json`，自動將該孤立項目自 `module-db-v2` 剔除，防止 PM2 啟動崩潰。
   - **PM2 模組載入器防禦性修補 (`NPM.js`)**：
     - 修補 `NPM.js` 的 `start` 函式，當模組路徑不存在且便攜版目錄亦無此模組時，安全跳過並呼叫回呼函式，不再傳入無效路徑。
-    - 修補 `StartModule` 函式，以 `try/catch` 封裝 `require(opts.cmd)`，避免 require 異常中斷主進程。
+    - 修補 `StartModule` 函式，以 `try/catch` 封裝 `require(opts.cmd)`，避免 require 異常中斷主行程。
   - **背景服務守護同步 (`pm2_service_runner.js` / `service_runner.js`)**：
     - 在服務背景巡檢與預掛載時同步執行舊全域與孤立模組清理。
   - **單元測試防護**：
@@ -795,9 +795,9 @@
     - 同時清理並前置注入系統（`HKLM`）與使用者（`HKCU`）`PATH`，徹底剔除舊全域 Node/PM2 路徑。
     - 移除舊版 `pm2-installer` 遺留之系統與使用者變數 `PM2_INSTALL_DIRECTORY` 與 `PM2_SERVICE_DIRECTORY`。
     - 統一設定系統與使用者環境變數 `PM2_HOME` 為 `<根目錄>\.pm2`。
-  - **舊全域 PM2 服務與殘留進程清理**：
+  - **舊全域 PM2 服務與殘留行程清理**：
     - 安裝前自動查詢、停止並刪除舊全域 `pm2.exe` Windows 系統服務。
-    - 終止非目標可攜版路徑之 Node.js、PM2 Daemon 及殘留 FastCGI 進程。
+    - 終止非目標可攜版路徑之 Node.js、PM2 Daemon 及殘留 FastCGI 行程。
     - 自動清理與重寫 `dump.pm2`，將其內殘留之舊全域 node.exe 解譯器路徑重設為可攜版 `node`，並修正 PID 路徑至統一 `.pm2\pids`。
   - **便攜版內建 `pm2-logrotate` 模組直接掛載與啟動**：
     - 新增 `logrotate_bundled_version`，讀取 `<根目錄>\node\node_modules\pm2-logrotate\package.json`（版本 3.0.0）。
@@ -907,7 +907,7 @@
 
 ### 🦀 自動移除工具改以 Tauri 2 (Rust) 全新改寫 (`uninstaller/`)
 - **底層核心完全改以 Rust 實作**：
-  - 以 Tauri 2 + 純靜態 HTML/JS 完整移植 Python 既有移除功能，包含停止/刪除 Windows 服務（`LAH_PM2_Service`、`Apache2.4`）、精確終止殘留進程（`pm2 kill` 與 PowerShell 樹狀行程刪除）、清理開機自啟動與工作排程、自系統與使用者 `PATH` 環境變數剔除並廣播 `WM_SETTINGCHANGE`、Apache PHP 轉發設定防護性註銷與語法驗證、解除檔案唯讀屬性強健刪除、以及安裝根目錄深度清理（嚴格保護 `_LAH_Backup_*.zip`）。
+  - 以 Tauri 2 + 純靜態 HTML/JS 完整移植 Python 既有移除功能，包含停止/刪除 Windows 服務（`LAH_PM2_Service`、`Apache2.4`）、精確終止殘留行程（`pm2 kill` 與 PowerShell 樹狀行程刪除）、清理開機自啟動與工作排程、自系統與使用者 `PATH` 環境變數剔除並廣播 `WM_SETTINGCHANGE`、Apache PHP 轉發設定防護性註銷與語法驗證、解除檔案唯讀屬性強健刪除、以及安裝根目錄深度清理（嚴格保護 `_LAH_Backup_*.zip`）。
   - 產出之 Windows 單一執行檔體積縮減至 10.68 MB，免去 Python 解壓暫存目錄，達成隨點隨開與零防毒誤判。
 - **建置管線對齊 backuper 規範與專屬圖示更新**：
   - 重新繪製具備警戒深紅底座、系統齒輪解構、清理垃圾桶與立體粗體移除叉號之專屬 ICO/PNG 圖示，替換舊有即時通圖示。
@@ -1044,7 +1044,7 @@
 
 ### 🚀 全新安裝與更新收尾自動化完善
 - **Apache 雙層巢狀目錄防呆與自動攤平**：強化 `detect_strip_prefix` 支援識別含外層散落說明檔（如 `ReadMe.txt`、`-- Win64 VS18 --`）的 Apache Lounge 官方壓縮包並自動剝除 `Apache24/` 外層目錄。同時新增 `flatten_nested_apache_dir` 自動偵測並攤平既有的 `Apache24\Apache24` 雙層目錄。
-- **全流程自動化收尾**：安裝或更新完成後，自動產生或校正 `httpd.conf` 與 `php7/php.ini`、`php85/php.ini` 並套用資安弱點防護、自動註冊並立即啟動 `Apache2.4` Windows 服務、自動將本機綠色版 Node（`<root_dir>\node\node.exe`）註冊至 PATH 最前端並綁定 PM2 核心守護進程、拉起 5 大核心服務，最後自動配置 `LAH_PM2_Service` 原生系統服務與開機自動化。
+- **全流程自動化收尾**：安裝或更新完成後，自動產生或校正 `httpd.conf` 與 `php7/php.ini`、`php85/php.ini` 並套用資安弱點防護、自動註冊並立即啟動 `Apache2.4` Windows 服務、自動將本機綠色版 Node（`<root_dir>\node\node.exe`）註冊至 PATH 最前端並綁定 PM2 核心守護行程、拉起 5 大核心服務，最後自動配置 `LAH_PM2_Service` 原生系統服務與開機自動化。
 
 ### 🐛 錯誤修復與壓縮包清理體驗優化
 - **修復更新完成後卡在「更新進行中，請稍候...」無法關閉視窗之問題**：修正 `_run_update_process` 的 `finally` 區塊中未定義變數 `should_restart_apache` 導致的 `NameError`，確保 `_on_update_completed_ui` 100% 執行，完成後進度視窗按鈕立即切換為可用的「✅ 完成並關閉 (Esc)」。
@@ -1095,7 +1095,7 @@
 ## [v1.4.0] - 2026-10-25
 
 ### 🛑 專屬自動移除工具全新發布 (uninstaller.py)
-- **全方位系統清理**：一鍵停止並解除安裝 Windows 服務（`LAH_PM2_Service`、`Apache2.4`），終止殘留進程（`pm2 kill`、`node.exe`、`php-cgi`）。
+- **全方位系統清理**：一鍵停止並解除安裝 Windows 服務（`LAH_PM2_Service`、`Apache2.4`），終止殘留行程（`pm2 kill`、`node.exe`、`php-cgi`）。
 - **開機自啟動與環境變數清除**：清理 Windows 啟動資料夾 VBS 腳本、工作排程器任務（`LAH_Startup_PM2`），並自使用者環境變數 `PATH` 移除 Node、Instant Client、PHP 等路徑。
 - **手動 PHP 目錄清除**：支援一併清理手動安裝之 `php7` 與 `php85` 目錄，若保留 Apache 則自動清理 `httpd.conf` 中的 PHP 載入規則與 FastCGI 轉發區塊。
 - **刪除前關鍵資料自動備份**：支援執行前自動打包備份關鍵持久化資料（即時通 SQLite `db/`、附件 `uploads/`、環境變數 `.env`、LDAP 設定 `AD.php`、`php.ini` 與 `httpd.conf`），存放於安裝根目錄。
@@ -1118,10 +1118,10 @@
 
 ### 🟩 Node.js 綠色環境與 PM2 服務管理升級
 - **Node.js 綠色便攜環境支援 (`node.zip`)**：支援將完整綠色 Node.js (含 npm, pm2, yarn) 解壓部署至目標目錄。
-- **實時核心進程探測**：主視窗實時探測 PM2 God Daemon 是由哪一個 `node.exe` 喚醒運行，防止核心進程錯置。
-- **一鍵無痛核心校正按鈕**：提供「⚡ 立即校正 PM2 核心」按鈕，執行 `pm2 save` 備份、`pm2 kill` 終止舊進程並調用綠色 Node 執行 `pm2 resurrect` 完整還原服務。
+- **實時核心行程探測**：主視窗實時探測 PM2 God Daemon 是由哪一個 `node.exe` 喚醒運行，防止核心行程錯置。
+- **一鍵無痛核心校正按鈕**：提供「⚡ 立即校正 PM2 核心」按鈕，執行 `pm2 save` 備份、`pm2 kill` 終止舊行程並調用綠色 Node 執行 `pm2 resurrect` 完整還原服務。
 - **自動註冊 Node 環境變數 (User PATH)**：更新 `node.zip` 或校正時，自動透過 `winreg` 將綠色 Node 目錄寫入 Windows 使用者 `PATH` 最前端並廣播變更。
-- **更新安全停機防護**：解壓 `node.zip` 或 `node_modules.zip` 前自動偵測 `node.exe` 檔案鎖定，必要時安全暫停 PM2 守護進程，解壓後自動復原。
+- **更新安全停機防護**：解壓 `node.zip` 或 `node_modules.zip` 前自動偵測 `node.exe` 檔案鎖定，必要時安全暫停 PM2 守護行程，解壓後自動復原。
 
 ---
 
