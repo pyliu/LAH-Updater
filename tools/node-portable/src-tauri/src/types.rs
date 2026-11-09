@@ -83,6 +83,8 @@ pub struct Pm2ProcessInfo {
     pub uptime: u64,
     pub restarts: u32,
     pub is_module: bool,
+    pub header_protection_enabled: bool,
+    pub header_protection_supported: bool,
     pub version: String,
     pub exec_path: String,
     pub out_log_path: String,

@@ -211,6 +211,7 @@ fn query_pm2_processes_uncached(root_dir: &Path) -> Result<Vec<Pm2ProcessInfo>, 
             .and_then(|v| v.as_u64())
             .unwrap_or(0);
 
+        let (header_protection_enabled, header_protection_supported) = crate::header_protection::process_state(root_dir, env, is_module);
         list.push(Pm2ProcessInfo {
             pm_id,
             name,
@@ -221,6 +222,8 @@ fn query_pm2_processes_uncached(root_dir: &Path) -> Result<Vec<Pm2ProcessInfo>, 
             uptime,
             restarts,
             is_module,
+            header_protection_enabled,
+            header_protection_supported,
             version,
             exec_path,
             out_log_path,

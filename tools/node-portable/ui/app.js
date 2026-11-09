@@ -4,8 +4,8 @@ const { open } = window.__TAURI__.dialog;
 
 const $ = (id) => document.getElementById(id);
 let isBusy = false;
-let currentTab = "install";
-let initialTabDecided = false;
+let currentTab = "console";
+let installTabAvailable = null;
 let consolePollTimer = null;
 let lastOverview = null;
 let currentLogProcess = null;
@@ -57,6 +57,9 @@ function setToast(msg, type = "normal") {
 }
 
 function switchTab(tab) {
+  if (tab === "install" && installTabAvailable !== true) {
+    tab = "console";
+  }
   currentTab = tab;
   document.body.classList.toggle("install-mode", tab === "install");
   document.body.classList.toggle("console-mode", tab === "console");
@@ -71,12 +74,13 @@ function switchTab(tab) {
   }
 
   if (tab === "console") {
-    refreshConsole();
+    const refreshed = refreshConsole();
     consolePollTimer = setInterval(() => {
       if ($("chk_auto_refresh").checked && !isBusy) {
         refreshConsole(true);
       }
     }, 4000);
+    return refreshed;
   } else {
     rescan();
   }
@@ -151,12 +155,8 @@ async function rescan(isInitial = false) {
   const isInstalled = !!(s.node_version && s.pm2_version);
   $("btn_goto_console").style.display = isInstalled ? "inline-block" : "none";
 
-  // 啟動預設畫面：若偵測到沙盒 Node 與 PM2 已經安裝，直接預設打開控制台分頁
-  if (isInitial && !initialTabDecided) {
-    initialTabDecided = true;
-    if (isInstalled) {
-      switchTab("console");
-    }
+  if (isInitial) {
+    switchTab(installTabAvailable && !isInstalled ? "install" : "console");
   }
 }
 
@@ -225,7 +225,9 @@ async function refreshConsole(silent = false) {
     const tbody = $("pm2_apps_tbody");
     if (!ov.installed) {
       tbody.innerHTML = `<div class="pm2-empty" style="color:#b45309;">
-        警告：此目錄尚未安裝沙盒 Node.js 與 PM2，請先切換至「沙盒安裝與部署」分頁執行安裝。
+        警告：此目錄尚未安裝沙盒 Node.js 與 PM2，${installTabAvailable
+          ? "請先切換至「沙盒安裝與部署」分頁執行安裝。"
+          : "請將 node.zip 放在工具執行檔同目錄的 base 資料夾後重新開啟工具。"}
       </div>`;
     } else if (ov.pm2_error && apps.length === 0) {
       tbody.innerHTML = `<div class="pm2-empty">
@@ -250,6 +252,7 @@ async function refreshConsole(silent = false) {
             <div class="btn-group">
                 <button class="btn-sm" data-pm2-action="${toggleAction}" data-pm2-target="${safeName}">${toggleLabel}</button>
                 <button class="btn-sm btn-green" data-pm2-action="restart" data-pm2-target="${safeName}"><svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5M5 9a7 7 0 0112-2l3 5M19 15a7 7 0 01-12 2l-3-5"/></svg> 重啟</button>
+                <button class="btn-sm${app.header_protection_enabled ? " btn-green" : ""}" data-header-protection="${app.pm_id}" ${!app.header_protection_supported || (!isOnline && !(app.header_protection_enabled && ["stopped", "errored"].includes(app.status))) ? "disabled" : ""} title="HTTP/HTTPS 標頭防護設定，HTTP/2 不支援；請另執行資安自檢">${app.header_protection_enabled ? "停用防護" : "啟用防護"}</button>
                 <button class="btn-sm primary" data-pm2-log="${safeName}"><svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 2h8l4 4v16H6zM14 2v5h4M9 11h6M9 15h6"/></svg> 日誌</button>
             </div>
           </div>`;
@@ -300,6 +303,12 @@ $("pm2_apps_tbody").onclick = async (e) => {
   }
   if (isBusy) return;
 
+  const protectionId = btn.getAttribute("data-header-protection");
+  if (protectionId !== null) {
+    const proc = (lastOverview?.processes || []).find(p => p.pm_id === Number(protectionId));
+    if (proc && !btn.disabled) await setHeaderProtection(proc, btn);
+    return;
+  }
   const action = btn.getAttribute("data-pm2-action");
   const target = btn.getAttribute("data-pm2-target");
   const logName = btn.getAttribute("data-pm2-log");
@@ -313,6 +322,28 @@ $("pm2_apps_tbody").onclick = async (e) => {
     await openLogModal(proc?.out_log_path || "", proc || null);
   }
 };
+
+async function setHeaderProtection(proc, button) {
+  const enabled = !proc.header_protection_enabled;
+  const label = enabled ? "啟用" : "停用";
+  if (!confirm(`將${label} ${proc.name}（ID ${proc.pm_id}）的標頭防護，重新啟動此程序，並儲存全部 PM2 程序的目前快照。
+防護僅移除 X-Powered-By 與 Server，HTTP/2 不支援。是否繼續？`)) return;
+  isBusy = true;
+  button.disabled = true;
+  try {
+    const result = await invoke("set_header_protection", {
+      rootDir: $("root_dir").value.trim(), pmId: proc.pm_id, enabled, expectedExecPath: proc.exec_path,
+    });
+    await refreshConsole(true);
+    setToast(result.message, result.success ? "success" : "error");
+  } catch (error) {
+    await refreshConsole(true);
+    setToast(`標頭防護操作失敗：${error}`, "error");
+  } finally {
+    isBusy = false;
+    button.disabled = false;
+  }
+}
 
 async function executePm2Action(action, target, btnEl = null) {
   if (isBusy) return;
@@ -681,8 +712,24 @@ $("btn_start").onclick = async () => {
   }
 };
 
+async function initializeTabs() {
+  try {
+    installTabAvailable = await invoke("has_adjacent_node_zip");
+  } catch (err) {
+    installTabAvailable = false;
+    console.error("has_adjacent_node_zip failed:", err);
+  }
+  $("tab_btn_install").style.display = installTabAvailable ? "" : "none";
+  try {
+    await rescan(true);
+  } catch (err) {
+    await switchTab("console");
+    setToast(`環境偵測失敗：${err}`, "error");
+  }
+}
+
 initAdminStatus();
-rescan(true);
+initializeTabs();
 
 // ==================== 大螢幕工作台模式：內嵌即時日誌串流邏輯 ====================
 let currentInlineProc = null;

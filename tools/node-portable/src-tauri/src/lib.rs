@@ -1,5 +1,6 @@
 pub mod audit;
 pub mod console;
+pub mod header_protection;
 pub mod install;
 pub mod pm2;
 pub mod system;
@@ -34,6 +35,14 @@ fn exit_app(app: AppHandle) {
 #[tauri::command]
 fn scan_environment(root_dir: String) -> ScanSummary {
     install::scan(&root_dir)
+}
+
+#[tauri::command]
+fn has_adjacent_node_zip() -> bool {
+    std::env::current_exe()
+        .ok()
+        .and_then(|exe| exe.parent().map(|dir| dir.join("base").join("node.zip")))
+        .is_some_and(|path| path.is_file())
 }
 
 #[tauri::command]
@@ -80,6 +89,13 @@ async fn run_install(app: AppHandle, options: InstallOptions) -> Result<InstallR
     })
     .await
     .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn set_header_protection(root_dir: String, pm_id: u32, enabled: bool, expected_exec_path: String) -> Result<CommandActionResult, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        header_protection::set(&resolve_root(&root_dir), pm_id, enabled, &expected_exec_path)
+    }).await.map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
@@ -177,10 +193,12 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             check_admin,
             scan_environment,
+            has_adjacent_node_zip,
             check_root_dir,
             run_security_audit,
             run_install,
             get_console_overview,
+            set_header_protection,
             pm2_process_action,
             pm2_service_action,
             repair_logrotate,

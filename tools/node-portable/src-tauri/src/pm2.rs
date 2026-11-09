@@ -271,6 +271,11 @@ pub fn sanitize_pm2_dump(dump_path: &Path, root_dir: &Path, log_fn: &dyn Fn(&str
                 modified = true;
             }
         }
+        if let Some(args) = obj.get_mut("node_args") {
+            if crate::header_protection::rebase_node_args(args, root_dir) {
+                modified = true;
+            }
+        }
         if let Some(interp) = obj.get("exec_interpreter").and_then(|v| v.as_str()).map(|s| s.to_string()) {
             let lower = interp.to_lowercase();
             if lower.ends_with("node.exe") && !lower.starts_with(&node_dir_str.to_lowercase()) {
@@ -305,6 +310,10 @@ pub fn ensure_portable_pm2_patched(root_dir: &Path, log_fn: &dyn Fn(&str, &str))
     }
 
     log_fn("正在配置綠色版 Node.js 與 PM2 執行期環境...", "info");
+    if let Err(error) = crate::header_protection::install(root_dir) {
+        log_fn(&error, "error");
+        return false;
+    }
     let mut patched_any = false;
 
     // 0. 確保統一的 <root_dir>\.pm2 目錄存在，若尚無 dump.pm2 則自動自既有全域/使用者 .pm2 遷移
