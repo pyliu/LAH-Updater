@@ -58,6 +58,10 @@ const state = {
   pollingTimer: null,
   autoTail: true,
   currentLogPath: '',
+  currentLogKey: '',
+  isFollowingLatestLog: true,
+  lastLogListRefreshTimestamp: 0,
+  lastKnownDateStr: '',
   availableLogs: [],
   apiLogFiles: [],
   rawLogLines: [],
@@ -570,8 +574,9 @@ const initApp = async () => {
 
   // 日誌檢視器事件
   el.logSourceSelect.addEventListener('change', async (e) => {
-    const selectedPath = e.target.value;
-    const selectedItem = state.availableLogs.find((i) => i.path === selectedPath);
+    const selectedKey = e.target.value;
+    const selectedItem = state.availableLogs.find((i) => i.key === selectedKey);
+    state.isFollowingLatestLog = true;
     await handleLogSourceSelection(selectedItem);
   });
 
@@ -580,6 +585,8 @@ const initApp = async () => {
       const path = e.target.value;
       if (path) {
         state.currentLogPath = path;
+        const isLatest = state.apiLogFiles && state.apiLogFiles.length > 0 && state.apiLogFiles[0].path === path;
+        state.isFollowingLatestLog = isLatest;
         updateLogMetaDisplay();
         fetchLogTail(true);
       }
@@ -1131,6 +1138,7 @@ const switchTab = (tabId) => {
     loadPm2Processes();
   } else if (tabId === 'tab-logs') {
     stopTerminalPolling();
+    checkAndRefreshLogsScheduler(false);
     fetchLogTail(true);
   } else if (tabId === 'tab-metrics') {
     stopTerminalPolling();
@@ -1440,24 +1448,39 @@ window.quickControlService = async (evt, action, category, serviceKey, displayNa
 // ==========================================================================
 // 4. 即時日誌檢視器 (分頁二)
 // ==========================================================================
-const loadAvailableLogsList = async () => {
+const HISTORICAL_LOG_KEYS = new Set(['apache_error', 'apache_access', 'api_www_log']);
+const LOG_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 每 5 分鐘探測一次最新日誌檔案
+
+const loadAvailableLogsList = async (isBackgroundSync = false) => {
   try {
     const list = await invoke('get_available_logs');
     if (!list || list.length === 0) return;
 
     state.availableLogs = list;
+    state.lastLogListRefreshTimestamp = Date.now();
+    state.lastKnownDateStr = new Date().toISOString().slice(0, 10);
+
     let html = '';
     list.forEach((item) => {
       const optLabel = item.exists ? `${item.label} (${formatBytes(item.size_bytes)})` : `${item.label} [無日誌]`;
-      html += `<option value="${item.path}" ${!item.exists ? 'disabled' : ''}>${optLabel}</option>`;
+      html += `<option value="${item.key}" data-path="${item.path}" ${!item.exists ? 'disabled' : ''}>${optLabel}</option>`;
     });
     el.logSourceSelect.innerHTML = html;
 
-    // 優先選取第一個存在的日誌
-    const firstExist = list.find((i) => i.exists);
-    if (firstExist) {
-      el.logSourceSelect.value = firstExist.path;
-      await handleLogSourceSelection(firstExist);
+    // 保留目前使用者選中的 key，或優先選取第一個存在的日誌
+    const currentKey = state.currentLogKey;
+    let targetItem = list.find((i) => i.key === currentKey && i.exists);
+    if (!targetItem) {
+      targetItem = list.find((i) => i.exists) || list[0];
+    }
+
+    if (targetItem) {
+      el.logSourceSelect.value = targetItem.key;
+      if (!isBackgroundSync || !state.currentLogKey) {
+        await handleLogSourceSelection(targetItem);
+      } else {
+        await syncCurrentLogLatestOnSchedule(targetItem);
+      }
     }
   } catch (err) {
     console.error('讀取可用日誌清單失敗：', err);
@@ -1466,23 +1489,25 @@ const loadAvailableLogsList = async () => {
 
 const handleLogSourceSelection = async (item) => {
   if (!item) return;
+  state.currentLogKey = item.key;
 
-  if (item.key === 'api_www_log') {
+  if (HISTORICAL_LOG_KEYS.has(item.key)) {
     // 顯示歷史日期下拉選單
     if (el.apiDateSelectGroup) el.apiDateSelectGroup.style.display = 'flex';
-    await loadApiLogDates();
+    await loadLogHistoryDates(item.key, true);
   } else {
     // 隱藏歷史日期下拉選單
     if (el.apiDateSelectGroup) el.apiDateSelectGroup.style.display = 'none';
+    state.isFollowingLatestLog = false;
     state.currentLogPath = item.path;
     updateLogMetaDisplay();
     fetchLogTail(true);
   }
 };
 
-const loadApiLogDates = async () => {
+const loadLogHistoryDates = async (key, keepOrResetLatest = true) => {
   try {
-    const files = await invoke('get_api_log_files');
+    const files = await invoke('get_log_history_files', { key });
     state.apiLogFiles = files || [];
     if (files && files.length > 0) {
       let html = '';
@@ -1492,20 +1517,89 @@ const loadApiLogDates = async () => {
       });
       if (el.apiDateSelect) {
         el.apiDateSelect.innerHTML = html;
-        el.apiDateSelect.value = files[0].path;
+        if (state.isFollowingLatestLog || !files.some((f) => f.path === state.currentLogPath)) {
+          el.apiDateSelect.value = files[0].path;
+          state.currentLogPath = files[0].path;
+          state.isFollowingLatestLog = true;
+        } else {
+          el.apiDateSelect.value = state.currentLogPath;
+        }
       }
-      state.currentLogPath = files[0].path;
     } else {
       if (el.apiDateSelect) {
         el.apiDateSelect.innerHTML = '<option value="">無歷史日誌</option>';
       }
-      const mainItem = state.availableLogs.find((i) => i.key === 'api_www_log');
+      const mainItem = state.availableLogs.find((i) => i.key === key);
       state.currentLogPath = mainItem ? mainItem.path : '';
     }
     updateLogMetaDisplay();
     fetchLogTail(true);
   } catch (err) {
-    console.error('讀取 API 歷史日誌檔案清單失敗：', err);
+    console.error(`讀取 [${key}] 歷史日誌檔案清單失敗：`, err);
+  }
+};
+
+const syncCurrentLogLatestOnSchedule = async (currentItem) => {
+  if (!currentItem) return;
+
+  if (HISTORICAL_LOG_KEYS.has(currentItem.key)) {
+    try {
+      const files = await invoke('get_log_history_files', { key: currentItem.key });
+      state.apiLogFiles = files || [];
+      if (files && files.length > 0) {
+        let html = '';
+        files.forEach((f) => {
+          const sizeStr = formatBytes(f.size_bytes);
+          html += `<option value="${f.path}">${f.label} (${sizeStr})</option>`;
+        });
+        if (el.apiDateSelect) {
+          el.apiDateSelect.innerHTML = html;
+        }
+
+        const latestFile = files[0];
+        // 若使用者處於追蹤最新模式，且最新檔案路徑已變更 (換日或產生新檔)
+        if (state.isFollowingLatestLog && latestFile.path !== state.currentLogPath) {
+          console.log(`[AutoTail] 偵測到日誌換日更新：${state.currentLogPath} -> ${latestFile.path}`);
+          state.currentLogPath = latestFile.path;
+          state.lastLogFingerprint = '';
+          if (el.apiDateSelect) el.apiDateSelect.value = latestFile.path;
+          updateLogMetaDisplay();
+          await fetchLogTail(true);
+          const fname = latestFile.path.split(/[\\/]/).pop();
+          showToast(`已自動平滑切換追蹤今日最新日誌：${fname}`);
+        } else if (state.isFollowingLatestLog) {
+          if (el.apiDateSelect) el.apiDateSelect.value = state.currentLogPath;
+          updateLogMetaDisplay();
+        } else {
+          if (el.apiDateSelect) el.apiDateSelect.value = state.currentLogPath;
+          updateLogMetaDisplay();
+        }
+      }
+    } catch (e) {
+      console.warn('定時同步歷史日誌失敗：', e);
+    }
+  } else {
+    if (currentItem.path !== state.currentLogPath) {
+      state.currentLogPath = currentItem.path;
+      state.lastLogFingerprint = '';
+      updateLogMetaDisplay();
+      await fetchLogTail(true);
+    } else {
+      updateLogMetaDisplay();
+    }
+  }
+};
+
+const checkAndRefreshLogsScheduler = async (force = false) => {
+  const now = Date.now();
+  const nowDateStr = new Date().toISOString().slice(0, 10);
+  const isDateChanged = state.lastKnownDateStr && nowDateStr !== state.lastKnownDateStr;
+  const isOverdue = now - state.lastLogListRefreshTimestamp >= LOG_CHECK_INTERVAL_MS;
+
+  if (force || isDateChanged || isOverdue) {
+    state.lastLogListRefreshTimestamp = now;
+    state.lastKnownDateStr = nowDateStr;
+    await loadAvailableLogsList(true);
   }
 };
 
@@ -1970,6 +2064,7 @@ const refreshAllData = async (isManual = false) => {
     if (state.activeTab === 'tab-services') {
       await Promise.all([loadSystemServices(), loadPm2Processes()]);
     } else if (state.activeTab === 'tab-logs') {
+      await checkAndRefreshLogsScheduler(false);
       await fetchLogTail(false);
     } else if (state.activeTab === 'tab-metrics') {
       await loadHostMetrics();

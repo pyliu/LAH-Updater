@@ -454,9 +454,109 @@ pub fn list_api_log_files(root_dir: &Path) -> Vec<LogFileInfo> {
     result
 }
 
+pub fn list_apache_log_files(root_dir: &Path, prefix: &str) -> Vec<LogFileInfo> {
+    let logs_dir = root_dir.join("logs");
+    let unified_apache_dir = logs_dir.join("apache");
+    let legacy_apache_dir = root_dir.join("Apache24").join("logs");
+    let apache_logs_dir = if unified_apache_dir.is_dir() {
+        unified_apache_dir
+    } else {
+        legacy_apache_dir.clone()
+    };
+
+    let mut files = find_all_matching_files(&apache_logs_dir, prefix, ".log");
+    if files.is_empty() {
+        let fallback_name = format!("{}_log", prefix);
+        let fb_path = apache_logs_dir.join(&fallback_name);
+        if fb_path.is_file() {
+            files.push(fb_path);
+        }
+    }
+
+    if files.is_empty() && legacy_apache_dir.is_dir() && legacy_apache_dir != apache_logs_dir {
+        files = find_all_matching_files(&legacy_apache_dir, prefix, ".log");
+        if files.is_empty() {
+            let fallback_name = format!("{}_log", prefix);
+            let fb_path = legacy_apache_dir.join(&fallback_name);
+            if fb_path.is_file() {
+                files.push(fb_path);
+            }
+        }
+    }
+
+    let mut result = Vec::new();
+    for (idx, p) in files.into_iter().enumerate() {
+        let file_name = p.file_name().and_then(|n| n.to_str()).unwrap_or("log.log");
+        let display_name = if file_name.starts_with(prefix) {
+            let trimmed = file_name.trim_start_matches(prefix).trim_start_matches('.');
+            let clean = trimmed.trim_end_matches(".log");
+            if clean.is_empty() {
+                file_name.to_string()
+            } else {
+                clean.to_string()
+            }
+        } else {
+            file_name.to_string()
+        };
+
+        let label = if idx == 0 {
+            format!("{} (最新)", display_name)
+        } else {
+            display_name
+        };
+        let path_str = p.to_string_lossy().to_string();
+        result.push(build_log_info(
+            format!("apache_{}_{}", prefix, idx),
+            label,
+            path_str,
+            true,
+        ));
+    }
+
+    result
+}
+
+pub fn list_log_history_files(root_dir: &Path, key: &str) -> Vec<LogFileInfo> {
+    match key {
+        "api_www_log" => list_api_log_files(root_dir),
+        "apache_error" => list_apache_log_files(root_dir, "error"),
+        "apache_access" => list_apache_log_files(root_dir, "access"),
+        _ => Vec::new(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_list_log_history_files_returns_sorted_apache_logs() {
+        let temp_root = std::env::temp_dir().join(format!(
+            "lah_test_dashboard_history_{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let unified_apache_dir = temp_root.join("logs").join("apache");
+        fs::create_dir_all(&unified_apache_dir).unwrap();
+
+        fs::write(unified_apache_dir.join("error.2026.11.08.log"), b"err 08\n").unwrap();
+        // 稍微間隔確保 mtime 順序
+        std::thread::sleep(std::time::Duration::from_millis(15));
+        fs::write(unified_apache_dir.join("error.2026.11.09.log"), b"err 09\n").unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(15));
+        fs::write(unified_apache_dir.join("error.2026.11.10.log"), b"err 10\n").unwrap();
+
+        let history = list_log_history_files(&temp_root, "apache_error");
+        assert_eq!(history.len(), 3);
+        assert!(history[0].label.contains("(最新)"));
+        assert!(history[0].path.ends_with("error.2026.11.10.log"));
+        assert!(history[1].path.ends_with("error.2026.11.09.log"));
+        assert!(history[2].path.ends_with("error.2026.11.08.log"));
+
+        let _ = fs::remove_dir_all(&temp_root);
+    }
 
     #[test]
     fn test_list_available_logs_falls_back_to_legacy_apache_plain_logs_when_unified_dir_is_empty() {

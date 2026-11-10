@@ -307,6 +307,12 @@ fn get_api_log_files() -> Vec<LogFileInfo> {
 }
 
 #[tauri::command]
+fn get_log_history_files(key: String) -> Vec<LogFileInfo> {
+    let root = get_current_root_dir();
+    logs::list_log_history_files(&root, &key)
+}
+
+#[tauri::command]
 fn get_log_tail(path: String, max_lines: usize) -> Result<LogContentResult, String> {
     logs::read_log_tail(&path, max_lines)
 }
@@ -547,6 +553,7 @@ pub fn run() {
             get_host_metrics,
             get_available_logs,
             get_api_log_files,
+            get_log_history_files,
             get_log_tail,
             open_log_in_notepad,
             open_logs_folder,
