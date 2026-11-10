@@ -887,7 +887,7 @@ Listen 8080\n\
             RewriteRule ^(l05proxy|smsproxy|srmas-weathermap)/(.*)$ /api/proxy.php?_target=$1&_path=$2 [QSA,L]\n\
             RewriteCond %{{REQUEST_FILENAME}} !-f\n\
             RewriteCond %{{REQUEST_FILENAME}} !-d\n\
-            RewriteCond %{{REQUEST_URI}} !^/(api|LAH-API|lah-api|img|legacy|l05proxy|smsproxy|srmas-weathermap|get_)\n\
+            RewriteCond %{{REQUEST_URI}} !^/(api|LAH-API|lah-api|img|legacy|assets|project|l05proxy|smsproxy|srmas-weathermap|get_)\n\
             RewriteRule ^ /index.html [L]\n\
         </IfModule>\n\
     </Directory>\n\
