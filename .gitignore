@@ -16,6 +16,7 @@ dist/
 .idea/
 *.sublime-project
 *.sublime-workspace
+.codex
 
 # OS generated files
 Thumbs.db

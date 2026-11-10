@@ -63,6 +63,8 @@ Listen 8080\n\
     Alias /api \"{www_fwd}/api\"\n\
     Alias /img \"{www_fwd}\"\n\
     Alias /legacy \"{www_fwd}\"\n\
+    Alias /assets \"{www_fwd}/assets\"\n\
+    Alias /project \"{www_fwd}/project\"\n\
     Alias /LAH-API/api \"{api_fwd}/v1\"\n\
     Alias /lah-api/api \"{api_fwd}/v1\"\n\
     Alias /LAH-API \"{api_fwd}\"\n\
