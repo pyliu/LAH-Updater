@@ -135,6 +135,32 @@ class TestPackIntegrity(unittest.TestCase):
             # 驗證破損 ZIP 已被自動銷毀
             self.assertFalse(os.path.exists(test_zip), "破損 ZIP 未被自動刪除！")
 
+    def test_zip_integrity_rejects_specialized_env_example(self):
+        """驗證 post-pack 校驗能攔截包含寫死特定所別代碼 (SITE=HA) 的範本並防呆刪除"""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            bad_zip = os.path.join(tmpdir, "bad-api.zip")
+            with zipfile.ZipFile(bad_zip, "w") as zf:
+                zf.writestr("index.php", "<?php echo 'ok';")
+                zf.writestr(".env.example", "MOCK=false\nSITE=HA\nWEBAP_IP=220.1.3X.XXX\n")
+
+            with self.assertRaises(PackIntegrityError) as ctx:
+                verify_zip_integrity(bad_zip, "api", self.api_dir)
+
+            err_msg = str(ctx.exception)
+            self.assertIn("範本特化違規", err_msg)
+            self.assertIn("包含寫死之所別代碼 'SITE=HA'", err_msg)
+            self.assertFalse(os.path.exists(bad_zip), "含特化範本之 ZIP 未被銷毀！")
+
+            # 驗證中立註解範本能順利通過
+            good_zip = os.path.join(tmpdir, "good-api.zip")
+            with zipfile.ZipFile(good_zip, "w") as zf:
+                zf.writestr("index.php", "<?php echo 'ok';")
+                zf.writestr(".env.example", "MOCK=false\n# SITE=HA\nWEBAP_IP=220.1.3X.XXX\n")
+
+            passed = verify_zip_integrity(good_zip, "api", self.api_dir)
+            self.assertTrue(passed)
+            self.assertTrue(os.path.exists(good_zip))
+
     def test_pack_summary_handles_missing_optional_node_without_unbound_error(self):
         """【防回歸測試】驗證當本機未安裝 Node.js 綠色環境時，打包結尾摘要不會拋出 UnboundLocalError 崩潰"""
         pack_script = os.path.join(UPDATER_ROOT, "pack", "pack.py")

@@ -674,8 +674,9 @@ pub fn sync_fe_runtime_config(root_dir: &Path, log_fn: &dyn Fn(&str, &str)) -> b
     };
 
     let mut env_map = serde_json::Map::new();
-    for env_candidate in &[fe_dir.join(".env"), fe_dir.join(".env.example")] {
-        if let Ok(raw) = fs::read_to_string(env_candidate) {
+
+    let parse_env_into = |path: &Path, map: &mut serde_json::Map<String, serde_json::Value>| {
+        if let Ok(raw) = fs::read_to_string(path) {
             for line in raw.lines() {
                 let trimmed = line.trim();
                 if trimmed.is_empty() || trimmed.starts_with('#') {
@@ -688,12 +689,41 @@ pub fn sync_fe_runtime_config(root_dir: &Path, log_fn: &dyn Fn(&str, &str)) -> b
                         val = val[..hash_idx].trim();
                     }
                     val = val.trim_matches(|c| c == '"' || c == '\'');
-                    if !key.is_empty() {
-                        env_map.insert(key.to_string(), serde_json::Value::String(val.to_string()));
+                    if !key.is_empty() && !map.contains_key(key) {
+                        map.insert(key.to_string(), serde_json::Value::String(val.to_string()));
                     }
                 }
             }
+        }
+    };
+
+    // 1. 優先讀取前端正式 .env，若無讀取 .env.example
+    if fe_dir.join(".env").is_file() {
+        parse_env_into(&fe_dir.join(".env"), &mut env_map);
+    } else if fe_dir.join(".env.example").is_file() {
+        parse_env_into(&fe_dir.join(".env.example"), &mut env_map);
+    }
+
+    // 2. 合併後端環境變數 (如 www/.env 或 LAH-API/.env 中的 SITE 等核心參數)
+    for backend_env in &[
+        root_dir.join("www").join(".env"),
+        root_dir.join("LAH-API").join(".env"),
+    ] {
+        if backend_env.is_file() {
+            parse_env_into(backend_env, &mut env_map);
             break;
+        }
+    }
+
+    // 3. 若仍缺少 SITE，由 SQLite dimension.db 探測並補入
+    if !env_map.contains_key("SITE") {
+        if let Some(probed) = crate::extractor::probe_site_config_from_db(root_dir) {
+            env_map.insert("SITE".to_string(), serde_json::Value::String(probed.site));
+            if let Some(site_id) = probed.site_id {
+                if !env_map.contains_key("SITE_ID") {
+                    env_map.insert("SITE_ID".to_string(), serde_json::Value::String(site_id));
+                }
+            }
         }
     }
 
@@ -720,6 +750,26 @@ pub fn sync_fe_runtime_config(root_dir: &Path, log_fn: &dyn Fn(&str, &str)) -> b
             .unwrap_or(default)
     };
 
+    let site = get_str("SITE", "");
+    let default_srmas_ip = match site.as_str() {
+        "HA" => "220.1.34.253",
+        "HB" => "220.1.35.253",
+        "HC" => "220.1.36.253",
+        "HD" => "220.1.37.253",
+        "HE" => "220.1.38.253",
+        "HF" => "220.1.39.253",
+        "HG" => "220.1.40.253",
+        "HH" => "220.1.41.253",
+        _ => "",
+    };
+    let srmas_ip = if !get_str("SRMAS_HOST_IP", "").is_empty() {
+        get_str("SRMAS_HOST_IP", "")
+    } else if !get_str("SRMAS_HOST", "").is_empty() {
+        get_str("SRMAS_HOST", "")
+    } else {
+        default_srmas_ip.to_string()
+    };
+
     let pkg_version = fs::read_to_string(fe_dir.join("package.json"))
         .ok()
         .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok())
@@ -729,6 +779,7 @@ pub fn sync_fe_runtime_config(root_dir: &Path, log_fn: &dyn Fn(&str, &str)) -> b
     let is_dev = get_str("NODE_ENV", "production") != "production";
     let runtime_cfg = serde_json::json!({
         "isDev": is_dev,
+        "site": site,
         "pkgVersion": pkg_version,
         "websocketHost": get_str("WEBSOCKET_HOST", "127.0.0.1"),
         "websocketPort": get_str("WEBSOCKET_PORT", "8081"),
@@ -742,7 +793,7 @@ pub fn sync_fe_runtime_config(root_dir: &Path, log_fn: &dyn Fn(&str, &str)) -> b
             },
             "srmas": {
                 "host": {
-                    "ip": get_str("SRMAS_HOST_IP", "220.1.34.253"),
+                    "ip": srmas_ip,
                     "port": get_str("SRMAS_HOST_PORT", "443")
                 },
                 "warning": {
@@ -1339,6 +1390,39 @@ fn test_node2shell_mitigation_injection_and_idempotency() {
         assert!(ok2);
         assert!(!changed2);
         assert_eq!(fs::read_to_string(&conf_path).unwrap(), conf1);
+
+        let _ = fs::remove_dir_all(&temp_root);
+    }
+
+    #[test]
+    fn test_sync_fe_runtime_config_inherits_backend_site_and_aligns_srmas() {
+        let temp_root = std::env::temp_dir().join(format!(
+            "lah_test_fe_rt_site_{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let fe_dir = temp_root.join("LAH-NUXTJS");
+        let www_dir = temp_root.join("www");
+        fs::create_dir_all(&fe_dir).unwrap();
+        fs::create_dir_all(&www_dir).unwrap();
+
+        // 前端刻意無 .env，後端提供 SITE=HE
+        fs::write(fe_dir.join("package.json"), r#"{"version":"2.5.0"}"#).unwrap();
+        fs::write(www_dir.join(".env"), "SITE=HE\n").unwrap();
+
+        let updated = sync_fe_runtime_config(&temp_root, &|_, _| {});
+        assert!(updated);
+
+        let rt_path = fe_dir.join("dist").join("runtime-config.js");
+        assert!(rt_path.is_file());
+        let content = fs::read_to_string(&rt_path).unwrap();
+
+        // 斷言所別精準繼承且 SRMAS 對齊蘆竹所 220.1.38.253，杜絕桃園所 220.1.34.253 滲漏
+        assert!(content.contains(r#""site": "HE""#), "未包含 site: HE, 內容: {}", content);
+        assert!(content.contains("220.1.38.253"), "未對齊蘆竹所 SRMAS 220.1.38.253, 內容: {}", content);
+        assert!(!content.contains("220.1.34.253"), "錯誤滲漏了桃園所 SRMAS 220.1.34.253! 內容: {}", content);
 
         let _ = fs::remove_dir_all(&temp_root);
     }

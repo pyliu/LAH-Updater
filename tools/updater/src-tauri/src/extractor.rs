@@ -542,7 +542,95 @@ pub fn auto_flatten_nested_dirs(root_dir: &Path, log_fn: &dyn Fn(&str, &str)) {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProbedSiteConfig {
+    pub site: String,
+    pub site_id: Option<String>,
+    pub webap_ip: Option<String>,
+}
+
+pub fn probe_site_config_from_db(root_dir: &Path) -> Option<ProbedSiteConfig> {
+    let db_candidates = [
+        root_dir.join("www").join("assets").join("db").join("dimension.db"),
+        root_dir.join("assets").join("db").join("dimension.db"),
+        root_dir.join("LAH-API").join("www").join("assets").join("db").join("dimension.db"),
+    ];
+    for db_path in &db_candidates {
+        if !db_path.is_file() {
+            continue;
+        }
+        let Ok(conn) = rusqlite::Connection::open_with_flags(
+            db_path,
+            rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY | rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX,
+        ) else {
+            continue;
+        };
+
+        let get_val = |k: &str| -> Option<String> {
+            conn.query_row(
+                "SELECT value FROM config WHERE key = ?1 LIMIT 1",
+                [k],
+                |row| row.get::<_, String>(0),
+            )
+            .ok()
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+        };
+
+        if let Some(site) = get_val("SITE") {
+            let trimmed = site.to_uppercase();
+            if trimmed.len() == 2 && trimmed.chars().all(|c| c.is_ascii_alphabetic()) {
+                return Some(ProbedSiteConfig {
+                    site: trimmed,
+                    site_id: get_val("SITE_ID"),
+                    webap_ip: get_val("WEBAP_IP"),
+                });
+            }
+        }
+    }
+    None
+}
+
+fn render_injected_env(template_content: &str, probed: &Option<ProbedSiteConfig>) -> String {
+    let mut rendered = template_content.to_string();
+    if let Some(cfg) = probed {
+        // 1. SITE
+        let site_re = Regex::new(r"(?m)^#?\s*SITE\s*=.*$").unwrap();
+        if site_re.is_match(&rendered) {
+            rendered = site_re.replace(&rendered, format!("SITE={}", cfg.site)).to_string();
+        } else {
+            rendered.push_str(&format!("\nSITE={}\n", cfg.site));
+        }
+
+        // 2. SITE_ID
+        if let Some(site_id) = &cfg.site_id {
+            let site_id_re = Regex::new(r"(?m)^#?\s*SITE_ID\s*=.*$").unwrap();
+            if site_id_re.is_match(&rendered) {
+                rendered = site_id_re.replace(&rendered, format!("SITE_ID={}", site_id)).to_string();
+            }
+        }
+
+        // 3. WEBAP_IP
+        if let Some(webap_ip) = &cfg.webap_ip {
+            let webap_re = Regex::new(r"(?m)^#?\s*WEBAP_IP\s*=.*$").unwrap();
+            if webap_re.is_match(&rendered) {
+                rendered = webap_re.replace(&rendered, format!("WEBAP_IP={}", webap_ip)).to_string();
+            }
+        }
+    }
+    rendered
+}
+
 pub fn ensure_default_env_files(root_dir: &Path, log_fn: &dyn Fn(&str, &str)) {
+    // 0. 先探測本地既有資料庫是否包含所別代碼
+    let probed_site = probe_site_config_from_db(root_dir);
+    if let Some(ref cfg) = probed_site {
+        log_fn(
+            &format!("  [所別探測] 偵測到本地資料庫既有所別代碼: [{}]", cfg.site),
+            "info",
+        );
+    }
+
     // 1. LAH-NUXTJS
     let fe_env = root_dir.join("LAH-NUXTJS").join(".env");
     let fe_example = root_dir.join("LAH-NUXTJS").join(".env.example");
@@ -568,8 +656,21 @@ pub fn ensure_default_env_files(root_dir: &Path, log_fn: &dyn Fn(&str, &str)) {
     let www_env = root_dir.join("www").join(".env");
     let www_example = root_dir.join("www").join(".env.example");
     if !www_env.is_file() && www_example.is_file() {
-        if fs::copy(&www_example, &www_env).is_ok() {
-            log_fn("  已依據 .env.example 初始化建立 www/.env", "success");
+        if let Ok(raw_tmpl) = fs::read_to_string(&www_example) {
+            let content_to_write = render_injected_env(&raw_tmpl, &probed_site);
+            if fs::write(&www_env, content_to_write).is_ok() {
+                if let Some(ref cfg) = probed_site {
+                    log_fn(
+                        &format!("  [所別繼承] 成功自本地 SQLite (dimension.db) 繼承所別代碼 [{}]，已建立 www/.env", cfg.site),
+                        "success",
+                    );
+                } else {
+                    log_fn(
+                        "  [警告] 未於本地資料庫探測到所別，已依中立範本建立 www/.env（請至該檔確認所別設定）",
+                        "warning",
+                    );
+                }
+            }
         }
     }
 
@@ -577,8 +678,21 @@ pub fn ensure_default_env_files(root_dir: &Path, log_fn: &dyn Fn(&str, &str)) {
     let api_env = root_dir.join("LAH-API").join(".env");
     let api_example = root_dir.join("LAH-API").join(".env.example");
     if !api_env.is_file() && api_example.is_file() {
-        if fs::copy(&api_example, &api_env).is_ok() {
-            log_fn("  已依據 .env.example 初始化建立 LAH-API/.env", "success");
+        if let Ok(raw_tmpl) = fs::read_to_string(&api_example) {
+            let content_to_write = render_injected_env(&raw_tmpl, &probed_site);
+            if fs::write(&api_env, content_to_write).is_ok() {
+                if let Some(ref cfg) = probed_site {
+                    log_fn(
+                        &format!("  [所別繼承] 成功自本地 SQLite 繼承所別代碼 [{}]，已建立 LAH-API/.env", cfg.site),
+                        "success",
+                    );
+                } else {
+                    log_fn(
+                        "  [警告] 未於本地資料庫探測到所別，已依中立範本建立 LAH-API/.env",
+                        "warning",
+                    );
+                }
+            }
         }
     }
 }
@@ -754,5 +868,141 @@ mod tests {
 
         let meta_none = parse_apache_zip_meta("Apache24.zip");
         assert_eq!(meta_none, None);
+    }
+
+    #[test]
+    fn test_ensure_default_env_files_inherits_site_from_db() {
+        let temp_dir = std::env::temp_dir().join(format!("lah_updater_test_db_{}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()));
+        let _ = fs::create_dir_all(&temp_dir);
+
+        // 建立 SQLite dimension.db (模擬蘆竹所 HE 安裝狀態)
+        let db_dir = temp_dir.join("www").join("assets").join("db");
+        fs::create_dir_all(&db_dir).unwrap();
+        let db_file = db_dir.join("dimension.db");
+        let conn = rusqlite::Connection::open(&db_file).unwrap();
+        conn.execute(
+            "CREATE TABLE config (key TEXT PRIMARY KEY, value TEXT)",
+            [],
+        ).unwrap();
+        conn.execute(
+            "INSERT INTO config (key, value) VALUES ('SITE', 'HE'), ('SITE_ID', '43504044'), ('WEBAP_IP', '220.1.35.161')",
+            [],
+        ).unwrap();
+        drop(conn);
+
+        // 建立 www/.env.example (發布中立範本)
+        let example_content = "MOCK=false\n# SITE=HA\n# SITE_ID=43504044\nWEBAP_IP=220.1.3X.XXX\n";
+        fs::write(temp_dir.join("www").join(".env.example"), example_content).unwrap();
+
+        // 呼叫 ensure_default_env_files (模擬解壓縮後環境初始化)
+        let logs = std::cell::RefCell::new(Vec::new());
+        ensure_default_env_files(&temp_dir, &|msg, lvl| {
+            logs.borrow_mut().push((msg.to_string(), lvl.to_string()));
+        });
+
+        // 斷言 www/.env 已建立，且所別成功繼承為 HE
+        let env_file = temp_dir.join("www").join(".env");
+        assert!(env_file.is_file(), "www/.env 未被自動生成！");
+        let content = fs::read_to_string(&env_file).unwrap();
+        assert!(content.contains("SITE=HE"), "未成功繼承 SITE=HE，內容為: {}", content);
+        assert!(!content.contains("SITE=HA"), "錯誤包含了 SITE=HA！內容為: {}", content);
+        assert!(content.contains("SITE_ID=43504044"), "未繼承 SITE_ID！");
+        assert!(content.contains("WEBAP_IP=220.1.35.161"), "未繼承 WEBAP_IP！");
+
+        // 清理測試目錄
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_ensure_default_env_files_without_db_fallback() {
+        let temp_dir = std::env::temp_dir().join(format!("lah_updater_test_nodb_{}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()));
+        let www_dir = temp_dir.join("www");
+        fs::create_dir_all(&www_dir).unwrap();
+
+        let example_content = "MOCK=false\n# SITE=HA\n";
+        fs::write(www_dir.join(".env.example"), example_content).unwrap();
+
+        let warnings = std::cell::RefCell::new(Vec::new());
+        ensure_default_env_files(&temp_dir, &|msg, lvl| {
+            if lvl == "warning" {
+                warnings.borrow_mut().push(msg.to_string());
+            }
+        });
+
+        assert!(!warnings.borrow().is_empty(), "缺少資料庫時未發出警示日誌！");
+        let env_file = www_dir.join(".env");
+        assert!(env_file.is_file());
+        let content = fs::read_to_string(&env_file).unwrap();
+        assert!(content.contains("# SITE=HA"), "無資料庫時應保持範本中立內容");
+
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_e2e_luzhu_inplace_upgrade_pipeline() {
+        let temp_root = std::env::temp_dir().join(format!(
+            "lah_e2e_luzhu_upgrade_{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let www_dir = temp_root.join("www");
+        let fe_dir = temp_root.join("LAH-NUXTJS");
+        let db_dir = www_dir.join("assets").join("db");
+        fs::create_dir_all(&db_dir).unwrap();
+        fs::create_dir_all(&fe_dir).unwrap();
+
+        // 1. 模擬蘆竹所既有 SQLite dimension.db (僅有資料庫，無 www/.env，無 LAH-NUXTJS/.env)
+        let db_file = db_dir.join("dimension.db");
+        let conn = rusqlite::Connection::open(&db_file).unwrap();
+        conn.execute(
+            "CREATE TABLE config (key TEXT PRIMARY KEY, value TEXT)",
+            [],
+        ).unwrap();
+        conn.execute(
+            "INSERT INTO config (key, value) VALUES ('SITE', 'HE'), ('SITE_ID', '43504044'), ('WEBAP_IP', '220.1.38.161')",
+            [],
+        ).unwrap();
+        drop(conn);
+
+        // 2. 模擬更新工具解壓覆蓋（釋放中立範本）
+        fs::write(
+            www_dir.join(".env.example"),
+            "MOCK=false\n# SITE=HA\n# SITE_ID=43504044\nWEBAP_IP=220.1.3X.XXX\n",
+        ).unwrap();
+        fs::write(fe_dir.join("package.json"), r#"{"version":"2.5.0"}"#).unwrap();
+        fs::write(fe_dir.join(".env.example"), "PROTOCOL=http\nPORT=8080\n").unwrap();
+
+        // 3. 執行環境檔自動繼承與初始化
+        ensure_default_env_files(&temp_root, &|_, _| {});
+
+        // 4. 執行前端執行期組態注入
+        let updated = crate::apache_conf::sync_fe_runtime_config(&temp_root, &|_, _| {});
+        assert!(updated);
+
+        // 5. 斷言後端環境檔已成功繼承 HE
+        let www_env = www_dir.join(".env");
+        assert!(www_env.is_file(), "www/.env 未建立");
+        let www_env_content = fs::read_to_string(&www_env).unwrap();
+        assert!(www_env_content.contains("SITE=HE"), "未繼承 SITE=HE, 內容為: {}", www_env_content);
+        assert!(!www_env_content.contains("SITE=HA"), "錯誤包含 SITE=HA！內容為: {}", www_env_content);
+        assert!(www_env_content.contains("SITE_ID=43504044"));
+        assert!(www_env_content.contains("WEBAP_IP=220.1.38.161"));
+
+        // 6. 斷言前端執行期組態已生成且對齊 HE 與蘆竹所 SRMAS
+        let rt_js = fe_dir.join("dist").join("runtime-config.js");
+        assert!(rt_js.is_file(), "runtime-config.js 未建立");
+        let rt_content = fs::read_to_string(&rt_js).unwrap();
+        assert!(rt_content.contains(r#""site": "HE""#), "前端未對齊 site: HE, 內容: {}", rt_content);
+        assert!(rt_content.contains("220.1.38.253"), "前端未對齊蘆竹所 SRMAS 220.1.38.253, 內容: {}", rt_content);
+        assert!(!rt_content.contains("220.1.34.253"), "前端錯誤滲漏桃園所 220.1.34.253！內容: {}", rt_content);
+
+        // 7. 驗證等冪性（重複執行不被覆蓋）
+        ensure_default_env_files(&temp_root, &|_, _| {});
+        let www_env_content2 = fs::read_to_string(&www_env).unwrap();
+        assert_eq!(www_env_content, www_env_content2, "重複執行後 www/.env 發生非等冪異動");
+
+        let _ = fs::remove_dir_all(&temp_root);
     }
 }

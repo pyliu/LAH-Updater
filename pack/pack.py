@@ -590,6 +590,30 @@ def verify_zip_integrity(zip_path, package_type, base_dir=None):
         if not has_php:
             missing.append("*.php 核心檔案")
 
+    # 範本去特化與中立性驗證 (Template Sanitization & De-specialization Check)
+    # 嚴格禁止更新包內夾帶寫死特定所別 (如未註解之 SITE=HA) 之 .env.example
+    # 亦嚴防正式環境檔 .env 意外滲漏至發布包中
+    with zipfile.ZipFile(zip_path, "r") as zf_check:
+        for item in zf_check.infolist():
+            fname = item.filename.replace("\\", "/")
+            base_name = os.path.basename(fname).lower()
+            if base_name == ".env":
+                missing.append(f"發布安全違規：更新包內嚴禁包含正式環境檔 ({fname})！")
+            elif base_name.endswith(".env.example") or base_name == ".env.example":
+                try:
+                    content = zf_check.read(item.filename).decode("utf-8", errors="ignore")
+                    for line_idx, line in enumerate(content.splitlines(), 1):
+                        trimmed = line.strip()
+                        if trimmed.startswith("#") or not trimmed:
+                            continue
+                        if re.match(r"^SITE\s*=\s*[A-Za-z0-9_]+", trimmed, re.IGNORECASE):
+                            missing.append(
+                                f"範本特化違規：{fname} 第 {line_idx} 行包含寫死之所別代碼 '{trimmed}'，"
+                                f"發布範本必須保持中立指引或予以註解！"
+                            )
+                except Exception:
+                    pass
+
     if missing:
         try:
             os.remove(zip_path)
