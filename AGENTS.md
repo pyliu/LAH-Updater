@@ -1,208 +1,59 @@
-# AGENTS.md - Developer & AI Agent Context
+# LAH-Updater — 系統自動更新部署與離線維運規範
 
-本文件旨在為後續參與開發、維護或重構此專案的工程師與 AI 程式助理（Agents）提供系統架構說明、核心業務規則與開發守則。
-
----
-
-## 1. 專案願景與基本原則
-
-- **目標**：提供一套乾淨、輕量、秒開、免安裝、具備防呆機制且相容 Windows 權限體系的原生自動化維運工具套件。
-- **核心架構**：
-  - 全系列維運工具與擴充小工具全數收納於 `tools/`，並採用 **Tauri 2 (Rust) + 純靜態 HTML/JS 前端** 原生架構實作（包含 `tools/updater`、`tools/node-portable`、`tools/uninstaller`、`tools/backuper`、`tools/dashboard` 與 `tools/sms-env-editor`）。
-  - 單一執行檔體積約 9~12 MB，冷啟動縮減至 0.3 秒以內，免除 Python 解壓暫存目錄，達成隨點秒開並大幅降低防毒軟體誤判率。
-- **無外部運行庫依賴（Zero External Runtime Dependencies）**：
-  - 核心程式碼嚴格使用 Rust 靜態編譯並自包含 WinSW 服務核心（`lah-service.exe` / `lah-web-service.exe`）。
-  - 打包工具 `pack/pack.py` 嚴格僅使用 Python 標準庫，零第三方套件依賴。
+> **專案架構**：`tools/` 收納全系列 **Tauri 2 (Rust) + 純靜態 HTML/JS** 獨立維運工具（`updater`、`uninstaller`、`backuper`、`node-portable`、`dashboard`、`sms-env-editor`），`pack/pack.py`（Python 3.10+ 純標準庫）負責三向分流打包至 `dist/`（`base/`、`patch/`、`node_modules/`）。
 
 ---
 
-## 2. 專案目錄結構與職責分工
+## 1. 桌面維運工具核心防呆與 UI 鐵律
 
-```text
-LAH-Updater/
-├── tools/                  # 獨立維運工具套件庫 (全數採用 Tauri 2 / Rust 實作)
-│   ├── updater/            # 智慧控管與監控系統 - 自動安裝與更新工具 (Tauri 2 / Rust)
-│   │   ├── src-tauri/      # Rust 核心 (5 階段更新、解壓對齊、LAH_Web_Service / LAH_PM2_Service 沙盒服務配置)
-│   │   ├── ui/             # 純靜態 HTML/JS 介面 (動態高度自適應無捲軸)
-│   │   ├── service/        # WinSW 模板 (lah-web-service.xml, lah-service.xml，編譯時透過 include_bytes! 內嵌)
-│   │   ├── build.py / build.bat# 一鍵編譯發布腳本 (輸出至 dist/)
-│   │   └── README.md
-│   ├── uninstaller/        # 智慧控管與監控系統 - 自動移除工具 (Tauri 2 / Rust)
-│   │   ├── src-tauri/      # Rust 核心 (服務停止/刪除、進程終止、PATH/排程清理、深度掃除)
-│   │   ├── ui/             # 純靜態 HTML/JS 介面 (內置二次確認彈窗、動態高度自適應)
-│   │   ├── build.py / build.bat# 一鍵編譯發布腳本 (輸出至 dist/)
-│   │   └── README.md
-│   ├── backuper/           # 智慧控管與監控系統 - 備份與還原工具 (Tauri 2 / Rust)
-│   │   ├── src-tauri/      # Rust 核心 (重要資料備份、OCI8/MSSQL DLL 掃描、復原點 undo)
-│   │   ├── ui/             # 彈現式日誌介面 (Modal Overlay、動態高度自適應)
-│   │   ├── build.py / build.bat# 一鍵編譯發布腳本 (輸出至 dist/)
-│   │   └── README.md
-│   ├── node-portable/      # 智慧控管與監控系統 - Node 沙盒監管工具 (Tauri 2 / Rust)
-│   │   ├── src-tauri/      # Rust 核心 (Node 26.x 解壓、零全域污染沙盒隔離、WinSW 註冊、pm2-logrotate 預載)
-│   │   ├── ui/             # 純靜態 HTML/JS 介面 (無捲軸緊緻版面、Unicode 4.0 符號向下相容)
-│   │   ├── service/        # WinSW 服務模板與 pm2_service_runner.js
-│   │   ├── build.py / build.bat# 一鍵編譯發布腳本 (輸出至 dist/)
-│   │   └── README.md
-│   ├── dashboard/          # 管理儀表板 (智慧控管與監控系統 - 管理儀表板.exe，WinSW/PM2/Log/Metrics)
-│   ├── sms-env-editor/     # 地籍異動簡訊參數設定工具 (env.properties BASE64 編輯器)
-│   └── README.md
-├── pack/                   # 系統原始碼自動打包發布工具 (Python 3.10+ 標準庫)
-│   ├── pack.py / pack.bat  # 遍歷 LAH 各子專案與 VC++ 執行期打包為三向分流 .zip 壓縮包
-│   └── README.md
-├── assets/img/             # 離線操作手冊專用本機截圖與圖示資源
-├── README.html             # 視覺化系統架構技術手冊 (100% 離線純靜態 HTML，含字體大小切換)
-├── INSTALLATION.html       # 伺服器端安裝與版本升級標準操作手冊 (100% 離線純靜態 HTML，含字體切換與燈箱)
-└── dist/                   # 統一發布輸出目錄 (全工具產出執行檔與 base/、patch/、node_modules/ 集中於此)
-```
+1. **真實執行目錄定位（`get_app_dir`）**：
+   - Rust 必須透過 `std::env::current_exe()` 取父目錄定位 `.exe` 所在位置，**嚴禁使用 `std::env::current_dir()`**（防捷徑或提權啟動時落入 `C:\Windows\System32`）。
+2. **主視窗禁止出現捲軸（`autoFitWindow` 強制規範）**：
+   - 所有桌面工具主視窗在任何狀態（初始開啟、展開／收合選項、掃描完成後）**嚴禁出現垂直或水平 Scrollbar**，視窗必須貼齊內容。
+   - 前端 `autoFitWindow()` 量測文檔流真實累積高度（排除 `position: sticky` 底部列位置，加 `4px` 浮點進位裕度），呼叫後端 `fit_window_to_content` 設定客戶區高度；在初始渲染、掃描完成、展開或收合後皆須觸發，**禁止留成空函式（no-op）**。
+   - Tauri 2 `window.set_size()` 設定的是客戶區（inner size），不得疊加標題列與邊框高度；`tauri.conf.json` 預設高度須大於最高展開狀態，`body` 設為 `overflow-y: hidden`（彈窗內日誌長文字區塊不在此限）。
+3. **更新包三向探測、壓縮包缺失防呆與雙層巢狀自癒**：
+   - 優先探測分類子目錄（基礎環境 `base/`、業務程式 `patch/`、套件 `node_modules/`），未找到則依序回退至同層目錄、`C:\Temp` 與安裝根目錄；缺失對應 ZIP 時強制將核取方塊設為 `disabled`（`cursor: not-allowed`）。
+   - 解壓前必須先停止 Windows 服務（`LAH_Web_Service` / `Apache2.4`、`LAH_PM2_Service`）、呼叫 `kill_pm2_daemon` 並確認 `node.exe` / `httpd.exe` 未被鎖定（`is_file_locked`，防 `os error 5`）。
+   - 解壓時自動剝除同名單一頂層資料夾（`detect_strip_prefix`），解壓後巡檢並自動攤平 `node\node`、`php7\php7`、`php85\php85`、`Apache24\Apache24` 等雙層巢狀目錄（`auto_flatten_nested_dirs`）。
+4. **離線環境（Zero-CDN）與舊版 Windows Server 相容**：
+   - 所有工具介面與離線手冊（`README.html`、`INSTALLATION.html`）**嚴禁引用 Google Fonts、cdnjs、unpkg 等任何外部 URL**（防封閉內網 Timeout 卡死）；手冊須提供字體大小切換（一般、中[+15%]、大[+25%]，預設「中」）。
+   - 避免使用 Unicode 11.0+ 新版 Emoji，改用內嵌 SVG 或向下相容之 Unicode 4.0 符號（如 `⚡`、`⚙️`、`🏠`），防止 Windows Server 2012R2/2016 顯示豆腐方塊。
+5. **新工具專屬圖示（ICO）設計流程**：
+   - 於 `tools/` 新增工具時**嚴禁沿用既有圖示**；動手前必須向使用者提出 2～3 組視覺與配色方案供選擇，定案後以 `generate_icons.ps1` 產出多解析度 `icon.ico`（16~256px）及完整 PNG 套裝並內嵌至 `Cargo.toml` / `tauri.conf.json`。
 
 ---
 
-## 3. 核心業務規則與安全防護
+## 2. 伺服器沙盒隔離與組態自癒鐵律（Lesson Learnt）
 
-### 3.1 執行目錄定位 (`get_app_dir`)
-程式執行時必須取得使用者放置 `.exe` 的真實目錄（而非暫存目錄或工作目錄）：
-在 Rust 中透過 `std::env::current_exe()` 解析並取其父目錄。絕不可使用 `std::env::current_dir()`，避免捷徑或提權啟動時工作目錄被置於 `C:\Windows\System32`。
+### 2.1 Node.js 與 PM2 零全域污染沙盒隔離
+1. **零全域環境變數污染**：嚴禁將 `<root_dir>\node` 或 `PM2_HOME` 寫入 `HKLM` / `HKCU` 全域登錄檔，並主動清理舊版殘留路徑；日常維運統一使用安裝根目錄之 `lah-cmd.bat`。
+2. **WinSW 實體絕對路徑與私有 `PM2_HOME`**：`lah-service.xml`（`LAH_PM2_Service`）直接鎖定 `<root_dir>\node\node.exe`、`<root_dir>\node\node_modules\pm2\bin\pm2` 與私有環境變數 `PM2_HOME = <root_dir>\.pm2`，徹底脫鉤系統全域 Node 升級與 `%USERPROFILE%\.pm2`。
+3. **殘留模組淨化（`wire_bundled_pm2_logrotate`）**：自動清除 `module_conf.json` 中舊版 `@jessety/pm2-logrotate`、`pm2-logrotate-ext` 及磁碟無對應 `package.json` 之幽靈模組，將輪替參數無損平移至標準 `pm2-logrotate`（預設 `compress: true`）。
+4. **PM2 `NPM.js` 防崩潰保護**：於 `node\node_modules\pm2\lib\API\Modules\NPM.js` 注入路徑檢查與 `try/catch` 包裹 `require()`，防止缺失模組拋出 `MODULE_NOT_FOUND` 導致 PM2 Daemon 啟動崩潰。
 
-### 3.2 安裝包分類優先搜尋與平滑回退
-自動安裝與更新工具探測更新包時，優先至分類專屬子目錄尋找：
-- **基礎服務環境**（`Apache24.zip`、`vcredist-x64.zip`、`php7.zip`、`php85.zip`、`node.zip`）：優先至 **`base/`** 子資料夾。
-- **業務程式更新包**（`LAH-NUXTJS.zip`、`LAH-API.zip`、`www.zip`、`lah-messenger-server.zip`）：優先至 **`patch/`** 子資料夾。
-- **依賴套件包**（`LAH-NUXTJS-node_modules.zip`、`lah-messenger-server-node_modules.zip`）：優先至 **`node_modules/`** 子資料夾。
-- **更新說明文字檔**（`*更新說明*.txt`）：優先至 **`patch/`** 子資料夾，並依最後修改時間排序讀取最新檔案。
-- **回退機制**：若各子資料夾未放置或不存在，自動回退至執行目錄根部、`C:\Temp` 與安裝根目錄搜尋。
+### 2.2 Apache 2.4 & 雙 PHP 組態自癒與正則 `NoExpand` 防吞噬
+1. **Web 服務沙盒化與資安脫敏**：以 WinSW 封裝 `LAH_Web_Service`（注入私有 `PATH` 含 `Apache24\bin`、`instantclient_11_2`、`php7` 並卸載舊 `Apache2.4` 服務）；`services.msc` 服務名稱全面使用公務中性名稱以防弱掃誤判；`vcredist-x64.zip` 解壓時同步補齊至 `Apache24\bin`、`php7` 與 `php85`。
+2. **舊組態清理與路徑校準**：動態將 `httpd.conf` 中 `rotatelogs.exe` 舊路徑重寫為當前日誌目錄；清除散落之舊版 AppServ `LoadFile` / `mod_php7` 與失效 `Alias /LAH-API`；確保 `php.ini` 僅保留單一精準 `extension_dir = "<php_dir>/ext"`。
+3. **Rust 正則替換強制 `regex::NoExpand`（防 `$1` 吞噬）**：
+   - 當動態組態區塊（如 `fcgi_block`、`php2shell_block`、`xml_content`）含 `$` 字元時，**嚴禁直接傳入 `&str` 呼叫 `re.replace(text, &block)`**（正則引擎會將 `$1` 當成反向引用靜默吞噬為空字串 `""`，導致 FastCGI HTTP 503）。
+   - **強制寫法**：一律包裝為 `regex::NoExpand(&block)`。
+4. **`ProxyFCGISetEnvIf` 捕獲組語法**：
+   - 剝除代理前綴時必須寫為 `SCRIPT_FILENAME "$1"`，**嚴禁誤寫為 `"$$1"`**（會被解析為 `$C:/...` 導致 `No input file specified.` HTTP 404）。
+5. **雙軌等冪性單元測試**：所有組態修改函式的單元測試必須**連續執行兩次呼叫（初次注入 ➔ 二次覆蓋更新）**，並同時斷言包含 `"$1"`、不包含 `""`、不包含 `"$$1"`。
 
-### 3.3 雙層同名目錄防呆對齊 (`detect_strip_prefix`)
-解壓壓縮包時必須檢測頂層結構，若含有同名單一資料夾（例如 `www.zip` 內含 `www/`），自動剔除外層前綴對齊解壓，徹底防範雙層巢狀目錄。
+### 2.3 打包完整性守門員（`pack/pack.py`）
+- **動態提取**：自動解析 `LAH-FE/nuxt.config.js` 的 `serverMiddleware` 與 `ecosystem.config.js`，動態納入中介軟體；`lah-messenger-server` 採用 `*.js` 萬用字元收錄。
+- **事前與事後雙重守門員**：打包前缺失宣告檔案即拋出 `PackIntegrityError` 中止；打包後重開 ZIP 驗證核心檔案，不完整立即自動刪除銷毀 ZIP，並由 `python tests\test_pack_integrity.py` 把關。
 
-### 3.4 Node 26 與 PM2 零全域污染沙盒隔離與殘留模組淨化
-- **零全域環境變數污染**：工具嚴禁將 `<root_dir>\node` 或 `PM2_HOME` 寫入系統 (`HKLM`) 或使用者 (`HKCU`) 全域登錄檔，並於執行時主動清理舊版殘留之登錄檔路徑，確保一般 CMD 輸入 `node --version` 完全不受污染。日常維運統一使用自動生成於安裝根目錄之專屬沙盒終端 `lah-cmd.bat`。
-- **WinSW 服務實體路徑與私有變數綁定**：`lah-service.xml` (`LAH_PM2_Service`) 直接鎖定 `<root_dir>\node\node.exe` 與私有 `PM2_HOME = <root_dir>\.pm2`，杜絕外部全域 Node 22+ 升級干擾。
-- **殘留模組清除**：`wire_bundled_pm2_logrotate` 自動清除 `module_conf.json` 中之舊版 `@jessety/pm2-logrotate` 與磁碟不存在之幽靈模組，並繼承舊有輪替設定。
-- **NPM.js 例外防禦**：修補 PM2 核心 `NPM.js` 之 `StartModule`，以 `try/catch` 封裝模組 `require()`，防止 `MODULE_NOT_FOUND` 拋出造成守護程序崩潰。
-
-### 3.5 Apache 與 PHP 組態自癒、Web 服務沙盒化與資安脫敏
-- **Web 伺服器 WinSW 沙盒化 (`LAH_Web_Service`)**：捨棄 `httpd.exe -k install` 全域侵入方式，改由 WinSW (`lah-web-service.exe` / `lah-web-service.xml`) 封裝為 `LAH_Web_Service`，於服務私有環境變數內注入 `Apache24\bin`、`instantclient_11_2` 與 `php7`，並自動偵測與卸載舊版 `Apache2.4` 服務。
-- **VC++ 執行期依賴獨立封裝與同步 (`vcredist-x64.zip`)**：保持官方 `httpd-*.zip` 原貌不重壓，由 `pack.py` 打包獨立 `vcredist-x64.zip`，解壓時自動補齊至 `Apache24\bin`、`php7` 與 `php85`。
-- **服務管理員 (`services.msc`) 資安脫敏**：服務顯示名稱與描述全面脫敏為公務系統中性用語（「LAH 智慧管控：應用系統入口與 API 閘道服務」、「LAH 智慧管控：背景服務總線與健康管理系統」），避免出現 Apache、PHP、node、PM2 等字眼引發弱掃誤判。
-- **日誌路徑正規化與 FastCGI 校準**：動態將 `httpd.conf` 中 `rotatelogs.exe` 目錄重寫為當前 `<root_dir>/logs/apache/`；確保 `ProxyFCGISetEnvIf` 使用正確 `$1` 捕獲組轉發至 `127.0.0.1:8085`；自動清除散落之舊版 AppServ 指令並去重 `php.ini` 之 `extension_dir`。
-
-### 3.6 行程鎖定釋放與雙層目錄自癒
-- **行程安全釋放**：解壓覆蓋前依序停止 Windows 服務、終止 PM2 Daemon，並確認 `node.exe` 檔案鎖已釋放（防止 `os error 5` 拒絕存取）。
-- **雙層巢狀自癒**：解壓後若產生 `node\node`、`php7\php7` 等巢狀目錄，自動平移提升並清除空目錄。
-
-### 3.7 零外部 CDN 與 Windows Server 相容
-- **Zero-CDN**：全工具介面與離線手冊（`README.html`、`INSTALLATION.html`）嚴禁外連 CDN 或遠端字型，確保封閉隔離內網不逾時。離線手冊必須內建字體大小切換選單（一般、中、大，預設為「中」）。
-- **符號向下相容**：介面使用 SVG 或 Unicode 4.0 符號，根除 Windows Server 2012R2/2016 缺字方塊。
-
-### 3.8 新增維運小工具與 App 圖示 (ICO) 專屬設計規範
-在 `tools/` 資料夾下開發任何新工具時，**嚴禁直接沿用或複製既有工具之圖示**，必須遵守以下設計流程：
-- **為新工具量身重新設計專屬圖示**：視覺主題、象徵符號與配色漸層必須緊密契合該工具之業務職責與操作情境。
-- **強制提出方案供使用者選擇**：在動手繪製或生成圖示前，Agent 必須主動透過結構化詢問向使用者提出至少 2 至 3 組核心意象與配色提案，由使用者親自審閱並選擇定案。
-- **完整規格產出套裝**：每個新工具均須附帶獨立之 `generate_icons.ps1` 繪圖腳本，產出包含 16、24、32、48、64、128 與 256 多解析度影格之 `icon.ico`，以及 `32x32.png`、`128x128.png`、`128x128@2x.png`、`icon.png` (512x512) 與 `ui/favicon.png`。
-- **確保編譯時內嵌**：執行 `build.py` 時必須確保 `Cargo.toml` 與 `tauri.conf.json` 正確載入專屬圖示，產出之 `.exe` 必須包含該工具專屬圖示資源。
-
-### 3.9 介面禁止出現 Scrollbar（強制）
-- 所有工具主視窗在任何狀態（剛開啟、展開或收合選項、掃描完成後）都不得出現捲軸，視窗尺寸必須剛好貼齊內容。
-- 必須實作動態自適應視窗高度：前端 `autoFitWindow()` 量測文檔流真實高度（`main-layout` 底部 + `footer` 高度與 margin + `body` padding + 4px 裕度，不可直接取 sticky 的 `.footer-bar` 位置），呼叫後端 `fit_window_to_content` 設定客戶區高度；初始渲染、掃描完成、展開或收合元件後都要觸發，禁止留成 no-op。
-- Tauri 2 `window.set_size()` 為客戶區尺寸，不得再疊加標題列與邊框高度。
-- `tauri.conf.json` 預設高度需大於最高內容狀態，`body` 使用 `overflow-y: hidden`。
-- 修改介面後必須實測各狀態無捲軸才能回報完成；彈窗內日誌與說明等長文字區塊不在此限。
-
-
-### 3.10 組態注入與正則字面替換防禦規範（強制）
-維運工具經常涉及以 Rust 讀取、修改並重新寫入 `httpd.conf`、`php.ini`、`services.xml` 或 `ecosystem.config.js` 等中介軟體設定檔。為根絕過去多次因「正則捕獲組吞噬」或「字串跳脫混淆」導致 FastCGI 路徑錯亂（HTTP 404 / 503）的事故，必須嚴格遵守以下三部曲防禦規範：
-
-1. **Rust 正則區塊替換強制宣告 `regex::NoExpand`**：
-   - 當動態生成之組態區塊（如 `fcgi_block`、`php2shell_block`、`xml_content`）內容含有 `$` 符號（例如 Apache 代理捕獲組 `$1`、環境變數 `$PORT`、正規表達式語法等）時，**嚴禁**直接傳入字串切片 `re.replace(text, &block)`。
-   - 在 Rust `regex` 套件中，`&str` 作為替換內容會自動嘗試展開 `$1`, `$2` 等反向引用；若被替換的目標正則未宣告對應捕獲組，**正則引擎會靜默將 `$1` 吞噬替換為空字串 `""`**，造成線上環境設定檔產生 `SCRIPT_FILENAME ""` 的致命錯誤。
-   - **強制做法**：必須一律包裝為 `regex::NoExpand(&block)`（例如 `re.replace(&content, NoExpand(&fcgi_block))`），強制將替換內容作為純字面（Literal）處理，絕不進行反向引用解析。
-
-2. **Apache `ProxyFCGISetEnvIf` 路徑捕獲語法規範**：
-   - 於 `httpd.conf` 中轉發 Windows FastCGI 請求時，剝除代理 URL 前綴之標準語法為：
-     ```apache
-     ProxyFCGISetEnvIf "reqenv('SCRIPT_FILENAME') =~ m#^proxy:fcgi://127\.0\.0\.1:8085/(.*)$#" SCRIPT_FILENAME "$1"
-     ```
-   - Expression 表達式中的捕獲組**必須且只能是 `$1`**。
-   - **嚴禁寫成 `$$1`**：Apache `ap_expr` 會將 `$$1` 解析為字面 `$` 字元加上捕獲內容（如 `$C:/AppServ/...`），導致 Windows 版 `php-cgi.exe` 收到無效磁碟路徑而報錯 `No input file specified.` (HTTP 404)。
-
-3. **組態函式雙軌單元測試強制驗證（初次建立 + 二次覆蓋等冪性）**：
-   - 凡涉及設定檔生成、注入或正規化的 Rust 函式，其單元測試**嚴格禁止只驗證「初次寫入（`push_str`）」路徑**。
-   - 測試案例必須強制執行**連續兩次呼叫（初次注入 ➔ 二次覆蓋更新）**，以完整模擬使用者重新執行工具或升級覆蓋的真實情境。
-   - 於第二次覆蓋後，必須同時驗證：
-     1. 正確字串已保留：`assert!(conf.contains(r#"SCRIPT_FILENAME "$1""#));`
-     2. 吞噬空字串不存在：`assert!(!conf.contains(r#"SCRIPT_FILENAME """#));`
-     3. 錯誤轉義字串不存在：`assert!(!conf.contains(r#"SCRIPT_FILENAME "$$1""#));`
-### 3.11 打包完整性守門員與執行期依賴自動偵測機制（強制）
-為根除因前端或後端新增程式碼（如 Nuxt `serverMiddleware`、自訂伺服端腳本等）未被收錄進靜態打包白名單，導致線上環境部署後啟動崩潰的事故，打包系統實施三重架構防呆：
-
-1. **單一真相來源動態提取（Dynamic Dependency Extraction）**：
-   - 嚴禁仰賴人工手動維護的靜態目錄白名單。
-   - `pack.py` 於打包 `LAH-FE` 前，自動解析 `nuxt.config.js` 的 `serverMiddleware` 宣告與 `ecosystem.config.js` 的啟動腳本，動態將所有宣告的中介軟體與伺服端目錄加入打包清單。
-   - `lah-messenger-server` 採用萬用字元 `*.js`，杜絕逐檔條列導致新增模組漏包。
-2. **打包前事前完整性守門員（Pre-pack Integrity Gatekeeper）**：
-   - 在檔案寫入壓縮包前，強制校驗待打包清單是否涵蓋 `nuxt.config.js` 與 `ecosystem.config.js` 宣告的每一項實體檔案。
-   - 若有任何中介軟體或腳本缺失，立即拋出 `PackIntegrityError` 並中斷打包程序，絕不放行殘缺產物。
-3. **打包後成品銷毀校驗（Post-pack ZIP Validation & Auto-Destruction）**：
-   - 壓縮完成後自動重開 ZIP 驗證核心檔案（`.nuxt/`、`nuxt.config.js`、`ecosystem.config.js`、中介軟體檔案等）。
-   - 若成品不完整，自動刪除銷毀該 ZIP 檔案並報錯退出，杜絕殘缺包流入 `dist/patch/`。
+### 2.4 Windows 維運排程與 PowerShell 腳本防禦規範
+- **環境與編碼**：鎖定原生 PowerShell 5.1（零第三方模組）；含繁體中文之 `.ps1` / `.bat` 嚴格維持 **`CP950 / BIG5 + CRLF`**，嚴禁無 BOM 之 UTF-8 覆蓋造成終端亂碼。
+- **無人值守防護**：週期巡檢腳本須具備公務上班時間檢查（非辦公時段 Early Return）；以 `NT AUTHORITY\SYSTEM`（如神網派送）執行時須先複製至 `C:\Temp` 本機或以專用網域帳號驗證掛載 UNC 路徑；呼叫含 `PAUSE` 之批次檔須透過管道注入空輸入防卡死。
 
 ---
 
-## 4. 常用測試與打包指令
+## 3. 常用建置與測試指令
 
-- **執行打包完整性防禦測試**：
-  ```powershell
-  python tests\test_pack_integrity.py
-  ```
-- **建立自動安裝與更新工具**：
-  ```powershell
-  python tools\updater\build.py
-  # 或執行：.\建立自動安裝與更新工具.bat (亦相容 .\建立自動更新工具.bat)
-  ```
-- **建立自動移除工具**：
-  ```powershell
-  python tools\uninstaller\build.py
-  # 或執行：.\建立解除安裝工具.bat
-  ```
-- **建立 Node 沙盒監管工具**：
-  ```powershell
-  python tools\node-portable\build.py
-  # 或執行：.\建立NODE沙盒監管工具.bat (亦相容 .\建立可攜NODE工具.bat)
-  ```
-- **建立自動備份工具**：
-  ```powershell
-  python tools\backuper\build.py
-  # 或執行：.\建立自動備份工具.bat
-  ```
-- **建立簡訊設定工具**：
-  ```powershell
-  python tools\sms-env-editor\build.py
-  # 或執行：.\建立簡訊設定工具.bat
-  ```
-- **建立管理儀表板工具**：
-  ```powershell
-  python tools\dashboard\build.py
-  # 或執行：.\建立管理儀表板工具.bat
-  ```
-- **原始碼全系統打包**：
-  ```powershell
-  python pack\pack.py
-  # 或執行：.\打包智慧控管及監控系統.bat
-  ```
-- **現有服務資安脫敏熱校準**：
-  ```powershell
-  .\校準現有服務資安脫敏名稱.bat
-  ```
-- **輸出確認**：產出之執行檔統一集中於 `LAH-Updater/dist/` 目錄。
-
----
-
-## 5. 規則與強制防呆機制對照表（Rule Enforcement Table）
-
-| 規則名稱 | 違規情境（歷史事故） | 最高防呆層級 | 強制執行把關機制 | 驗證與測試命令 |
-|---|---|---|---|---|
-| **執行期依賴打包完整性** | 前端新增 `serverMiddleware` 或中介腳本，未手動加入打包清單，導致目標機啟動崩潰 | **架構自動偵測 + 雙重事前/事後守門員** | `pack.py` 自動自 `nuxt.config.js` 萃取相依項目並注入清單；打包前後校驗缺失即中斷並刪除破損 ZIP | `python tests\test_pack_integrity.py` |
-| **即時通模組打包完整性** | 即時通新增 `.js` 模組，因硬編碼清單遺漏而無法上線 | **架構萬用字元消除** | `MESSENGER_INCLUDES` 採用 `*.js`，不再逐檔條列 14 檔，新模組自動收錄 | `python tests\test_pack_integrity.py` |
-| **正則字面替換防吞噬** | Rust 替換含 `$` 組態區塊時被當成反向引用靜默吞噬為空字串 | **型別強制約束** | 全面使用 `regex::NoExpand(&block)`，禁止裸字串替換 | `cargo test` |
-| **FastCGI 路徑捕獲語法** | Apache 路徑捕獲寫成 `$$1` 導致 FastCGI HTTP 404 | **行為測試把關** | 雙軌單元測試連續兩次執行注入與二次覆蓋等冪性檢查 | `cargo test` |
-| **視窗禁止出現捲軸** | 工具主視窗在展開或完成後產生捲軸 | **架構自適應約束** | 前端 `autoFitWindow()` 量測文檔流真實高度並動態調整客戶區 | UI 實機檢驗 |
+- **打包完整性測試**：`python tests\test_pack_integrity.py`
+- **個別工具編譯（輸出至 `dist/`）**：`python tools\<updater|uninstaller|node-portable|backuper|sms-env-editor|dashboard>\build.py`
+- **全系統原始碼打包**：`python pack\pack.py`
