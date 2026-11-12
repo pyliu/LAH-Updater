@@ -18,7 +18,7 @@ pub fn operation_guard() -> Result<MutexGuard<'static, ()>, String> {
         .map_err(|_| "另一項沙盒作業正在執行，請稍後再試。".into())
 }
 
-pub fn preview_operation_guard() -> Result<MutexGuard<'static, ()>, String> {
+pub fn waiting_operation_guard() -> Result<MutexGuard<'static, ()>, String> {
     OPERATION
         .lock()
         .map_err(|_| "沙盒作業狀態異常，請重新啟動工具。".into())
@@ -494,21 +494,26 @@ mod tests {
     static NEXT: AtomicUsize = AtomicUsize::new(0);
 
     #[test]
-    fn preview_waits_for_a_running_console_read() {
+    fn waiting_operation_waits_for_console_read_and_excludes_mutations() {
         let held = OPERATION.lock().unwrap();
         let (tx, rx) = std::sync::mpsc::channel();
+        let (release_tx, release_rx) = std::sync::mpsc::channel();
         let worker = std::thread::spawn(move || {
-            let result = preview_operation_guard();
-            tx.send(result.is_ok()).unwrap();
+            let _guard = waiting_operation_guard().unwrap();
+            tx.send(()).unwrap();
+            release_rx.recv().unwrap();
         });
         let premature = rx.recv_timeout(std::time::Duration::from_millis(50));
         drop(held);
-        worker.join().unwrap();
         assert!(
             premature.is_err(),
-            "preview must wait instead of rejecting a running console read"
+            "terminal and preview operations must wait for a running console read"
         );
-        assert!(rx.recv_timeout(std::time::Duration::from_secs(1)).unwrap());
+        rx.recv_timeout(std::time::Duration::from_secs(1)).unwrap();
+        let mutation_blocked = operation_guard().is_err();
+        release_tx.send(()).unwrap();
+        worker.join().unwrap();
+        assert!(mutation_blocked, "waiting operations must retain mutation exclusion");
     }
 
     #[test]

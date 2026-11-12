@@ -1,6 +1,6 @@
 [package]
 name = "lah-node-portable"
-version = "0.1.6"
+version = "0.1.7"
 description = "智慧控管與監控系統 - Node 沙盒監管工具"
 edition = "2021"
 

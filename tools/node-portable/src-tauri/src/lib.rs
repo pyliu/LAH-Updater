@@ -2,6 +2,7 @@ pub mod audit;
 pub mod console;
 pub mod header_protection;
 pub mod install;
+pub mod log_stream;
 pub mod pm2;
 pub mod system;
 pub mod types;
@@ -18,7 +19,7 @@ use types::{
 #[tauri::command]
 async fn preview_uninstall(root_dir: String) -> Result<uninstall::RemovalPlan, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        let _guard = uninstall::preview_operation_guard()?;
+        let _guard = uninstall::waiting_operation_guard()?;
         uninstall::preview(&root_dir)
     })
     .await
@@ -80,6 +81,7 @@ fn check_admin() -> bool {
 
 #[tauri::command]
 fn exit_app(app: AppHandle) {
+    log_stream::stop(None);
     app.exit(0);
 }
 
@@ -241,6 +243,30 @@ fn get_log_tail(path: String, max_lines: usize) -> Result<LogContentResult, Stri
 }
 
 #[tauri::command]
+fn start_pm2_log_stream(
+    app: AppHandle,
+    root_dir: String,
+    pm_id: u32,
+    session_id: String,
+    max_lines: usize,
+) -> Result<(), String> {
+    log_stream::start(
+        &resolve_root(&root_dir),
+        pm_id,
+        session_id,
+        max_lines,
+        std::sync::Arc::new(move |event| {
+            let _ = app.emit("pm2-log-stream", event);
+        }),
+    )
+}
+
+#[tauri::command]
+fn stop_pm2_log_stream(session_id: String) {
+    log_stream::stop(Some(&session_id));
+}
+
+#[tauri::command]
 fn open_log_in_notepad(path: String) -> CommandActionResult {
     console::open_in_notepad(&path)
 }
@@ -252,20 +278,24 @@ fn open_logs_folder(root_dir: String) -> CommandActionResult {
 }
 
 #[tauri::command]
-fn open_lah_cmd(root_dir: String) -> CommandActionResult {
-    let Ok(_guard) = uninstall::operation_guard() else {
-        return CommandActionResult {
-            success: false,
-            message: "另一項沙盒作業正在執行。".into(),
-        };
-    };
-    let root = resolve_root(&root_dir);
-    console::open_lah_cmd(&root)
+async fn open_lah_cmd(root_dir: String) -> Result<CommandActionResult, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let _guard = uninstall::waiting_operation_guard()?;
+        let root = resolve_root(&root_dir);
+        Ok(console::open_lah_cmd(&root))
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .on_window_event(|_, event| {
+            if matches!(event, tauri::WindowEvent::Destroyed) {
+                log_stream::stop(None);
+            }
+        })
         .invoke_handler(tauri::generate_handler![
             check_admin,
             scan_environment,
@@ -283,6 +313,8 @@ pub fn run() {
             trigger_logrotate_now,
             get_sandbox_logs,
             get_log_tail,
+            start_pm2_log_stream,
+            stop_pm2_log_stream,
             open_log_in_notepad,
             open_logs_folder,
             open_lah_cmd,

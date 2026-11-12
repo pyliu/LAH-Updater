@@ -9,9 +9,15 @@ let installTabAvailable = null;
 let consolePollTimer = null;
 let lastOverview = null;
 let consoleRefresh = null;
-let currentLogProcess = null;
 let uninstallPlan = null;
 let operationKind = "install";
+let currentInlineProc = null;
+let currentInlineLogType = "all";
+let logModalMode = "file";
+let logFileRequest = 0;
+let logStream = null;
+let logStreamSequence = 0;
+let logStreamCommands = Promise.resolve();
 
 async function initAdminStatus() {
   const badge = $("admin_badge");
@@ -52,11 +58,19 @@ function formatUptime(pmUptimeMs) {
   return `${days}天${hours % 24}時`;
 }
 
+let toastTimer = null;
 function setToast(msg, type = "normal") {
   const bar = $("console_toast");
   const text = $("console_toast_msg");
+  clearTimeout(toastTimer);
   text.textContent = msg;
   bar.className = "toast-bar" + (type === "error" ? " error" : type === "success" ? " success" : "");
+  if (type === "success") {
+    toastTimer = setTimeout(() => {
+      text.textContent = "就緒";
+      bar.className = "toast-bar";
+    }, 6000);
+  }
 }
 
 function switchTab(tab) {
@@ -86,6 +100,8 @@ function switchTab(tab) {
     }, 4000);
     return refreshed;
   } else {
+    stopLogStream("已離開控制台");
+    $("modal_logs").classList.remove("active");
     rescan();
   }
 }
@@ -172,11 +188,13 @@ function refreshConsole(silent = false) {
 
 async function loadConsole(silent = false) {
   const rootDir = $("root_dir").value.trim();
+  const requestedTab = currentTab;
   if (!silent) {
     setToast("正在同步沙盒 Node / PM2 狀態...");
   }
   try {
     const ov = await invoke("get_console_overview", { rootDir });
+    if (rootDir !== $("root_dir").value.trim() || currentTab !== requestedTab) return;
     lastOverview = ov;
     if (!rootDir && ov.root_dir) {
       $("root_dir").value = ov.root_dir;
@@ -255,15 +273,15 @@ async function loadConsole(silent = false) {
           const toggleAction = isOnline ? "stop" : "start";
           const toggleLabel = isOnline ? "停止" : "啟動";
           const safeName = escapeHtml(app.name);
-          const selected = currentInlineProc && currentInlineProc.name === app.name;
-          return `<div class="pm2-card${selected ? " active-row" : ""}" >
+          const selected = currentInlineProc && currentInlineProc.pm_id === app.pm_id;
+          return `<div class="pm2-card${selected ? " active-row" : ""}" data-pm2-id="${app.pm_id}">
             <div class="pm2-card-header"><button class="pm2-select pm2-card-name" aria-label="選取 ${safeName} 的日誌" aria-pressed="${!!selected}">${safeName}</button><span class="status-pill ${pillClass}">${escapeHtml(app.status)}</span></div>
             <div class="pm2-card-details"><span>ID ${app.pm_id}</span><span>PID ${app.pid || "-"}</span><span>CPU ${app.cpu.toFixed(1)}%</span><span>記憶體 ${formatBytes(app.memory)}</span><span>運行 ${isOnline ? formatUptime(app.uptime) : "-"}</span><span>重啟 ${app.restarts}</span></div>
             <div class="btn-group">
                 <button class="btn-sm" data-pm2-action="${toggleAction}" data-pm2-target="${safeName}">${toggleLabel}</button>
                 <button class="btn-sm btn-green" data-pm2-action="restart" data-pm2-target="${safeName}"><svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5M5 9a7 7 0 0112-2l3 5M19 15a7 7 0 01-12 2l-3-5"/></svg> 重啟</button>
                 <button class="btn-sm${app.header_protection_enabled ? " btn-green" : ""}" data-header-protection="${app.pm_id}" ${!app.header_protection_supported || (!isOnline && !(app.header_protection_enabled && ["stopped", "errored"].includes(app.status))) ? "disabled" : ""} title="HTTP/HTTPS 標頭防護設定，HTTP/2 不支援；請另執行資安自檢">${app.header_protection_enabled ? "停用防護" : "啟用防護"}</button>
-                <button class="btn-sm primary" data-pm2-log="${safeName}"><svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 2h8l4 4v16H6zM14 2v5h4M9 11h6M9 15h6"/></svg> 日誌</button>
+                <button class="btn-sm primary" data-pm2-log="${app.pm_id}"><svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 2h8l4 4v16H6zM14 2v5h4M9 11h6M9 15h6"/></svg> 日誌</button>
             </div>
           </div>`;
         })
@@ -277,15 +295,12 @@ async function loadConsole(silent = false) {
       setToast("沙盒狀態同步完成");
     }
     // 大螢幕工作台模式：自動同步內嵌日誌串流
-    if (ov.processes && ov.processes.length > 0) {
-      if (!currentInlineProc) {
-        currentInlineProc = ov.processes.find(p => !p.is_module) || ov.processes[0];
-      } else {
-        const found = ov.processes.find(p => p.name === currentInlineProc.name);
-        if (found) currentInlineProc = found;
-      }
-      updateInlineLog(currentInlineProc, currentInlineLogType);
-    }
+    const procs = ov.processes || [];
+    currentInlineProc = currentInlineProc
+      ? procs.find(p => p.pm_id === currentInlineProc.pm_id) || null
+      : procs.find(p => !p.is_module) || null;
+    if (!currentInlineProc) stopLogStream("目前無受管系統可供監看");
+    if (currentTab === "console") updateInlineLog(currentInlineProc, currentInlineLogType);
   } catch (err) {
     setToast(`同步沙盒狀態失敗：${err}`, "error");
   }
@@ -303,11 +318,10 @@ $("pm2_apps_tbody").onclick = async (e) => {
   const btn = e.target.closest("button");
   if (!btn || btn.classList.contains("pm2-select")) {
     // 點擊非按鈕區域：自動切換下方內嵌日誌
-    const targetName = row?.querySelector("[data-pm2-target]")?.getAttribute("data-pm2-target")
-                    || row?.querySelector("[data-pm2-log]")?.getAttribute("data-pm2-log");
-    if (targetName) {
-      const proc = (lastOverview?.processes || []).find((p) => p.name === targetName);
-      if (proc) await updateInlineLog(proc, "out");
+    const targetId = row?.getAttribute("data-pm2-id");
+    if (targetId != null) {
+      const proc = (lastOverview?.processes || []).find((p) => p.pm_id === Number(targetId));
+      if (proc) await updateInlineLog(proc, "all");
     }
     return;
   }
@@ -321,14 +335,14 @@ $("pm2_apps_tbody").onclick = async (e) => {
   }
   const action = btn.getAttribute("data-pm2-action");
   const target = btn.getAttribute("data-pm2-target");
-  const logName = btn.getAttribute("data-pm2-log");
+  const logId = btn.getAttribute("data-pm2-log");
 
   if (action && target) {
     await executePm2Action(action, target, btn);
-  } else if (logName) {
-    const proc = (lastOverview?.processes || []).find((p) => p.name === logName);
+  } else if (logId !== null) {
+    const proc = (lastOverview?.processes || []).find((p) => p.pm_id === Number(logId));
     // 連動內嵌日誌
-    if (proc) await updateInlineLog(proc, "out");
+    if (proc) await updateInlineLog(proc, "all");
     await openLogModal(proc?.out_log_path || "", proc || null);
   }
 };
@@ -396,10 +410,18 @@ $("btn_svc_stop").onclick = (e) => executeServiceAction("stop", e.currentTarget)
 $("btn_svc_restart").onclick = (e) => executeServiceAction("restart", e.currentTarget);
 
 $("btn_open_cmd").onclick = async () => {
-  if (isBusy) return;
-  const rootDir = $("root_dir").value.trim();
-  const res = await invoke("open_lah_cmd", { rootDir });
-  setToast(res.message, res.success ? "success" : "error");
+  const button = $("btn_open_cmd");
+  if (isBusy || button.disabled) return;
+  button.disabled = true;
+  try {
+    const rootDir = $("root_dir").value.trim();
+    const res = await invoke("open_lah_cmd", { rootDir });
+    setToast(res.success ? "已在新視窗開啟 lah-cmd 終端，可關閉該視窗，不影響服務" : res.message, res.success ? "success" : "error");
+  } catch (err) {
+    setToast(`開啟沙盒終端失敗：${err}`, "error");
+  } finally {
+    button.disabled = false;
+  }
 };
 
 $("btn_lr_trigger").onclick = async (e) => {
@@ -469,94 +491,102 @@ $("btn_open_log_modal").onclick = () => openLogModal("", null);
 
 // ==================== 即時日誌預覽彈窗 (Log Tail Modal) ====================
 async function openLogModal(preferredPath = "", procContext = null) {
-  currentLogProcess = procContext;
-  const quickWrap = $("proc_quick_logs");
-  if (procContext && (procContext.out_log_path || procContext.err_log_path)) {
-    quickWrap.style.display = "inline-flex";
-  } else {
-    quickWrap.style.display = "none";
-  }
-
   $("modal_logs").classList.add("active");
-  $("log_tail_box").textContent = "正在載入日誌清單...";
+  if (procContext) {
+    setLogModalMode("live");
+    await updateInlineLog(procContext);
+    return;
+  }
+  setLogModalMode("file");
+  await loadLogFiles(preferredPath);
+}
 
-  const rootDir = $("root_dir").value.trim();
+function setLogModalMode(mode) {
+  logModalMode = mode;
+  logFileRequest++;
+  const live = mode === "live";
+  $("sel_log_file").style.display = live ? "none" : "";
+  $("proc_quick_logs").style.display = live ? "inline-flex" : "none";
+  $("btn_log_files").style.display = live ? "" : "none";
+  $("btn_log_live").style.display = !live && currentInlineProc ? "" : "none";
+  $("btn_log_Notepad").disabled = live;
+  if (live) {
+    $("sel_log_lines").value = $("sel_inline_lines").value;
+    renderLogStream();
+  }
+}
+
+async function loadLogFiles(preferredPath = "") {
+  const request = ++logFileRequest;
+  $("log_tail_box").textContent = "正在載入日誌清單...";
   try {
-    const logs = await invoke("get_sandbox_logs", { rootDir });
+    const logs = await invoke("get_sandbox_logs", { rootDir: $("root_dir").value.trim() });
+    if (request !== logFileRequest || logModalMode !== "file") return;
     const sel = $("sel_log_file");
-    if (!logs || logs.length === 0) {
-      sel.innerHTML = `<option value="">（目前尚無日誌檔案）</option>`;
-      $("log_meta_bar").textContent = "檔案路徑：尚未產生任何 .log 檔案";
-      $("log_tail_box").textContent = "目前沙盒 .pm2\\logs 與 logs 目錄下尚無日誌檔案。";
+    sel.innerHTML = logs.length ? logs.map(l =>
+      `<option value="${escapeHtml(l.path)}">${escapeHtml(l.label)} (${formatBytes(l.size_bytes)})</option>`
+    ).join("") : `<option value="">（目前尚無日誌檔案）</option>`;
+    if (logs.some(l => l.path.toLowerCase() === preferredPath.toLowerCase())) sel.value = preferredPath;
+    if (!logs.length) {
+      $("log_meta_bar").textContent = "尚未產生日誌檔案";
+      $("log_tail_box").textContent = "目前沒有可查閱的日誌檔案。即時監看請選取受管系統。";
       return;
     }
-
-    sel.innerHTML = logs
-      .map(
-        (l) =>
-          `<option value="${escapeHtml(l.path)}">${escapeHtml(l.label)} (${formatBytes(l.size_bytes)})</option>`
-      )
-      .join("");
-
-    if (preferredPath) {
-      const match = logs.find((l) => l.path.toLowerCase() === preferredPath.toLowerCase());
-      if (match) {
-        sel.value = match.path;
-      }
-    }
-
     await loadSelectedLog();
   } catch (err) {
-    $("log_tail_box").textContent = `載入日誌清單失敗：${err}`;
+    if (request === logFileRequest && logModalMode === "file") $("log_tail_box").textContent = `載入日誌清單失敗：${err}`;
   }
 }
 
 async function loadSelectedLog() {
+  if (logModalMode === "live") {
+    $("sel_inline_lines").value = $("sel_log_lines").value;
+    return updateInlineLog(null, null, true);
+  }
   const path = $("sel_log_file").value;
   if (!path) return;
-  const maxLines = Number($("sel_log_lines").value) || 200;
+  const request = ++logFileRequest;
   $("log_tail_box").textContent = "讀取中...";
   try {
-    const res = await invoke("get_log_tail", { path, maxLines });
+    const res = await invoke("get_log_tail", { path, maxLines: Number($("sel_log_lines").value) || 200 });
+    if (request !== logFileRequest || logModalMode !== "file") return;
     $("log_meta_bar").textContent = `檔案路徑：${res.path} ｜ 檔案大小：${formatBytes(res.file_size)}`;
     const box = $("log_tail_box");
-    box.textContent = (res.lines || []).join("\n");
+    box.textContent = res.exists ? res.lines.join("\n") || "[日誌目前為空]" : "日誌檔案尚未產生。";
     box.scrollTop = box.scrollHeight;
   } catch (err) {
-    $("log_tail_box").textContent = `讀取日誌失敗：${err}`;
+    if (request === logFileRequest && logModalMode === "file") $("log_tail_box").textContent = `讀取日誌失敗：${err}`;
   }
 }
 
 $("sel_log_file").onchange = loadSelectedLog;
 $("sel_log_lines").onchange = loadSelectedLog;
 $("btn_log_reload").onclick = loadSelectedLog;
-
-$("btn_quick_out").onclick = async () => {
-  if (currentLogProcess?.out_log_path) {
-    $("sel_log_file").value = currentLogProcess.out_log_path;
-    await loadSelectedLog();
-  }
+$("btn_quick_all").onclick = () => updateInlineLog(null, "all");
+$("btn_quick_out").onclick = () => updateInlineLog(null, "out");
+$("btn_quick_err").onclick = () => updateInlineLog(null, "err");
+$("btn_log_files").onclick = () => {
+  setLogModalMode("file");
+  loadLogFiles();
 };
-$("btn_quick_err").onclick = async () => {
-  if (currentLogProcess?.err_log_path) {
-    $("sel_log_file").value = currentLogProcess.err_log_path;
-    await loadSelectedLog();
-  }
+$("btn_log_live").onclick = () => {
+  setLogModalMode("live");
+  updateInlineLog();
 };
 
 $("btn_log_Notepad").onclick = async () => {
   const path = $("sel_log_file").value;
-  if (!path) return;
+  if (!path || logModalMode !== "file") return;
   const res = await invoke("open_log_in_notepad", { path });
   if (!res.success) alert(res.message);
 };
 
 $("btn_log_Folder").onclick = async () => {
-  const rootDir = $("root_dir").value.trim();
-  await invoke("open_logs_folder", { rootDir });
+  await invoke("open_logs_folder", { rootDir: $("root_dir").value.trim() });
 };
 
 $("btn_close_logs").onclick = () => {
+  logFileRequest++;
   $("modal_logs").classList.remove("active");
 };
 
@@ -598,11 +628,15 @@ listen("log", ({ payload }) => appendLog(payload.message, payload.level || "info
 $("browse_btn").onclick = async () => {
   const selected = await open({ directory: true, defaultPath: $("root_dir").value.trim() || "C:\\AppServ" });
   if (selected) {
+    resetLogRoot();
     $("root_dir").value = selected;
     rescan();
   }
 };
-$("root_dir").onchange = () => rescan();
+$("root_dir").onchange = () => {
+  resetLogRoot();
+  rescan();
+};
 $("btn_rescan").onclick = () => rescan();
 
 $("btn_audit").onclick = async () => {
@@ -660,6 +694,7 @@ $("btn_close_audit").onclick = () => {
 
 async function exitApp() {
   if (isBusy) return;
+  await stopLogStream("工具已關閉");
   await invoke("exit_app");
 }
 $("btn_exit").onclick = exitApp;
@@ -789,6 +824,7 @@ $("btn_confirm_uninstall").onclick = async () => {
   $("status_text").textContent = "重新檢查移除範圍...";
   $("modal_progress").classList.add("active");
   try {
+    await stopLogStream("沙盒移除中");
     const message = await invoke("run_uninstall", { plan });
     $("status_text").textContent = message;
     currentInlineProc = null;
@@ -824,99 +860,187 @@ initAdminStatus();
 initializeTabs();
 
 // ==================== 大螢幕工作台模式：內嵌即時日誌串流邏輯 ====================
-let currentInlineProc = null;
-let currentInlineLogType = "out";
+function queueLogCommand(command) {
+  logStreamCommands = logStreamCommands.catch(() => {}).then(command);
+  return logStreamCommands;
+}
 
-async function updateInlineLog(proc = null, type = null) {
+function stopLogStream(message = "監看已停止") {
+  const previous = logStream;
+  logStream = null;
+  renderLogStream(message);
+  if (!previous) return Promise.resolve();
+  return queueLogCommand(() => invoke("stop_pm2_log_stream", { sessionId: previous.sessionId }))
+    .catch(err => setToast(`停止日誌監看失敗：${err}`, "error"));
+}
+
+function resetLogRoot() {
+  stopLogStream("沙盒目錄已變更，請重新選取受管系統");
+  currentInlineProc = null;
+  lastOverview = null;
+  logFileRequest++;
+  $("modal_logs").classList.remove("active");
+  renderLogStream();
+}
+
+function renderLogStream(emptyMessage = "目前無受管系統可供監看") {
+  const stream = logStream;
+  const statusText = {
+    connecting: "連線中", running: "等待輸出", streaming: "監看中",
+    stopped: "已停止", disconnected: "連線中斷", failed: "監看失敗"
+  };
+  const status = stream ? statusText[stream.status] || stream.status : "已停止";
+  const proc = currentInlineProc;
+  $("inline_log_proc_name").textContent = proc ? `${proc.name} (ID: ${proc.pm_id}, PID: ${proc.pid || "-"})` : "尚未選取受管系統";
+  $("inline_log_badge").textContent = status;
+  $("inline_log_badge").className = "status-pill " + (stream && ["running", "streaming"].includes(stream.status) ? "online" : "");
+  for (const [suffix, type] of [["all", "all"], ["out", "out"], ["err", "err"]]) {
+    for (const prefix of ["btn_inline_", "btn_quick_"]) {
+      const btn = $(prefix + suffix);
+      btn.setAttribute("aria-pressed", String(currentInlineLogType === type));
+      btn.style.fontWeight = currentInlineLogType === type ? "bold" : "normal";
+      btn.style.outline = currentInlineLogType === type ? "2px solid #0284c7" : "";
+    }
+  }
+  const filter = { all: "全部輸出", out: "標準輸出", err: "錯誤日誌" }[currentInlineLogType];
+  const meta = stream ? `PM2 logs ${proc?.pm_id} ｜ ${filter} ｜ ${status} ｜ ${[stream.notice, stream.message].filter(Boolean).join(" ")}` : emptyMessage;
+  $("inline_log_meta").textContent = meta;
+  const text = stream ? stream.chunks.filter(c => currentInlineLogType === "all" || c.stream === currentInlineLogType).map(c => c.text).join("") : "";
+  const content = text || (stream ? stream.message || "等待 PM2 輸出..." : emptyMessage);
+  for (const id of logModalMode === "live" ? ["inline_log_box", "log_tail_box"] : ["inline_log_box"]) {
+    const box = $(id);
+    if (box.textContent === content) continue;
+    const atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 40;
+    box.textContent = content;
+    if (atBottom) box.scrollTop = box.scrollHeight;
+  }
+  if (logModalMode === "live") $("log_meta_bar").textContent = meta;
+}
+
+function receiveLogStream(payload) {
+  const stream = logStream;
+  if (!stream || payload.session_id !== stream.sessionId) return;
+  if (payload.kind === "output") {
+    const text = payload.message;
+    if (!text) return;
+    const record = { stream: payload.stream, text, lines: (text.match(/\n/g) || []).length };
+    stream.chunks.push(record);
+    stream.characters += text.length;
+    stream.lines += record.lines;
+    while (stream.chunks.length && (stream.characters > 200000 || stream.lines > 2000 || stream.chunks.length > 2000)) {
+      const oldest = stream.chunks[0];
+      if (stream.chunks.length > 2000) {
+        stream.chunks.shift();
+        stream.characters -= oldest.text.length;
+        stream.lines -= oldest.lines;
+        continue;
+      }
+      let remove = Math.max(0, stream.characters - 200000);
+      let lineEnd = -1;
+      for (let n = 0; n < stream.lines - 2000; n++) {
+        lineEnd = oldest.text.indexOf("\n", lineEnd + 1);
+        if (lineEnd < 0) {
+          lineEnd = oldest.text.length - 1;
+          break;
+        }
+      }
+      remove = Math.min(oldest.text.length, Math.max(remove, lineEnd + 1));
+      const removed = oldest.text.slice(0, remove);
+      oldest.text = oldest.text.slice(remove);
+      const removedLines = (removed.match(/\n/g) || []).length;
+      oldest.lines -= removedLines;
+      stream.characters -= removed.length;
+      stream.lines -= removedLines;
+      if (!oldest.text) stream.chunks.shift();
+    }
+    stream.status = "streaming";
+    stream.message = "正在接收 PM2 輸出";
+  } else {
+    if (!(payload.status === "running" && stream.status === "streaming")) stream.status = payload.status;
+    stream.message = payload.message || (payload.status === "running" ? "監看已啟動，等待 PM2 輸出..." : "日誌監看已中斷，請重新載入。");
+  }
+  renderLogStream();
+}
+
+const logStreamListener = listen("pm2-log-stream", ({ payload }) => receiveLogStream(payload));
+
+async function checkLogHistory(stream, proc) {
+  const paths = [...new Set([proc.out_log_path, proc.err_log_path].filter(Boolean))];
+  const checks = await Promise.allSettled(paths.map(path => invoke("get_log_tail", { path, maxLines: 1 })));
+  if (logStream !== stream) return;
+  const missing = checks.filter(result => result.status === "fulfilled" && !result.value.exists).length;
+  if (!paths.length || missing) stream.notice = "部分歷史日誌檔不存在，仍持續接收即時輸出。";
+  else if (checks.some(result => result.status === "rejected")) stream.notice = "部分歷史日誌無法讀取，仍持續接收即時輸出。";
+  renderLogStream();
+}
+
+async function updateInlineLog(proc = null, type = null, reload = false) {
   if (proc) currentInlineProc = proc;
   if (type) currentInlineLogType = type;
-
-  if (!currentInlineProc) {
-    const procs = (lastOverview?.processes || []).filter(p => !p.is_module);
-    if (procs.length > 0) currentInlineProc = procs[0];
-  }
-
-  const nameEl = $("inline_log_proc_name");
-  const metaEl = $("inline_log_meta");
-  const boxEl = $("inline_log_box");
-  if (!nameEl || !boxEl) return;
-
-  if (!currentInlineProc) {
-    nameEl.textContent = "尚未受管業務系統在線";
-    metaEl.textContent = "檔案路徑：-";
-    boxEl.textContent = "目前無受管系統運行，啟動服務後將自動串流最新日誌...";
+  if (!currentInlineProc || currentTab !== "console") {
+    renderLogStream();
     return;
   }
-
-  nameEl.textContent = `${currentInlineProc.name} (PID: ${currentInlineProc.pid || "-"})`;
-
-  const btnOut = $("btn_inline_out");
-  const btnErr = $("btn_inline_err");
-  if (btnOut && btnErr) {
-    if (currentInlineLogType === "out") {
-      btnOut.style.fontWeight = "bold";
-      btnOut.style.border = "2px solid #16a34a";
-      btnErr.style.fontWeight = "normal";
-      btnErr.style.border = "1px solid #fde68a";
-    } else {
-      btnErr.style.fontWeight = "bold";
-      btnErr.style.border = "2px solid #ea580c";
-      btnOut.style.fontWeight = "normal";
-      btnOut.style.border = "1px solid #86efac";
-    }
-  }
-
-  const isOut = currentInlineLogType === "out";
-  const path = isOut ? currentInlineProc.out_log_path : currentInlineProc.err_log_path;
-  metaEl.textContent = `檔案路徑：${path || "未指定"} | 串流類型：${isOut ? "標準輸出 (stdout)" : "錯誤日誌 (stderr)"}`;
-
-  if (!path) {
-    boxEl.textContent = "此進程尚未設定日誌路徑。";
+  const rootDir = $("root_dir").value.trim();
+  const maxLines = Number($("sel_inline_lines").value) || 200;
+  const key = JSON.stringify([rootDir, currentInlineProc.pm_id, maxLines]);
+  if (!reload && logStream?.key === key) {
+    renderLogStream();
     return;
   }
-
-  const maxLines = parseInt($("sel_inline_lines")?.value || "200", 10);
-  try {
-    const res = await invoke("get_log_tail", { path, maxLines });
-    if (!res.exists) {
-      boxEl.textContent = `日誌檔案尚未產生：${path}`;
-      return;
-    }
-    if (!res.lines || res.lines.length === 0) {
-      boxEl.textContent = `[日誌目前為空] (${path})`;
-      return;
-    }
-    boxEl.textContent = res.lines.join("\n");
-    boxEl.scrollTop = boxEl.scrollHeight;
-  } catch (err) {
-    boxEl.textContent = `讀取即時日誌失敗：${err}`;
-  }
+  const previous = logStream;
+  const stream = {
+    sessionId: `log-${Date.now()}-${++logStreamSequence}`, key,
+    status: "connecting", message: "正在啟動 PM2 日誌監看...", notice: "",
+    chunks: [], characters: 0, lines: 0
+  };
+  logStream = stream;
+  const pmId = currentInlineProc.pm_id;
+  checkLogHistory(stream, currentInlineProc);
+  renderLogStream();
+  return queueLogCommand(async () => {
+    if (previous) await invoke("stop_pm2_log_stream", { sessionId: previous.sessionId });
+    if (logStream !== stream) return;
+    await logStreamListener;
+    if (logStream !== stream) return;
+    await invoke("start_pm2_log_stream", { rootDir, pmId, sessionId: stream.sessionId, maxLines });
+    if (logStream !== stream) await invoke("stop_pm2_log_stream", { sessionId: stream.sessionId });
+  }).catch(err => {
+    if (logStream !== stream) return;
+    stream.status = "failed";
+    stream.message = `啟動日誌監看失敗：${err}`;
+    renderLogStream();
+  });
 }
 
-if ($("btn_inline_out")) {
-  $("btn_inline_out").onclick = () => updateInlineLog(null, "out");
-  $("btn_inline_err").onclick = () => updateInlineLog(null, "err");
-  $("sel_inline_lines").onchange = () => updateInlineLog(null, null);
-  $("btn_inline_reload").onclick = () => updateInlineLog(null, null);
+$("btn_inline_all").onclick = () => updateInlineLog(null, "all");
+$("btn_inline_out").onclick = () => updateInlineLog(null, "out");
+$("btn_inline_err").onclick = () => updateInlineLog(null, "err");
+$("sel_inline_lines").onchange = () => {
+  if (logModalMode === "live") $("sel_log_lines").value = $("sel_inline_lines").value;
+  updateInlineLog(null, null, true);
+};
+$("btn_inline_reload").onclick = () => updateInlineLog(null, null, true);
 
-  $("btn_inline_notepad").onclick = async () => {
-    if (!currentInlineProc) return;
-    const path = currentInlineLogType === "out" ? currentInlineProc.out_log_path : currentInlineProc.err_log_path;
-    if (path) {
-      const res = await invoke("open_log_in_notepad", { path });
-      setToast(res.message, res.success ? "success" : "error");
-    }
-  };
-
-  $("btn_inline_folder").onclick = async () => {
-    const rootDir = $("root_dir").value.trim();
-    const res = await invoke("open_logs_folder", { rootDir });
+$("btn_inline_notepad").onclick = async () => {
+  if (!currentInlineProc) return;
+  if (currentInlineLogType === "all") return openLogModal("", null);
+  const path = currentInlineLogType === "out" ? currentInlineProc.out_log_path : currentInlineProc.err_log_path;
+  if (path) {
+    const res = await invoke("open_log_in_notepad", { path });
     setToast(res.message, res.success ? "success" : "error");
-  };
+  }
+};
 
-  $("btn_inline_modal").onclick = () => {
-    if (!currentInlineProc) return;
-    const path = currentInlineLogType === "out" ? currentInlineProc.out_log_path : currentInlineProc.err_log_path;
-    openLogModal(path || "", currentInlineProc);
-  };
-}
+$("btn_inline_folder").onclick = async () => {
+  const res = await invoke("open_logs_folder", { rootDir: $("root_dir").value.trim() });
+  setToast(res.message, res.success ? "success" : "error");
+};
+
+$("btn_inline_modal").onclick = () => {
+  if (currentInlineProc) openLogModal("", currentInlineProc);
+};
+
+window.addEventListener("beforeunload", () => {
+  if (logStream) invoke("stop_pm2_log_stream", { sessionId: logStream.sessionId }).catch(() => {});
+});

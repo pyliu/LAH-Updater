@@ -821,6 +821,14 @@ pub fn open_logs_folder(root_dir: &Path) -> CommandActionResult {
 }
 
 pub fn open_lah_cmd(root_dir: &Path) -> CommandActionResult {
+    if !root_dir.join("node").join("node.exe").is_file()
+        || resolve_pm2_command(root_dir).is_none()
+    {
+        return CommandActionResult {
+            success: false,
+            message: "此沙盒的 Node.js 或 PM2 已移除或尚未安裝，無法開啟終端。".into(),
+        };
+    }
     let bat = root_dir.join("lah-cmd.bat");
     if !bat.is_file() {
         ensure_portable_cmd_helper(root_dir, &|_, _| {});
@@ -856,6 +864,16 @@ pub fn open_lah_cmd(root_dir: &Path) -> CommandActionResult {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn missing_runtime_does_not_recreate_terminal_helper() {
+        let root = std::env::temp_dir().join(format!("lah_missing_terminal_{}", std::process::id()));
+        fs::create_dir_all(&root).unwrap();
+        let result = open_lah_cmd(&root);
+        assert!(!result.success);
+        assert!(!root.join("lah-cmd.bat").exists());
+        fs::remove_dir(&root).unwrap();
+    }
 
     #[test]
     fn test_read_log_tail_and_logrotate_compression() {
