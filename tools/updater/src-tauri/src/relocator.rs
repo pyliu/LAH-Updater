@@ -57,6 +57,18 @@ pub const RELOCATION_TARGETS: &[RelocationTargetSpec] = &[
         description: "Apache 2.4 主設定檔",
     },
     RelocationTargetSpec {
+        rel_path: "Apache24/conf/extra/lah-security.conf",
+        category: RelocationCategory::TextConfig,
+        slash_style: SlashStyle::ForceForwardSlash,
+        description: "Apache 2.4 受管資安與 MPM 設定檔",
+    },
+    RelocationTargetSpec {
+        rel_path: "Apache24/conf/extra/lah-fe-vhost.conf",
+        category: RelocationCategory::TextConfig,
+        slash_style: SlashStyle::ForceForwardSlash,
+        description: "Apache 2.4 受管 LAH-FE 虛擬主機設定檔",
+    },
+    RelocationTargetSpec {
         rel_path: "php7/php.ini",
         category: RelocationCategory::TextConfig,
         slash_style: SlashStyle::ForceForwardSlash,
@@ -168,11 +180,12 @@ pub fn detect_legacy_roots(root_dir: &Path) -> Vec<String> {
     candidates.push(r"C:\AppServ".to_string());
     candidates.push(r"D:\AppServ".to_string());
 
-    // 1. 從 Apache24/conf/httpd.conf 探測 SRVROOT / DocumentRoot / PHPIniDir
+    // 1. 從 Apache24/conf/httpd.conf 探測 SRVROOT / LAH_ROOT / DocumentRoot / PHPIniDir
     let httpd_conf = root_dir.join("Apache24").join("conf").join("httpd.conf");
     if let Ok(content) = fs::read_to_string(&httpd_conf) {
         let patterns = [
             r#"(?im)^\s*Define\s+SRVROOT\s+"([^"]+)[/\\]Apache24/?""#,
+            r#"(?im)^\s*Define\s+LAH_ROOT\s+"([^"]+)""#,
             r#"(?im)^\s*DocumentRoot\s+"([^"]+)[/\\]www/?""#,
             r#"(?im)^\s*PHPIniDir\s+"([^"]+)[/\\]php7/?""#,
             r#"(?im)^\s*Alias\s+/LAH-API\s+"([^"]+)[/\\]LAH-API/?""#,
@@ -1058,6 +1071,111 @@ OTHER_DIR=C:\AppServerOther\bin
             nuxt_env.contains("MONITOR_HOST_SMS_DIR=C:/SMSWEB_MOI"),
             "非隸屬舊安裝根目錄之外部路徑 MONITOR_HOST_SMS_DIR 必須保持原樣"
         );
+
+        let _ = fs::remove_dir_all(&temp_root);
+    }
+
+    #[test]
+    fn test_execute_relocation_updates_define_lah_root_and_managed_extra_confs_with_forward_slashes() {
+        let temp_root = std::env::temp_dir().join(format!(
+            "lah_test_reloc_managed_confs_{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let conf_dir = temp_root.join("Apache24").join("conf");
+        let extra_dir = conf_dir.join("extra");
+        fs::create_dir_all(&extra_dir).unwrap();
+
+        let old_root_fwd = "E:/LegacyLahRoot";
+        let new_root_fwd = temp_root.to_string_lossy().replace('\\', "/");
+
+        let httpd_path = conf_dir.join("httpd.conf");
+        fs::write(
+            &httpd_path,
+            format!(
+                "Define SRVROOT \"{0}/Apache24\"\nDefine LAH_ROOT \"{0}\"\nInclude conf/extra/lah-security.conf\nInclude conf/extra/lah-fe-vhost.conf\n",
+                old_root_fwd
+            ),
+        )
+        .unwrap();
+
+        let sec_path = extra_dir.join("lah-security.conf");
+        fs::write(
+            &sec_path,
+            "# managed security config\n<Directory \"${LAH_ROOT}/www\">\n    Require all granted\n</Directory>\nCustomLog \"E:/LegacyLahRoot/Apache24/logs/sec.log\" common\nErrorLog \"E:\\LegacyLahRoot\\sec_err.log\"\n",
+        )
+        .unwrap();
+
+        let vhost_path = extra_dir.join("lah-fe-vhost.conf");
+        fs::write(
+            &vhost_path,
+            format!(
+                "# managed vhost config\n<VirtualHost *:8080>\n    DocumentRoot \"${{LAH_ROOT}}/LAH-NUXTJS/dist\"\n    Alias /api \"{}/LAH-API\"\n</VirtualHost>\n",
+                old_root_fwd
+            ),
+        )
+        .unwrap();
+
+        let report = execute_path_relocation_and_verify(&temp_root, &|_, _| {});
+        assert!(
+            report.verified_clean,
+            "搬遷後不應殘留舊路徑，findings: {:?}",
+            report.remaining_findings
+        );
+        assert!(report.relocated_files.contains(&"Apache24/conf/httpd.conf".to_string()));
+        assert!(report.relocated_files.contains(&"Apache24/conf/extra/lah-security.conf".to_string()));
+        assert!(report.relocated_files.contains(&"Apache24/conf/extra/lah-fe-vhost.conf".to_string()));
+
+        let httpd_after = fs::read_to_string(&httpd_path).unwrap();
+        assert!(httpd_after.contains(&format!("Define LAH_ROOT \"{}\"", new_root_fwd)));
+        assert!(!httpd_after.contains(old_root_fwd));
+
+        let sec_after = fs::read_to_string(&sec_path).unwrap();
+        assert!(sec_after.contains("${LAH_ROOT}/www"));
+        assert!(sec_after.contains(&format!("CustomLog \"{}/Apache24/logs/sec.log\" common", new_root_fwd)));
+        assert!(sec_after.contains(&format!("ErrorLog \"{}/sec_err.log\"", new_root_fwd)));
+        assert!(!sec_after.contains("LegacyLahRoot"));
+
+        let vhost_after = fs::read_to_string(&vhost_path).unwrap();
+        assert!(vhost_after.contains("${LAH_ROOT}/LAH-NUXTJS/dist"));
+        assert!(vhost_after.contains(&format!("Alias /api \"{}/LAH-API\"", new_root_fwd)));
+        assert!(!vhost_after.contains("LegacyLahRoot"));
+
+        let _ = fs::remove_dir_all(&temp_root);
+    }
+
+    #[test]
+    fn test_execute_relocation_skips_missing_managed_extra_confs_safely() {
+        let temp_root = std::env::temp_dir().join(format!(
+            "lah_test_reloc_missing_extra_{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let conf_dir = temp_root.join("Apache24").join("conf");
+        fs::create_dir_all(&conf_dir).unwrap();
+
+        let new_root_fwd = temp_root.to_string_lossy().replace('\\', "/");
+        let httpd_path = conf_dir.join("httpd.conf");
+        fs::write(
+            &httpd_path,
+            "Define LAH_ROOT \"E:/LegacyOnlyDefine\"\nInclude conf/extra/lah-security.conf\n",
+        )
+        .unwrap();
+
+        // 故意不建立 Apache24/conf/extra/lah-security.conf 與 lah-fe-vhost.conf
+        let report = execute_path_relocation_and_verify(&temp_root, &|_, _| {});
+        assert!(report.verified_clean);
+        assert!(report.remaining_findings.is_empty());
+        assert!(report.relocated_files.contains(&"Apache24/conf/httpd.conf".to_string()));
+        assert!(!report.relocated_files.contains(&"Apache24/conf/extra/lah-security.conf".to_string()));
+        assert!(!report.relocated_files.contains(&"Apache24/conf/extra/lah-fe-vhost.conf".to_string()));
+
+        let httpd_after = fs::read_to_string(&httpd_path).unwrap();
+        assert!(httpd_after.contains(&format!("Define LAH_ROOT \"{}\"", new_root_fwd)));
 
         let _ = fs::remove_dir_all(&temp_root);
     }
