@@ -1003,6 +1003,29 @@ pub fn configure_apache_fe_static_vhost(
     root_dir: &Path,
     log_fn: &dyn Fn(&str, &str),
 ) -> (bool, bool) {
+    configure_apache_fe_static_vhost_with_checker(
+        apache_dir,
+        root_dir,
+        |dir, log| {
+            if dir.join("bin").join("httpd.exe").is_file() {
+                check_apache_syntax(dir, log)
+            } else {
+                (true, "skipped: httpd.exe not found".to_string())
+            }
+        },
+        log_fn,
+    )
+}
+
+pub fn configure_apache_fe_static_vhost_with_checker<F>(
+    apache_dir: &Path,
+    root_dir: &Path,
+    syntax_checker: F,
+    log_fn: &dyn Fn(&str, &str),
+) -> (bool, bool)
+where
+    F: Fn(&Path, &dyn Fn(&str, &str)) -> (bool, String),
+{
     sync_fe_runtime_config(root_dir, log_fn);
 
     let conf_path = apache_dir.join("conf").join("httpd.conf");
@@ -1013,20 +1036,15 @@ pub fn configure_apache_fe_static_vhost(
     let Ok(mut content) = fs::read_to_string(&conf_path) else {
         return (false, false);
     };
-    let orig = content.clone();
 
-    let fe_dir = if root_dir.join("LAH-FE").is_dir() && !root_dir.join("LAH-NUXTJS").is_dir() {
-        root_dir.join("LAH-FE")
+    let fe_rel = if root_dir.join("LAH-FE").is_dir() && !root_dir.join("LAH-NUXTJS").is_dir() {
+        "LAH-FE"
     } else {
-        root_dir.join("LAH-NUXTJS")
+        "LAH-NUXTJS"
     };
-    let fe_dist_dir = fe_dir.join("dist");
+    let fe_dist_dir = root_dir.join(fe_rel).join("dist");
     let _ = fs::create_dir_all(&fe_dist_dir);
     let _ = fs::create_dir_all(root_dir.join("www").join("api"));
-
-    let fe_dist_fwd = fe_dist_dir.to_string_lossy().replace('\\', "/");
-    let www_fwd = root_dir.join("www").to_string_lossy().replace('\\', "/");
-    let api_fwd = root_dir.join("LAH-API").to_string_lossy().replace('\\', "/");
 
     // 1. 確保必要模組啟用
     for m in &["headers_module", "rewrite_module", "alias_module"] {
@@ -1040,49 +1058,55 @@ pub fn configure_apache_fe_static_vhost(
         }
     }
 
-    // 2. 先移除區塊外可能散落的 Listen 8080，統一納入 FE_VHOST 標記區塊管理以維持等冪性
+    // 2. 清除舊版 FE_VHOST 標記區塊與散落的 Listen 8080（遷移至 conf/extra/lah-fe-vhost.conf）
     let existing_vhost_re = Regex::new(&format!(
-        r"(?s){}.*?{}",
+        r"(?s)\r?\n?{}.*?{}\r?\n?",
         regex::escape(FE_VHOST_BEGIN),
         regex::escape(FE_VHOST_END)
     ))
     .unwrap();
-    let content_without_block = existing_vhost_re.replace_all(&content, "").to_string();
-    let re_stray_listen8080 = Regex::new(r#"(?m)^\s*Listen\s+(?:[0-9.]+:)?8080\s*\r?\n"#).unwrap();
-    if re_stray_listen8080.is_match(&content_without_block) {
+    if existing_vhost_re.is_match(&content) {
+        content = existing_vhost_re.replace_all(&content, "\n").to_string();
+    }
+    let re_stray_listen8080 =
+        Regex::new(r#"(?m)^\s*Listen\s+(?:[0-9.]+:)?8080\s*(?:\r?\n|$)"#).unwrap();
+    if re_stray_listen8080.is_match(&content) {
         content = re_stray_listen8080.replace_all(&content, "").to_string();
     }
 
-    let vhost_block = format!(
-        "{FE_VHOST_BEGIN}\n\
+    // 3. 整份覆寫產出 conf/extra/lah-fe-vhost.conf（內部路徑統一使用 ${LAH_ROOT}）
+    let vhost_conf_path = apache_dir.join("conf").join("extra").join("lah-fe-vhost.conf");
+    let vhost_content = format!(
+        "# 此檔案由 LAH-Updater 自動產生與覆寫，請勿手動修改\n\
 Listen 8080\n\
 <VirtualHost *:8080>\n\
     ServerName localhost:8080\n\
-    DocumentRoot \"{fe_dist_fwd}\"\n\
+    DocumentRoot \"${{LAH_ROOT}}/{fe_rel}/dist\"\n\
 \n\
     # 本機 PHP 7.4 (www) 與 PHP 8.5 (LAH-API) 路由別名映射\n\
-    Alias /api \"{www_fwd}/api\"\n\
-    Alias /img \"{www_fwd}\"\n\
-    Alias /legacy \"{www_fwd}\"\n\
-    Alias /assets \"{www_fwd}/assets\"\n\
-    Alias /project \"{www_fwd}/project\"\n\
-    Alias /LAH-API/api \"{api_fwd}/v1\"\n\
-    Alias /lah-api/api \"{api_fwd}/v1\"\n\
-    Alias /LAH-API \"{api_fwd}\"\n\
-    Alias /lah-api \"{api_fwd}\"\n\
-    Alias /get_user_img.php \"{api_fwd}/v1/get_user_img.php\"\n\
-    Alias /get_carousel_img.php \"{api_fwd}/v1/get_carousel_img.php\"\n\
-    Alias /get_blob_img.php \"{api_fwd}/v1/get_blob_img.php\"\n\
-    Alias /get_adm_reserve_pdf.php \"{api_fwd}/v1/get_adm_reserve_pdf.php\"\n\
-    Alias /get_reg_foreigner_pdf.php \"{api_fwd}/v1/get_reg_foreigner_pdf.php\"\n\
-    Alias /get_sur_destruction_pdf.php \"{api_fwd}/v1/get_sur_destruction_pdf.php\"\n\
+    Alias /api \"${{LAH_ROOT}}/www/api\"\n\
+    Alias /img \"${{LAH_ROOT}}/www\"\n\
+    Alias /legacy \"${{LAH_ROOT}}/www\"\n\
+    Alias /assets \"${{LAH_ROOT}}/www/assets\"\n\
+    Alias /project \"${{LAH_ROOT}}/www/project\"\n\
+    Alias /LAH-API/api \"${{LAH_ROOT}}/LAH-API/v1\"\n\
+    Alias /lah-api/api \"${{LAH_ROOT}}/LAH-API/v1\"\n\
+    Alias /LAH-API \"${{LAH_ROOT}}/LAH-API\"\n\
+    Alias /lah-api \"${{LAH_ROOT}}/LAH-API\"\n\
+    Alias /get_user_img.php \"${{LAH_ROOT}}/LAH-API/v1/get_user_img.php\"\n\
+    Alias /get_carousel_img.php \"${{LAH_ROOT}}/LAH-API/v1/get_carousel_img.php\"\n\
+    Alias /get_blob_img.php \"${{LAH_ROOT}}/LAH-API/v1/get_blob_img.php\"\n\
+    Alias /get_adm_reserve_pdf.php \"${{LAH_ROOT}}/LAH-API/v1/get_adm_reserve_pdf.php\"\n\
+    Alias /get_reg_foreigner_pdf.php \"${{LAH_ROOT}}/LAH-API/v1/get_reg_foreigner_pdf.php\"\n\
+    Alias /get_sur_destruction_pdf.php \"${{LAH_ROOT}}/LAH-API/v1/get_sur_destruction_pdf.php\"\n\
 \n\
     <IfModule rewrite_module>\n\
         RewriteEngine On\n\
+        RewriteOptions InheritBefore\n\
         RewriteRule ^/(l05proxy|smsproxy|srmas-weathermap)/(.*)$ /api/proxy.php?_target=$1&_path=$2 [QSA,PT,L]\n\
     </IfModule>\n\
 \n\
-    <Directory \"{fe_dist_fwd}\">\n\
+    <Directory \"${{LAH_ROOT}}/{fe_rel}/dist\">\n\
         Header set Access-Control-Allow-Origin \"*\"\n\
         Options -Indexes +FollowSymLinks\n\
         AllowOverride None\n\
@@ -1103,27 +1127,30 @@ Listen 8080\n\
             RewriteRule ^ /index.html [L]\n\
         </IfModule>\n\
     </Directory>\n\
-</VirtualHost>\n\
-{FE_VHOST_END}"
+</VirtualHost>\n"
     );
 
-    if existing_vhost_re.is_match(&content) {
-        content = existing_vhost_re
-            .replace(&content, NoExpand(&vhost_block))
-            .to_string();
-    } else {
-        content.push_str(&format!("\n{}\n", vhost_block));
+    // 4. 於 httpd.conf 檔尾受管區塊掛載 Include conf/extra/lah-fe-vhost.conf
+    content = upsert_managed_includes_block(&content, root_dir, &["conf/extra/lah-fe-vhost.conf"]);
+
+    // 5. 交易式寫入 httpd.conf 與 lah-fe-vhost.conf（含語法驗證失敗自動還原）
+    let (ok, changed) = write_apache_configs_transactionally(
+        apache_dir,
+        &[
+            (conf_path.as_path(), &content),
+            (vhost_conf_path.as_path(), &vhost_content),
+        ],
+        syntax_checker,
+        log_fn,
+    );
+
+    if ok && changed {
         log_fn(
-            "  已向 Apache httpd.conf 掛載 LAH-FE 靜態網站 VirtualHost (*:8080) 與 SPA 路由規則",
+            "  已透過 conf/extra/lah-fe-vhost.conf 掛載 LAH-FE 靜態網站 VirtualHost (*:8080) 與 SPA 路由規則",
             "success",
         );
     }
-
-    let changed = content != orig;
-    if changed {
-        let _ = fs::write(&conf_path, content);
-    }
-    (true, changed)
+    (ok, changed)
 }
 
 fn build_node2shell_mitigation_block() -> String {
@@ -1525,11 +1552,22 @@ fn test_node2shell_mitigation_injection_and_idempotency() {
         fs::write(fe_dir.join("package.json"), r#"{"version":"2.5.0"}"#).unwrap();
 
         let conf_path = conf_dir.join("httpd.conf");
-        fs::write(
-            &conf_path,
-            "Define SRVROOT \"C:/AppServ/Apache24\"\nListen 80\n#LoadModule rewrite_module modules/mod_rewrite.so\nDocumentRoot \"C:/AppServ/www\"\n",
-        )
-        .unwrap();
+        let legacy_httpd = format!(
+            "Define SRVROOT \"C:/AppServ/Apache24\"\n\
+             Listen 80\n\
+             Listen 8080\n\
+             #LoadModule headers_module modules/mod_headers.so\n\
+             #LoadModule rewrite_module modules/mod_rewrite.so\n\
+             #LoadModule alias_module modules/mod_alias.so\n\
+             DocumentRoot \"C:/AppServ/www\"\n\
+             {FE_VHOST_BEGIN}\n\
+             Listen 8080\n\
+             <VirtualHost *:8080>\n\
+                 DocumentRoot \"C:/AppServ/LAH-NUXTJS/dist\"\n\
+             </VirtualHost>\n\
+             {FE_VHOST_END}\n"
+        );
+        fs::write(&conf_path, legacy_httpd).unwrap();
 
         let (ok, changed) = configure_apache_fe_static_vhost(&apache_dir, &temp_root, &|_, _| {});
         assert!(ok);
@@ -1541,16 +1579,71 @@ fn test_node2shell_mitigation_injection_and_idempotency() {
         assert!(rt_js.contains("2.5.0"));
 
         let conf1 = fs::read_to_string(&conf_path).unwrap();
-        assert_eq!(conf1.matches(FE_VHOST_BEGIN).count(), 1);
-        assert_eq!(conf1.matches(FE_VHOST_END).count(), 1);
-        assert_eq!(conf1.matches("Listen 8080").count(), 1);
-        assert!(conf1.contains("<VirtualHost *:8080>"));
-        assert!(conf1.contains("/api/proxy.php?_target=$1&_path=$2"));
+        assert!(!conf1.contains("#LoadModule headers_module"));
+        assert!(!conf1.contains("#LoadModule rewrite_module"));
+        assert!(!conf1.contains("#LoadModule alias_module"));
+        assert!(conf1.contains("LoadModule headers_module modules/mod_headers.so"));
+        assert!(conf1.contains("LoadModule rewrite_module modules/mod_rewrite.so"));
+        assert!(conf1.contains("LoadModule alias_module modules/mod_alias.so"));
+        assert!(!conf1.contains(FE_VHOST_BEGIN), "舊版 FE_VHOST_BEGIN 應被清除");
+        assert!(!conf1.contains(FE_VHOST_END), "舊版 FE_VHOST_END 應被清除");
+        assert!(!conf1.contains("Listen 8080"), "散落 Listen 8080 應從 httpd.conf 清除");
+        assert!(!conf1.contains("<VirtualHost *:8080>"), "VirtualHost 應抽離出 httpd.conf");
+        assert_eq!(conf1.matches(MANAGED_INCLUDES_BEGIN).count(), 1);
+        assert_eq!(conf1.matches("Include conf/extra/lah-fe-vhost.conf").count(), 1);
+
+        let vhost_path = conf_dir.join("extra").join("lah-fe-vhost.conf");
+        assert!(vhost_path.is_file(), "應產出 Apache24/conf/extra/lah-fe-vhost.conf");
+        let vhost1 = fs::read_to_string(&vhost_path).unwrap();
+        let root_fwd = temp_root.to_string_lossy().replace('\\', "/");
+        assert!(vhost1.contains("Listen 8080"));
+        assert!(vhost1.contains("<VirtualHost *:8080>"));
+        assert!(vhost1.contains("RewriteOptions InheritBefore"), "VirtualHost 須啟用 RewriteOptions InheritBefore");
+        assert!(vhost1.contains("${LAH_ROOT}/LAH-NUXTJS/dist"), "應使用 ${{LAH_ROOT}} 變數");
+        assert!(vhost1.contains("${LAH_ROOT}/www/api"));
+        assert!(vhost1.contains("/api/proxy.php?_target=$1&_path=$2"));
+        assert!(!vhost1.contains(&root_fwd), "不應寫死安裝根目錄絕對路徑");
 
         let (ok2, changed2) = configure_apache_fe_static_vhost(&apache_dir, &temp_root, &|_, _| {});
         assert!(ok2);
         assert!(!changed2);
         assert_eq!(fs::read_to_string(&conf_path).unwrap(), conf1);
+        assert_eq!(fs::read_to_string(&vhost_path).unwrap(), vhost1);
+
+        let _ = fs::remove_dir_all(&temp_root);
+    }
+
+    #[test]
+    fn test_configure_apache_fe_static_vhost_rolls_back_on_syntax_failure() {
+        let temp_root = std::env::temp_dir().join(format!(
+            "lah_test_fe_vhost_rollback_{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let apache_dir = temp_root.join("Apache24");
+        let conf_dir = apache_dir.join("conf");
+        fs::create_dir_all(&conf_dir).unwrap();
+
+        let conf_path = conf_dir.join("httpd.conf");
+        let original_httpd = "Define SRVROOT \"D:/LAH/Apache24\"\nListen 80\n";
+        fs::write(&conf_path, original_httpd).unwrap();
+
+        let (ok, changed) = configure_apache_fe_static_vhost_with_checker(
+            &apache_dir,
+            &temp_root,
+            |_, _| (false, "AH00526: Invalid directive".to_string()),
+            &|_, _| {},
+        );
+
+        assert!(!ok);
+        assert!(!changed);
+        assert_eq!(fs::read_to_string(&conf_path).unwrap(), original_httpd);
+        assert!(
+            !conf_dir.join("extra").join("lah-fe-vhost.conf").exists(),
+            "語法檢查失敗時應自動刪除新建的 lah-fe-vhost.conf"
+        );
 
         let _ = fs::remove_dir_all(&temp_root);
     }
