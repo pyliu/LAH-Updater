@@ -663,6 +663,167 @@ const NODE2SHELL_BEGIN: &str = "# === Node2Shell (CVE-2026-111497 Brotli OOB Wri
 const NODE2SHELL_END: &str = "# === End Node2Shell Mitigation ===";
 const FE_VHOST_BEGIN: &str = "# === LAH-FE Static VirtualHost (:8080) ===";
 const FE_VHOST_END: &str = "# === End LAH-FE Static VirtualHost ===";
+pub const MANAGED_INCLUDES_BEGIN: &str = "# === LAH Managed Includes ===";
+pub const MANAGED_INCLUDES_END: &str = "# === End LAH Managed Includes ===";
+
+/// 於 `httpd.conf` 檔尾維護單一受管 Include 區塊，定義 `Define LAH_ROOT` 並等冪合併 `Include` 清單。
+pub fn upsert_managed_includes_block(content: &str, root_dir: &Path, include_paths: &[&str]) -> String {
+    let root_fwd = root_dir.to_string_lossy().replace('\\', "/");
+    let block_re = Regex::new(&format!(
+        r"(?s){}.*?{}",
+        regex::escape(MANAGED_INCLUDES_BEGIN),
+        regex::escape(MANAGED_INCLUDES_END)
+    ))
+    .unwrap();
+
+    let mut merged_includes: Vec<String> = Vec::new();
+    let mut push_unique = |item: &str| {
+        let trimmed = item.trim();
+        if !trimmed.is_empty() && !merged_includes.iter().any(|existing| existing == trimmed) {
+            merged_includes.push(trimmed.to_string());
+        }
+    };
+
+    if let Some(matched) = block_re.find(content) {
+        let inc_re = Regex::new(r"(?m)^\s*Include\s+(.+?)\s*$").unwrap();
+        for cap in inc_re.captures_iter(matched.as_str()) {
+            if let Some(m) = cap.get(1) {
+                push_unique(m.as_str());
+            }
+        }
+    }
+
+    for inc in include_paths {
+        push_unique(inc);
+    }
+
+    let mut lines = Vec::with_capacity(merged_includes.len() + 3);
+    lines.push(MANAGED_INCLUDES_BEGIN.to_string());
+    lines.push(format!(r#"Define LAH_ROOT "{}""#, root_fwd));
+    for inc in &merged_includes {
+        lines.push(format!("Include {}", inc));
+    }
+    lines.push(MANAGED_INCLUDES_END.to_string());
+    let block = lines.join("\n");
+
+    if block_re.is_match(content) {
+        block_re.replace(content, NoExpand(&block)).to_string()
+    } else {
+        let trimmed = content.trim_end_matches(['\r', '\n']);
+        if trimmed.is_empty() {
+            format!("{}\n", block)
+        } else {
+            format!("{}\n\n{}\n", trimmed, block)
+        }
+    }
+}
+
+fn rollback_apache_config_backups(backups: &[(&Path, Option<Vec<u8>>)], log_fn: &dyn Fn(&str, &str)) {
+    for (path, backup) in backups.iter().rev() {
+        match backup {
+            Some(bytes) => {
+                if let Err(err) = fs::write(path, bytes) {
+                    log_fn(
+                        &format!("錯誤：還原設定檔失敗 ({}): {}", path.display(), err),
+                        "error",
+                    );
+                }
+            }
+            None => {
+                if path.exists() {
+                    if let Err(err) = fs::remove_file(path) {
+                        log_fn(
+                            &format!("錯誤：移除新建設定檔失敗 ({}): {}", path.display(), err),
+                            "error",
+                        );
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// 交易式寫入 Apache 設定檔：寫入前備份舊檔（或標記為新建），寫入後執行語法檢查；
+/// 若檢查失敗則自動還原所有檔案並記錄錯誤，回傳 `(ok, changed)`。
+pub fn write_apache_configs_transactionally<F>(
+    apache_dir: &Path,
+    files: &[(&Path, &str)],
+    syntax_checker: F,
+    log_fn: &dyn Fn(&str, &str),
+) -> (bool, bool)
+where
+    F: Fn(&Path, &dyn Fn(&str, &str)) -> (bool, String),
+{
+    if files.is_empty() {
+        return (true, false);
+    }
+
+    let mut any_changed = false;
+    let mut backups: Vec<(&Path, Option<Vec<u8>>)> = Vec::with_capacity(files.len());
+
+    for (path, new_content) in files {
+        if path.exists() {
+            match fs::read(path) {
+                Ok(bytes) => {
+                    if bytes != new_content.as_bytes() {
+                        any_changed = true;
+                    }
+                    backups.push((*path, Some(bytes)));
+                }
+                Err(err) => {
+                    log_fn(
+                        &format!("錯誤：讀取設定檔備份失敗 ({}): {}", path.display(), err),
+                        "error",
+                    );
+                    return (false, false);
+                }
+            }
+        } else {
+            any_changed = true;
+            backups.push((*path, None));
+        }
+    }
+
+    if !any_changed {
+        return (true, false);
+    }
+
+    for (path, new_content) in files {
+        if let Some(parent) = path.parent() {
+            if let Err(err) = fs::create_dir_all(parent) {
+                log_fn(
+                    &format!("錯誤：建立設定檔目錄失敗 ({}): {}", parent.display(), err),
+                    "error",
+                );
+                rollback_apache_config_backups(&backups, log_fn);
+                return (false, false);
+            }
+        }
+        if let Err(err) = fs::write(path, new_content) {
+            log_fn(
+                &format!("錯誤：寫入設定檔失敗 ({}): {}", path.display(), err),
+                "error",
+            );
+            rollback_apache_config_backups(&backups, log_fn);
+            return (false, false);
+        }
+    }
+
+    let (syntax_ok, syntax_msg) = syntax_checker(apache_dir, log_fn);
+    if !syntax_ok {
+        log_fn(
+            &format!(
+                "錯誤：Apache 語法檢查失敗，已自動還原所有設定檔：{}",
+                syntax_msg.trim()
+            ),
+            "error",
+        );
+        rollback_apache_config_backups(&backups, log_fn);
+        return (false, false);
+    }
+
+    (true, true)
+}
 
 pub fn sync_fe_runtime_config(root_dir: &Path, log_fn: &dyn Fn(&str, &str)) -> bool {
     let fe_dir = if root_dir.join("LAH-NUXTJS").is_dir() {
@@ -1423,6 +1584,132 @@ fn test_node2shell_mitigation_injection_and_idempotency() {
         assert!(content.contains(r#""site": "HE""#), "未包含 site: HE, 內容: {}", content);
         assert!(content.contains("220.1.38.253"), "未對齊蘆竹所 SRMAS 220.1.38.253, 內容: {}", content);
         assert!(!content.contains("220.1.34.253"), "錯誤滲漏了桃園所 SRMAS 220.1.34.253! 內容: {}", content);
+
+        let _ = fs::remove_dir_all(&temp_root);
+    }
+
+    #[test]
+    fn test_upsert_managed_includes_block_inserts_merges_and_is_idempotent() {
+        let orig = "Define SRVROOT \"D:/LAH/Apache24\"\nListen 80\n";
+        let root_dir = Path::new(r"D:\LAH");
+
+        // 第一次呼叫：插入單一 Include 與 Define LAH_ROOT
+        let once = upsert_managed_includes_block(orig, root_dir, &["conf/extra/lah-security.conf"]);
+        assert_eq!(once.matches(MANAGED_INCLUDES_BEGIN).count(), 1);
+        assert_eq!(once.matches(MANAGED_INCLUDES_END).count(), 1);
+        assert!(once.contains(r#"Define LAH_ROOT "D:/LAH""#));
+        assert!(once.contains("Include conf/extra/lah-security.conf"));
+
+        // 第二次呼叫相同參數：內容必須完全等冪
+        let twice = upsert_managed_includes_block(&once, root_dir, &["conf/extra/lah-security.conf"]);
+        assert_eq!(twice, once);
+
+        // 第三次呼叫新增第二個 Include 並變更根目錄：保留既有 Include、更新 Define LAH_ROOT 且不重複
+        let new_root = Path::new(r"E:\LAH_NEW");
+        let merged = upsert_managed_includes_block(&twice, new_root, &["conf/extra/lah-fe-vhost.conf"]);
+        assert_eq!(merged.matches(MANAGED_INCLUDES_BEGIN).count(), 1);
+        assert_eq!(merged.matches("Include conf/extra/lah-security.conf").count(), 1);
+        assert_eq!(merged.matches("Include conf/extra/lah-fe-vhost.conf").count(), 1);
+        assert!(merged.contains(r#"Define LAH_ROOT "E:/LAH_NEW""#));
+        assert!(!merged.contains(r#"Define LAH_ROOT "D:/LAH""#));
+    }
+
+    #[test]
+    fn test_write_apache_configs_transactionally_rolls_back_on_syntax_failure() {
+        let temp_root = std::env::temp_dir().join(format!(
+            "lah_test_tx_rollback_{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let apache_dir = temp_root.join("Apache24");
+        let conf_dir = apache_dir.join("conf");
+        fs::create_dir_all(&conf_dir).unwrap();
+
+        let httpd_conf = conf_dir.join("httpd.conf");
+        let extra_conf = conf_dir.join("extra").join("lah-security.conf");
+        let original_httpd = "# original httpd.conf\nListen 80\n";
+        fs::write(&httpd_conf, original_httpd).unwrap();
+
+        let logs = std::cell::RefCell::new(Vec::<(String, String)>::new());
+        let log_fn = |msg: &str, level: &str| {
+            logs.borrow_mut().push((level.to_string(), msg.to_string()));
+        };
+
+        let (ok, changed) = write_apache_configs_transactionally(
+            &apache_dir,
+            &[
+                (httpd_conf.as_path(), "# broken httpd.conf\n"),
+                (extra_conf.as_path(), "# new managed conf\n"),
+            ],
+            |_, _| (false, "AH00526: Syntax error on line 1".to_string()),
+            &log_fn,
+        );
+
+        assert!(!ok);
+        assert!(!changed);
+        assert_eq!(fs::read_to_string(&httpd_conf).unwrap(), original_httpd);
+        assert!(!extra_conf.exists(), "新建的受管檔案應於語法檢查失敗時被刪除");
+        assert!(
+            logs.borrow().iter().any(|(lvl, msg)| lvl == "error" && msg.contains("AH00526")),
+            "應記錄語法失敗與還原錯誤日誌: {:?}",
+            logs.borrow()
+        );
+
+        let _ = fs::remove_dir_all(&temp_root);
+    }
+
+    #[test]
+    fn test_write_apache_configs_transactionally_commits_on_syntax_ok_and_skips_unchanged() {
+        let temp_root = std::env::temp_dir().join(format!(
+            "lah_test_tx_commit_{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let apache_dir = temp_root.join("Apache24");
+        let conf_dir = apache_dir.join("conf");
+        fs::create_dir_all(&conf_dir).unwrap();
+
+        let httpd_conf = conf_dir.join("httpd.conf");
+        let extra_conf = conf_dir.join("extra").join("lah-security.conf");
+        fs::write(&httpd_conf, "# original httpd.conf\n").unwrap();
+
+        let syntax_calls = std::cell::Cell::new(0usize);
+        let new_httpd = "# updated httpd.conf\n";
+        let new_extra = "# managed security conf\n";
+
+        // 第一次寫入：語法檢查通過，保留更新內容並回傳 (true, true)
+        let (ok1, changed1) = write_apache_configs_transactionally(
+            &apache_dir,
+            &[(httpd_conf.as_path(), new_httpd), (extra_conf.as_path(), new_extra)],
+            |_, _| {
+                syntax_calls.set(syntax_calls.get() + 1);
+                (true, "Syntax OK".to_string())
+            },
+            &|_, _| {},
+        );
+        assert!(ok1);
+        assert!(changed1);
+        assert_eq!(syntax_calls.get(), 1);
+        assert_eq!(fs::read_to_string(&httpd_conf).unwrap(), new_httpd);
+        assert_eq!(fs::read_to_string(&extra_conf).unwrap(), new_extra);
+
+        // 第二次以相同內容寫入：應略過寫入與語法檢查並回傳 (true, false)
+        let (ok2, changed2) = write_apache_configs_transactionally(
+            &apache_dir,
+            &[(httpd_conf.as_path(), new_httpd), (extra_conf.as_path(), new_extra)],
+            |_, _| {
+                syntax_calls.set(syntax_calls.get() + 1);
+                (true, "Syntax OK".to_string())
+            },
+            &|_, _| {},
+        );
+        assert!(ok2);
+        assert!(!changed2);
+        assert_eq!(syntax_calls.get(), 1);
 
         let _ = fs::remove_dir_all(&temp_root);
     }
