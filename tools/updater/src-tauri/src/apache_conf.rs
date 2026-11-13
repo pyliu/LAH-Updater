@@ -528,130 +528,186 @@ module.exports = {{
     }
 }
 
-pub fn apply_apache_security_hardening(conf_path: &Path, root_dir: &Path, log_fn: &dyn Fn(&str, &str)) -> (bool, bool) {
-    let Ok(mut content) = fs::read_to_string(conf_path) else {
-        return (false, false);
-    };
-    let orig = content.clone();
-    let root_fwd = root_dir.to_string_lossy().replace('\\', "/");
-
-    // 1. ServerTokens Prod
-    let re_tokens = Regex::new(r#"(?m)^[ \t]*#?[ \t]*ServerTokens[ \t]+.*$"#).unwrap();
-    if re_tokens.is_match(&content) {
-        content = re_tokens.replace(&content, "ServerTokens Prod").to_string();
-    } else {
-        content.push_str("\nServerTokens Prod\n");
-    }
-
-    // 2. ServerSignature Off
-    let re_sig = Regex::new(r#"(?m)^[ \t]*#?[ \t]*ServerSignature[ \t]+.*$"#).unwrap();
-    if re_sig.is_match(&content) {
-        content = re_sig.replace(&content, "ServerSignature Off").to_string();
-    } else {
-        content.push_str("\nServerSignature Off\n");
-    }
-
-    // 3. PHP2Shell 緩解防護
+fn build_lah_security_conf() -> String {
     let php2shell_block = format!(
-        "\n# =====================================================================\n\
-        # PHP2Shell (CVE-2024-4577 PHP-CGI Argument Injection & WebShell) Mitigation\n\
-        # =====================================================================\n\
-        <IfModule rewrite_module>\n\
-            RewriteEngine On\n\
-            RewriteCond %{{QUERY_STRING}} (?:^|&)%ad [NC,OR]\n\
-            RewriteCond %{{THE_REQUEST}} \\s/+(?:cgi-bin|php-cgi)/ [NC]\n\
-            RewriteRule ^ - [F,L]\n\
-        </IfModule>\n\
-        <Directory \"{root_fwd}/www/assets\">\n\
-            <FilesMatch \"\\.(php|php5|php7|php8|phtml|phar|cgi|pl|asp|aspx|jsp)$\">\n\
-                Require all denied\n\
-            </FilesMatch>\n\
-        </Directory>\n\
-        <Directory \"{root_fwd}/www/export\">\n\
-            <FilesMatch \"\\.(php|php5|php7|php8|phtml|phar|cgi|pl|asp|aspx|jsp)$\">\n\
-                Require all denied\n\
-            </FilesMatch>\n\
-        </Directory>\n\
-        <Directory \"{root_fwd}/www/uploads\">\n\
-            <FilesMatch \"\\.(php|php5|php7|php8|phtml|phar|cgi|pl|asp|aspx|jsp)$\">\n\
-                Require all denied\n\
-            </FilesMatch>\n\
-        </Directory>\n\
-        {PHP2SHELL_END}\n"
+        "# =====================================================================\n\
+# PHP2Shell (CVE-2024-4577 PHP-CGI Argument Injection & WebShell) Mitigation\n\
+# =====================================================================\n\
+<IfModule rewrite_module>\n\
+    RewriteEngine On\n\
+    RewriteCond %{{QUERY_STRING}} (?:^|&)%ad [NC,OR]\n\
+    RewriteCond %{{THE_REQUEST}} \\s/+(?:cgi-bin|php-cgi)/ [NC]\n\
+    RewriteRule ^ - [F,L]\n\
+</IfModule>\n\
+<Directory \"${{LAH_ROOT}}/www/assets\">\n\
+    <FilesMatch \"\\.(php|php5|php7|php8|phtml|phar|cgi|pl|asp|aspx|jsp)$\">\n\
+        Require all denied\n\
+    </FilesMatch>\n\
+</Directory>\n\
+<Directory \"${{LAH_ROOT}}/www/export\">\n\
+    <FilesMatch \"\\.(php|php5|php7|php8|phtml|phar|cgi|pl|asp|aspx|jsp)$\">\n\
+        Require all denied\n\
+    </FilesMatch>\n\
+</Directory>\n\
+<Directory \"${{LAH_ROOT}}/www/uploads\">\n\
+    <FilesMatch \"\\.(php|php5|php7|php8|phtml|phar|cgi|pl|asp|aspx|jsp)$\">\n\
+        Require all denied\n\
+    </FilesMatch>\n\
+</Directory>\n\
+{PHP2SHELL_END}"
     );
 
-    // 清理舊版本可能遺留之重複百分比符號語法錯誤
-    content = content
+    let sensitive_block = build_sensitive_deny_block("${LAH_ROOT}");
+    let mpm_block = build_mpm_winnt_block();
+    let node2shell_block = build_node2shell_mitigation_block();
+
+    format!(
+        "# =====================================================================\n\
+# LAH Managed Apache Security & Memory Governance Configuration\n\
+# 此檔案由 LAH-Updater 自動覆寫維護，請勿手動修改\n\
+# =====================================================================\n\n\
+ServerTokens Prod\n\
+ServerSignature Off\n\n\
+{php2shell_block}\n\n\
+{sensitive_block}\n\n\
+{mpm_block}\n\n\
+{node2shell_block}\n"
+    )
+}
+
+/// 清理 `httpd.conf` 內既有的舊版資安標記區塊與指令（含無結尾標記之重複殘留區塊）。
+fn strip_legacy_security_blocks(raw: &str) -> String {
+    let mut content = raw
         .replace("%{%QUERY_STRING}", "%{QUERY_STRING}")
         .replace("%{%THE_REQUEST}", "%{THE_REQUEST}")
         .replace("%{%REQUEST_FILENAME}", "%{REQUEST_FILENAME}");
+    let mut removed_any = false;
 
-    let existing_sec_re = Regex::new(&format!(r"(?s)# =+\s*# PHP2Shell \(CVE-2024-4577.*?{}", regex::escape(PHP2SHELL_END))).unwrap();
-    let legacy_sec_re = Regex::new(r#"(?s)# =+\s*# PHP2Shell \(CVE-2024-4577.*?</Directory>\s*"#).unwrap();
+    for pat in [
+        r"(?m)^[ \t]*ServerTokens[ \t]+.*\r?\n?",
+        r"(?m)^[ \t]*ServerSignature[ \t]+.*\r?\n?",
+    ] {
+        let re = Regex::new(pat).unwrap();
+        if re.is_match(&content) {
+            content = re.replace_all(&content, "").to_string();
+            removed_any = true;
+        }
+    }
+
+    let existing_sec_re = Regex::new(&format!(
+        r"(?s)# =+\s*# PHP2Shell \(CVE-2024-4577.*?{}\s*",
+        regex::escape(PHP2SHELL_END)
+    ))
+    .unwrap();
     if existing_sec_re.is_match(&content) {
-        content = existing_sec_re.replace(&content, NoExpand(php2shell_block.trim())).to_string();
-    } else if legacy_sec_re.is_match(&content) {
-        // 舊版區塊無結尾標記，每次更新只取代第一個 Directory，會殘留並累積重複的 Directory 區塊
-        const PLACEHOLDER: &str = "\u{0}LAH_PHP2SHELL_BLOCK\u{0}";
-        content = legacy_sec_re.replace(&content, NoExpand(PLACEHOLDER)).to_string();
-        let re_stray = Regex::new(r#"(?s)<Directory\s+"[^"]*/www/(?:assets|export|uploads)">.*?</Directory>\s*"#).unwrap();
-        content = re_stray.replace_all(&content, "").to_string();
-        content = content.replace(PLACEHOLDER, &format!("{}\n", php2shell_block.trim()));
-    } else {
-        content.push_str(&php2shell_block);
-        log_fn("  Apache httpd.conf 已套用資安防護與 CVE-2024-4577 PHP2Shell 緩解設定", "success");
+        content = existing_sec_re.replace_all(&content, "").to_string();
+        removed_any = true;
     }
 
-    // 4. 敏感檔案拒絕 (.env、SQLite 資料庫、備份與日誌、dot 目錄)
-    let sensitive_block = build_sensitive_deny_block(&root_fwd);
-    let existing_sensitive_re = Regex::new(&format!(
-        r"(?s){}.*?{}",
-        regex::escape(SENSITIVE_DENY_BEGIN),
-        regex::escape(SENSITIVE_DENY_END)
-    ))
+    let legacy_sec_re =
+        Regex::new(r#"(?s)# =+\s*# PHP2Shell \(CVE-2024-4577.*?</Directory>\s*"#).unwrap();
+    if legacy_sec_re.is_match(&content) {
+        content = legacy_sec_re.replace_all(&content, "").to_string();
+        removed_any = true;
+    }
+
+    let stray_dir_re = Regex::new(
+        r#"(?s)<Directory\s+"[^"]*/www/(?:assets|export|uploads)">.*?</Directory>\s*"#,
+    )
     .unwrap();
-    if existing_sensitive_re.is_match(&content) {
-        content = existing_sensitive_re.replace(&content, NoExpand(&sensitive_block)).to_string();
-    } else {
-        content.push_str(&format!("\n{}\n", sensitive_block));
-        log_fn("  Apache httpd.conf 已套用敏感檔案拒絕規則 (.env / *.db / dot 目錄)", "success");
+    if stray_dir_re.is_match(&content) {
+        let mut stray_removed = false;
+        content = stray_dir_re
+            .replace_all(&content, |caps: &regex::Captures| -> String {
+                let matched = caps.get(0).map(|m| m.as_str()).unwrap_or("");
+                if matched.contains("Require all denied") {
+                    stray_removed = true;
+                    String::new()
+                } else {
+                    matched.to_string()
+                }
+            })
+            .to_string();
+        if stray_removed {
+            removed_any = true;
+        }
     }
 
-    // 5. Apache mpm_winnt 記憶體治理與子程序輪替回收
-    let mpm_block = build_mpm_winnt_block();
-    let existing_mpm_re = Regex::new(&format!(
-        r"(?s){}.*?{}",
-        regex::escape(MPM_WINNT_BEGIN),
-        regex::escape(MPM_WINNT_END)
-    ))
-    .unwrap();
-    if existing_mpm_re.is_match(&content) {
-        content = existing_mpm_re.replace(&content, NoExpand(&mpm_block)).to_string();
-    } else {
-        content.push_str(&format!("\n{}\n", mpm_block));
-        log_fn("  Apache httpd.conf 已套用 mpm_winnt 記憶體回收規則 (MaxConnectionsPerChild 10000 / MaxMemFree 2048)", "success");
+    for (begin, end) in [
+        (SENSITIVE_DENY_BEGIN, SENSITIVE_DENY_END),
+        (MPM_WINNT_BEGIN, MPM_WINNT_END),
+        (NODE2SHELL_BEGIN, NODE2SHELL_END),
+    ] {
+        let block_re = Regex::new(&format!(
+            r"(?s){}.*?{}\s*",
+            regex::escape(begin),
+            regex::escape(end)
+        ))
+        .unwrap();
+        if block_re.is_match(&content) {
+            content = block_re.replace_all(&content, "").to_string();
+            removed_any = true;
+        }
     }
 
-    // 6. Node2Shell (CVE-2026-111497 Brotli OOB Write) Mitigation
-    let node2shell_block = build_node2shell_mitigation_block();
-    let existing_node2shell_re = Regex::new(&format!(
-        r"(?s){}.*?{}",
-        regex::escape(NODE2SHELL_BEGIN),
-        regex::escape(NODE2SHELL_END)
-    ))
-    .unwrap();
-    if existing_node2shell_re.is_match(&content) {
-        content = existing_node2shell_re.replace(&content, NoExpand(&node2shell_block)).to_string();
-    } else {
-        content.push_str(&format!("\n{}\n", node2shell_block));
-        log_fn("  Apache httpd.conf 已套用 CVE-2026-111497 Node2Shell 標頭剝除防護", "success");
+    if removed_any {
+        let multi_blank_re = Regex::new(r"(?m)(?:\r?\n){3,}").unwrap();
+        content = multi_blank_re.replace_all(&content, "\n\n").to_string();
     }
 
-    let changed = content != orig;
-    if changed {
-        let _ = fs::write(conf_path, content);
+    content
+}
+
+pub fn apply_apache_security_hardening_with_checker<F>(
+    conf_path: &Path,
+    root_dir: &Path,
+    syntax_checker: F,
+    log_fn: &dyn Fn(&str, &str),
+) -> (bool, bool)
+where
+    F: Fn(&Path, &dyn Fn(&str, &str)) -> (bool, String),
+{
+    let Ok(orig_httpd) = fs::read_to_string(conf_path) else {
+        return (false, false);
+    };
+
+    let cleaned_httpd = strip_legacy_security_blocks(&orig_httpd);
+    let new_httpd =
+        upsert_managed_includes_block(&cleaned_httpd, root_dir, &["conf/extra/lah-security.conf"]);
+    let new_sec = build_lah_security_conf();
+
+    let conf_dir = conf_path.parent().unwrap_or_else(|| Path::new("."));
+    let sec_conf_path = conf_dir.join("extra").join("lah-security.conf");
+    let apache_dir = if conf_dir.file_name().and_then(|n| n.to_str()) == Some("conf") {
+        conf_dir.parent().unwrap_or(conf_dir)
+    } else {
+        conf_dir
+    };
+
+    let (ok, changed) = write_apache_configs_transactionally(
+        apache_dir,
+        &[
+            (conf_path, new_httpd.as_str()),
+            (sec_conf_path.as_path(), new_sec.as_str()),
+        ],
+        syntax_checker,
+        log_fn,
+    );
+    if ok && changed {
+        log_fn(
+            "  Apache 已套用受管資安設定 (conf/extra/lah-security.conf) 並於 httpd.conf 完成 Include 掛載",
+            "success",
+        );
     }
-    (true, changed)
+    (ok, changed)
+}
+
+pub fn apply_apache_security_hardening(
+    conf_path: &Path,
+    root_dir: &Path,
+    log_fn: &dyn Fn(&str, &str),
+) -> (bool, bool) {
+    apply_apache_security_hardening_with_checker(conf_path, root_dir, check_apache_syntax, log_fn)
 }
 
 const PHP2SHELL_END: &str = "# === End PHP2Shell Mitigation ===";
@@ -1154,7 +1210,11 @@ fn build_mpm_winnt_block() -> String {
 /// `.env.example` 為前端「下載範本」功能所需，刻意放行。
 /// 檔名規則皆不分大小寫，且涵蓋 Windows 結尾 `.`/空白與 `::$DATA` 變體。
 fn build_sensitive_deny_block(root_fwd: &str) -> String {
-    let root_re = regex::escape(root_fwd);
+    let root_re = if root_fwd == "${LAH_ROOT}" {
+        root_fwd.to_string()
+    } else {
+        regex::escape(root_fwd)
+    };
     format!(
         "{SENSITIVE_DENY_BEGIN}\n\
 <FilesMatch \"(?i)^\\.(?!env\\.example$)\">\n\
@@ -1203,19 +1263,38 @@ pub fn apply_php_security_hardening(ini_path: &Path, log_fn: &dyn Fn(&str, &str)
 }
 
 /// 檢查目標環境是否已套用資安強化設定 (CVE-2024-4577 緩解、敏感檔案防護、隱藏版本標頭)
+/// 必須同時驗證 `httpd.conf` 存在未被註解之有效 `Include conf/extra/lah-security.conf`
+/// 且 `conf/extra/lah-security.conf` 實體內容完整。
 pub fn is_security_hardened(root_dir: &Path) -> bool {
-    let apache_conf = root_dir.join("Apache24").join("conf").join("httpd.conf");
-    if !apache_conf.is_file() {
+    let conf_dir = root_dir.join("Apache24").join("conf");
+    let apache_conf = conf_dir.join("httpd.conf");
+    let sec_conf = conf_dir.join("extra").join("lah-security.conf");
+    if !apache_conf.is_file() || !sec_conf.is_file() {
         return false;
     }
-    let Ok(content) = fs::read_to_string(&apache_conf) else {
+
+    let Ok(httpd_content) = fs::read_to_string(&apache_conf) else {
         return false;
     };
-    content.contains(PHP2SHELL_END)
-        && content.contains(SENSITIVE_DENY_END)
-        && content.contains(MPM_WINNT_END)
-        && content.contains(NODE2SHELL_END)
-        && content.contains("ServerTokens Prod")
+    let include_re =
+        Regex::new(r#"(?i)^Include\s+"?conf/extra/lah-security\.conf"?(?:\s+#.*)?$"#).unwrap();
+    let has_active_include = httpd_content.lines().any(|line| {
+        let trimmed = line.trim();
+        !trimmed.starts_with('#') && include_re.is_match(trimmed)
+    });
+    if !has_active_include {
+        return false;
+    }
+
+    let Ok(sec_content) = fs::read_to_string(&sec_conf) else {
+        return false;
+    };
+    sec_content.contains(PHP2SHELL_END)
+        && sec_content.contains(SENSITIVE_DENY_END)
+        && sec_content.contains(MPM_WINNT_END)
+        && sec_content.contains(NODE2SHELL_END)
+        && sec_content.contains("ServerTokens Prod")
+        && sec_content.contains("ServerSignature Off")
 }
 
 
@@ -1305,119 +1384,273 @@ mod tests {
 
     #[test]
     fn test_security_hardening_denies_sensitive_files_idempotently() {
-        let temp_root = std::env::temp_dir().join(format!("lah_test_sensitive_{}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()));
-        fs::create_dir_all(&temp_root).unwrap();
-        let conf_path = temp_root.join("httpd.conf");
+        let temp_root = std::env::temp_dir().join(format!(
+            "lah_test_sensitive_{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let conf_dir = temp_root.join("Apache24").join("conf");
+        fs::create_dir_all(&conf_dir).unwrap();
+        let conf_path = conf_dir.join("httpd.conf");
+        let sec_conf_path = conf_dir.join("extra").join("lah-security.conf");
         fs::write(&conf_path, "ServerRoot \"C:/x\"\n").unwrap();
 
-        let (ok, changed) = apply_apache_security_hardening(&conf_path, &temp_root, &|_, _| {});
+        let syntax_ok = |_: &Path, _: &dyn Fn(&str, &str)| (true, "Syntax OK".to_string());
+        let (ok, changed) =
+            apply_apache_security_hardening_with_checker(&conf_path, &temp_root, syntax_ok, &|_, _| {});
         assert!(ok);
         assert!(changed);
-        let first = fs::read_to_string(&conf_path).unwrap();
-        assert_eq!(first.matches(SENSITIVE_DENY_BEGIN).count(), 1);
-        assert_eq!(first.matches(SENSITIVE_DENY_END).count(), 1);
-        assert_eq!(first.matches(MPM_WINNT_BEGIN).count(), 1);
-        assert_eq!(first.matches(MPM_WINNT_END).count(), 1);
-        assert_eq!(first.matches(NODE2SHELL_BEGIN).count(), 1);
-        assert_eq!(first.matches(NODE2SHELL_END).count(), 1);
-        assert!(first.contains("RequestHeader unset Content-Encoding"));
-        assert!(first.contains("MaxConnectionsPerChild 10000"));
-        assert!(first.contains("MaxMemFree             2048"));
-        assert!(first.contains(r#"<FilesMatch "(?i)^\.(?!env\.example$)">"#));
-        assert!(first.contains(r#"<FilesMatch "(?i)\.(db|sqlite3?|bak|sql|log)([. ]+|:.*)?$|\.(db|sqlite3?)-(wal|shm|journal)$">"#));
-        assert!(first.contains(r#"<FilesMatch "(?i)^composer\.(json|lock)$">"#));
-        assert!(first.contains(r"\.(?!well-known/)[^/]+/"));
-        assert!(first.contains("<DirectoryMatch"));
-        let root_re = regex::escape(&temp_root.to_string_lossy().replace('\\', "/"));
-        assert!(first.contains(&format!("^{root_re}/")));
+        assert!(sec_conf_path.is_file(), "應產出 conf/extra/lah-security.conf");
 
-        let (_, changed2) = apply_apache_security_hardening(&conf_path, &temp_root, &|_, _| {});
+        let httpd_first = fs::read_to_string(&conf_path).unwrap();
+        let root_fwd = temp_root.to_string_lossy().replace('\\', "/");
+        assert!(httpd_first.contains(MANAGED_INCLUDES_BEGIN));
+        assert!(httpd_first.contains(&format!(r#"Define LAH_ROOT "{root_fwd}""#)));
+        assert!(httpd_first.contains("Include conf/extra/lah-security.conf"));
+        assert!(!httpd_first.contains(SENSITIVE_DENY_BEGIN));
+        assert!(!httpd_first.contains(MPM_WINNT_BEGIN));
+        assert!(!httpd_first.contains(NODE2SHELL_BEGIN));
+        assert!(!httpd_first.contains(PHP2SHELL_END));
+
+        let sec_first = fs::read_to_string(&sec_conf_path).unwrap();
+        assert!(sec_first.contains("ServerTokens Prod"));
+        assert!(sec_first.contains("ServerSignature Off"));
+        assert_eq!(sec_first.matches(PHP2SHELL_END).count(), 1);
+        assert_eq!(sec_first.matches(SENSITIVE_DENY_BEGIN).count(), 1);
+        assert_eq!(sec_first.matches(SENSITIVE_DENY_END).count(), 1);
+        assert_eq!(sec_first.matches(MPM_WINNT_BEGIN).count(), 1);
+        assert_eq!(sec_first.matches(MPM_WINNT_END).count(), 1);
+        assert_eq!(sec_first.matches(NODE2SHELL_BEGIN).count(), 1);
+        assert_eq!(sec_first.matches(NODE2SHELL_END).count(), 1);
+        assert!(sec_first.contains("RequestHeader unset Content-Encoding"));
+        assert!(sec_first.contains("MaxConnectionsPerChild 10000"));
+        assert!(sec_first.contains("MaxMemFree             2048"));
+        assert!(sec_first.contains(r#"<FilesMatch "(?i)^\.(?!env\.example$)">"#));
+        assert!(sec_first.contains(r#"<FilesMatch "(?i)\.(db|sqlite3?|bak|sql|log)([. ]+|:.*)?$|\.(db|sqlite3?)-(wal|shm|journal)$">"#));
+        assert!(sec_first.contains(r#"<FilesMatch "(?i)^composer\.(json|lock)$">"#));
+        assert!(sec_first.contains(r"\.(?!well-known/)[^/]+/"));
+        assert!(sec_first.contains("<DirectoryMatch"));
+        assert!(sec_first.contains(r#"<Directory "${LAH_ROOT}/www/assets">"#));
+        assert!(sec_first.contains(r#"<Directory "${LAH_ROOT}/www/export">"#));
+        assert!(sec_first.contains(r#"<Directory "${LAH_ROOT}/www/uploads">"#));
+        assert!(sec_first.contains("(?i)^${LAH_ROOT}/(?:.*/)?\\.(?!well-known/)[^/]+/"));
+        assert!(!sec_first.contains(&root_fwd), "lah-security.conf 不應寫死實體路徑");
+
+        let (ok2, changed2) =
+            apply_apache_security_hardening_with_checker(&conf_path, &temp_root, syntax_ok, &|_, _| {});
+        assert!(ok2);
         assert!(!changed2);
-        assert_eq!(fs::read_to_string(&conf_path).unwrap(), first);
+        assert_eq!(fs::read_to_string(&conf_path).unwrap(), httpd_first);
+        assert_eq!(fs::read_to_string(&sec_conf_path).unwrap(), sec_first);
 
-        let stale = first
+        let stale = sec_first
             .replace("Require all denied\n</DirectoryMatch>", "Require all granted\n</DirectoryMatch>")
             .replace("MaxConnectionsPerChild 10000", "MaxConnectionsPerChild 0");
-        fs::write(&conf_path, stale).unwrap();
-        let (_, changed3) = apply_apache_security_hardening(&conf_path, &temp_root, &|_, _| {});
+        fs::write(&sec_conf_path, stale).unwrap();
+        let (ok3, changed3) =
+            apply_apache_security_hardening_with_checker(&conf_path, &temp_root, syntax_ok, &|_, _| {});
+        assert!(ok3);
         assert!(changed3);
-        let healed = fs::read_to_string(&conf_path).unwrap();
-        assert_eq!(healed.matches(SENSITIVE_DENY_BEGIN).count(), 1);
-        assert_eq!(healed.matches(MPM_WINNT_BEGIN).count(), 1);
-        assert_eq!(healed.matches(NODE2SHELL_BEGIN).count(), 1);
-        assert_eq!(healed.matches(NODE2SHELL_END).count(), 1);
-        assert_eq!(healed, first);
+        let healed = fs::read_to_string(&sec_conf_path).unwrap();
+        assert_eq!(healed, sec_first);
 
         let _ = fs::remove_dir_all(&temp_root);
     }
 
     #[test]
     fn test_security_hardening_collapses_legacy_duplicate_blocks() {
-        let temp_root = std::env::temp_dir().join(format!("lah_test_legacy_{}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()));
-        fs::create_dir_all(&temp_root).unwrap();
-        let conf_path = temp_root.join("httpd.conf");
+        let temp_root = std::env::temp_dir().join(format!(
+            "lah_test_legacy_{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let conf_dir = temp_root.join("Apache24").join("conf");
+        fs::create_dir_all(&conf_dir).unwrap();
+        let conf_path = conf_dir.join("httpd.conf");
+        let sec_conf_path = conf_dir.join("extra").join("lah-security.conf");
         let root_fwd = temp_root.to_string_lossy().replace('\\', "/");
-        let dir = |name: &str| format!("<Directory \"{root_fwd}/www/{name}\">\n<FilesMatch \"\\.(php)$\">\nRequire all denied\n</FilesMatch>\n</Directory>\n");
+        let dir = |name: &str| {
+            format!(
+                "<Directory \"{root_fwd}/www/{name}\">\n<FilesMatch \"\\.(php)$\">\nRequire all denied\n</FilesMatch>\n</Directory>\n"
+            )
+        };
         let legacy = format!(
-            "ServerRoot \"C:/x\"\n# =====\n# PHP2Shell (CVE-2024-4577 PHP-CGI Argument Injection & WebShell) Mitigation\n# =====\n{}{}{}{}{}",
-            dir("assets"), dir("export"), dir("uploads"), dir("export"), dir("uploads")
+            "ServerRoot \"C:/x\"\nServerTokens Full\nServerSignature On\n\
+# =====\n# PHP2Shell (CVE-2024-4577 PHP-CGI Argument Injection & WebShell) Mitigation\n# =====\n\
+{}{}{}{}{}\n\
+{SENSITIVE_DENY_BEGIN}\n# old deny\n{SENSITIVE_DENY_END}\n\
+{MPM_WINNT_BEGIN}\n# old mpm\n{MPM_WINNT_END}\n\
+{NODE2SHELL_BEGIN}\n# old node2shell\n{NODE2SHELL_END}\n",
+            dir("assets"),
+            dir("export"),
+            dir("uploads"),
+            dir("export"),
+            dir("uploads")
         );
         fs::write(&conf_path, legacy).unwrap();
 
-        apply_apache_security_hardening(&conf_path, &temp_root, &|_, _| {});
-        let once = fs::read_to_string(&conf_path).unwrap();
-        for name in ["assets", "export", "uploads"] {
-            assert_eq!(once.matches(&format!("{root_fwd}/www/{name}\">")).count(), 1, "{name}");
-        }
-        assert_eq!(once.matches(PHP2SHELL_END).count(), 1);
+        let syntax_ok = |_: &Path, _: &dyn Fn(&str, &str)| (true, "Syntax OK".to_string());
+        let (ok, changed) =
+            apply_apache_security_hardening_with_checker(&conf_path, &temp_root, syntax_ok, &|_, _| {});
+        assert!(ok);
+        assert!(changed);
 
-        let (_, changed) = apply_apache_security_hardening(&conf_path, &temp_root, &|_, _| {});
+        let httpd_once = fs::read_to_string(&conf_path).unwrap();
+        assert!(!httpd_once.contains("PHP2Shell"));
+        assert!(!httpd_once.contains(SENSITIVE_DENY_BEGIN));
+        assert!(!httpd_once.contains(MPM_WINNT_BEGIN));
+        assert!(!httpd_once.contains(NODE2SHELL_BEGIN));
+        assert!(!httpd_once.contains("ServerTokens"));
+        assert!(!httpd_once.contains("ServerSignature"));
+        for name in ["assets", "export", "uploads"] {
+            assert!(
+                !httpd_once.contains(&format!("{root_fwd}/www/{name}\">")),
+                "httpd.conf 不應殘留舊版 {name} Directory 區塊"
+            );
+        }
+        assert!(httpd_once.contains("Include conf/extra/lah-security.conf"));
+
+        let sec_once = fs::read_to_string(&sec_conf_path).unwrap();
+        for name in ["assets", "export", "uploads"] {
+            assert_eq!(
+                sec_once.matches(&format!("${{LAH_ROOT}}/www/{name}\">")).count(),
+                1,
+                "{name}"
+            );
+        }
+        assert_eq!(sec_once.matches(PHP2SHELL_END).count(), 1);
+
+        let (ok2, changed2) =
+            apply_apache_security_hardening_with_checker(&conf_path, &temp_root, syntax_ok, &|_, _| {});
+        assert!(ok2);
+        assert!(!changed2);
+        assert_eq!(fs::read_to_string(&conf_path).unwrap(), httpd_once);
+        assert_eq!(fs::read_to_string(&sec_conf_path).unwrap(), sec_once);
+
+        let _ = fs::remove_dir_all(&temp_root);
+    }
+
+    #[test]
+    fn test_security_hardening_rolls_back_when_syntax_check_fails() {
+        let temp_root = std::env::temp_dir().join(format!(
+            "lah_test_sec_rollback_{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let conf_dir = temp_root.join("Apache24").join("conf");
+        fs::create_dir_all(&conf_dir).unwrap();
+        let conf_path = conf_dir.join("httpd.conf");
+        let sec_conf_path = conf_dir.join("extra").join("lah-security.conf");
+        let orig_httpd = "ServerRoot \"C:/x\"\nListen 80\n";
+        fs::write(&conf_path, orig_httpd).unwrap();
+
+        let syntax_fail = |_: &Path, _: &dyn Fn(&str, &str)| (false, "AH00526: Syntax error".to_string());
+        let (ok, changed) =
+            apply_apache_security_hardening_with_checker(&conf_path, &temp_root, syntax_fail, &|_, _| {});
+        assert!(!ok);
         assert!(!changed);
-        assert_eq!(fs::read_to_string(&conf_path).unwrap(), once);
+        assert_eq!(fs::read_to_string(&conf_path).unwrap(), orig_httpd);
+        assert!(!sec_conf_path.exists());
 
         let _ = fs::remove_dir_all(&temp_root);
     }
 
     #[test]
     fn test_is_security_hardened() {
-        let temp_root = std::env::temp_dir().join(format!("lah_test_sec_check_{}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()));
+        let temp_root = std::env::temp_dir().join(format!(
+            "lah_test_sec_check_{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
         let conf_dir = temp_root.join("Apache24").join("conf");
         fs::create_dir_all(&conf_dir).unwrap();
         let conf_path = conf_dir.join("httpd.conf");
+        let sec_conf_path = conf_dir.join("extra").join("lah-security.conf");
 
         // 初始未加固狀態
         fs::write(&conf_path, "ServerRoot \"C:/AppServ/Apache24\"\nListen 80\n").unwrap();
         assert!(!is_security_hardened(&temp_root));
 
-        // 套用資安加固
-        apply_apache_security_hardening(&conf_path, &temp_root, &|_, _| {});
+        // 僅有舊版內嵌標記（無 Include 與無 lah-security.conf）應回傳 false
+        fs::write(
+            &conf_path,
+            format!(
+                "ServerTokens Prod\n{PHP2SHELL_END}\n{SENSITIVE_DENY_END}\n{MPM_WINNT_END}\n{NODE2SHELL_END}\n"
+            ),
+        )
+        .unwrap();
+        assert!(!is_security_hardened(&temp_root));
+
+        // 套用資安加固（同時有有效 Include 與完整 lah-security.conf）
+        let syntax_ok = |_: &Path, _: &dyn Fn(&str, &str)| (true, "Syntax OK".to_string());
+        let (ok, _) =
+            apply_apache_security_hardening_with_checker(&conf_path, &temp_root, syntax_ok, &|_, _| {});
+        assert!(ok);
         assert!(is_security_hardened(&temp_root));
+
+        // 若 Include 被註解掉，必須回傳 false
+        let httpd_content = fs::read_to_string(&conf_path).unwrap();
+        let commented_httpd = httpd_content.replace(
+            "Include conf/extra/lah-security.conf",
+            "# Include conf/extra/lah-security.conf",
+        );
+        fs::write(&conf_path, &commented_httpd).unwrap();
+        assert!(!is_security_hardened(&temp_root));
+
+        // 恢復有效 Include，但將 lah-security.conf 內容破壞（缺少標記），必須回傳 false
+        fs::write(&conf_path, &httpd_content).unwrap();
+        let sec_content = fs::read_to_string(&sec_conf_path).unwrap();
+        fs::write(&sec_conf_path, sec_content.replace(NODE2SHELL_END, "")).unwrap();
+        assert!(!is_security_hardened(&temp_root));
+
+        // 刪除 lah-security.conf，必須回傳 false
+        fs::remove_file(&sec_conf_path).unwrap();
+        assert!(!is_security_hardened(&temp_root));
 
         let _ = fs::remove_dir_all(&temp_root);
     }
 
     #[test]
-fn test_node2shell_mitigation_injection_and_idempotency() {
-        let temp_root = std::env::temp_dir().join(format!("lah_test_node2shell_{}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()));
-        fs::create_dir_all(&temp_root).unwrap();
-        let conf_path = temp_root.join("httpd.conf");
+    fn test_node2shell_mitigation_injection_and_idempotency() {
+        let temp_root = std::env::temp_dir().join(format!(
+            "lah_test_node2shell_{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let conf_dir = temp_root.join("Apache24").join("conf");
+        fs::create_dir_all(&conf_dir).unwrap();
+        let conf_path = conf_dir.join("httpd.conf");
+        let sec_conf_path = conf_dir.join("extra").join("lah-security.conf");
         fs::write(&conf_path, "ServerRoot \"C:/x\"\n").unwrap();
 
-        let (ok, changed) = apply_apache_security_hardening(&conf_path, &temp_root, &|_, _| {});
+        let syntax_ok = |_: &Path, _: &dyn Fn(&str, &str)| (true, "Syntax OK".to_string());
+        let (ok, changed) =
+            apply_apache_security_hardening_with_checker(&conf_path, &temp_root, syntax_ok, &|_, _| {});
         assert!(ok);
         assert!(changed);
 
-        let content = fs::read_to_string(&conf_path).unwrap();
-        assert_eq!(content.matches(NODE2SHELL_BEGIN).count(), 1);
-        assert_eq!(content.matches(NODE2SHELL_END).count(), 1);
-        assert!(content.contains(r#"<If "%{HTTP:Content-Encoding} =~ /br/i">"#));
-        assert!(content.contains("RequestHeader unset Content-Encoding"));
+        let sec_content = fs::read_to_string(&sec_conf_path).unwrap();
+        assert_eq!(sec_content.matches(NODE2SHELL_BEGIN).count(), 1);
+        assert_eq!(sec_content.matches(NODE2SHELL_END).count(), 1);
+        assert!(sec_content.contains(r#"<If "%{HTTP:Content-Encoding} =~ /br/i">"#));
+        assert!(sec_content.contains("RequestHeader unset Content-Encoding"));
 
         // 二次執行保持等冪且不產生變更
-        let (ok2, changed2) = apply_apache_security_hardening(&conf_path, &temp_root, &|_, _| {});
+        let (ok2, changed2) =
+            apply_apache_security_hardening_with_checker(&conf_path, &temp_root, syntax_ok, &|_, _| {});
         assert!(ok2);
         assert!(!changed2);
-        assert_eq!(fs::read_to_string(&conf_path).unwrap(), content);
+        assert_eq!(fs::read_to_string(&sec_conf_path).unwrap(), sec_content);
         let _ = fs::remove_dir_all(&temp_root);
     }
 
