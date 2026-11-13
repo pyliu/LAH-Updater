@@ -1,0 +1,10 @@
+/target
+/dist
+/src-tauri/gen
+/moiexe/
+env.properties
+settings.json
+desktop-demo.json
+/logs
+*.log
+*.exe

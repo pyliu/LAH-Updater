@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>地籍異動通知管理</title>
+  <link rel="icon" type="image/png" href="favicon.png">
+  <link rel="stylesheet" href="styles.css">
+  <script type="module" src="app.js"></script>
+</head>
+<body>
+  <div class="app" id="app">
+    <header>
+      <div class="brand"><div class="mark" aria-hidden="true">MOI</div><div><h1>地籍異動通知管理</h1><small>案件同步 · 簡訊與郵件派送</small></div></div>
+      <div class="topmeta">桃園地政事務所<br><small>Tauri 桌面版 / 0.1.0</small></div>
+    </header>
+    <div class="status">
+      <div class="state"><span class="badge" id="schedule-state">載入中</span><span class="badge" id="api-state">LAH-API：檢查中</span><span class="muted" id="schedule-time"></span></div>
+      <div class="actions"><button class="primary" id="schedule" disabled>啟動排程</button><button id="sync" title="手動掃描當日案件並搬移至待傳佇列（不會實際發送簡訊或郵件）" disabled>手動同步（不派送）</button><button id="refresh" disabled>重新整理</button></div>
+    </div>
+    <nav class="nav" aria-label="功能分頁">
+      <button data-page="main">已登案件 <span id="main-count"></span></button>
+      <button data-page="wait" class="active" aria-current="page">待傳案件 <span id="wait-count"></span></button>
+      <button data-page="log">傳送紀錄 <span id="log-count"></span></button>
+      <button data-page="messages">傳送訊息 <span id="messages-count"></span></button>
+      <button data-page="logs">日誌追蹤</button>
+      <button data-page="settings">系統設定</button>
+    </nav>
+    <div id="api-alert" class="api-alert" role="alert" hidden>
+      <span>無法連線至智慧控管系統（LAH-API），請輸入正確的智慧控管系統 IP 或端點網址。</span>
+      <button type="button" id="open-api-setup">設定系統 IP</button>
+    </div>
+    <main id="content" class="main" aria-busy="true"><p class="loading">正在載入 Rust 桌面服務…</p></main>
+    <footer class="footer"><span id="last-update">尚未載入</span><span id="runtime-status">等待桌面服務</span><time id="clock"></time></footer>
+  </div>
+  <div id="toast" role="status" aria-live="polite" hidden></div>
+  <dialog id="confirm-dialog" aria-labelledby="confirm-title">
+    <h2 id="confirm-title">設定尚未儲存</h2><p id="confirm-message"></p>
+    <div class="dialog-actions"><button id="confirm-cancel">繼續編輯</button><button class="primary" id="confirm-discard">捨棄修改</button></div>
+  </dialog>
+  <dialog id="api-setup-dialog" aria-labelledby="api-setup-title">
+    <h2 id="api-setup-title">無法連線至智慧控管系統</h2>
+    <p class="muted">偵測不到 LAH-API 連線成功，請輸入正確的智慧控管系統 IP（例如 192.168.1.100 或 192.168.1.100:8080）或完整 API 網址：</p>
+    <form id="api-setup-form" class="dialog-form">
+      <label>智慧控管系統 IP／API 網址<input id="api-setup-input" type="text" placeholder="例如 192.168.1.100" required autocomplete="off"></label>
+      <p id="api-setup-preview" class="muted api-preview"></p>
+      <p id="api-setup-error" class="inline-error" role="alert" hidden></p>
+      <div class="dialog-actions"><button type="button" id="api-setup-cancel">稍後再說</button><button class="primary" type="submit" id="api-setup-save">測試並儲存</button></div>
+    </form>
+  </dialog>
+</body>
+</html>
