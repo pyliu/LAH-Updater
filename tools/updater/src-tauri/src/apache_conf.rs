@@ -26,6 +26,18 @@ pub fn check_apache_syntax(apache_dir: &Path, log_fn: &dyn Fn(&str, &str)) -> (b
     }
 }
 
+/// 若 `bin/httpd.exe` 存在則執行語法檢查，否則略過並回傳通過（供無執行檔之測試或局部設定流程安全寫入）
+pub fn check_apache_syntax_if_present(
+    apache_dir: &Path,
+    log_fn: &dyn Fn(&str, &str),
+) -> (bool, String) {
+    if apache_dir.join("bin").join("httpd.exe").is_file() {
+        check_apache_syntax(apache_dir, log_fn)
+    } else {
+        (true, "skipped: httpd.exe not found".to_string())
+    }
+}
+
 pub fn ensure_php_ini_configured(php_dir: &Path, is_php85: bool, log_fn: &dyn Fn(&str, &str)) -> bool {
     if !php_dir.is_dir() {
         return false;
@@ -707,7 +719,12 @@ pub fn apply_apache_security_hardening(
     root_dir: &Path,
     log_fn: &dyn Fn(&str, &str),
 ) -> (bool, bool) {
-    apply_apache_security_hardening_with_checker(conf_path, root_dir, check_apache_syntax, log_fn)
+    apply_apache_security_hardening_with_checker(
+        conf_path,
+        root_dir,
+        check_apache_syntax_if_present,
+        log_fn,
+    )
 }
 
 const PHP2SHELL_END: &str = "# === End PHP2Shell Mitigation ===";
@@ -1062,13 +1079,7 @@ pub fn configure_apache_fe_static_vhost(
     configure_apache_fe_static_vhost_with_checker(
         apache_dir,
         root_dir,
-        |dir, log| {
-            if dir.join("bin").join("httpd.exe").is_file() {
-                check_apache_syntax(dir, log)
-            } else {
-                (true, "skipped: httpd.exe not found".to_string())
-            }
-        },
+        check_apache_syntax_if_present,
         log_fn,
     )
 }
@@ -2036,6 +2047,45 @@ mod tests {
         assert!(ok2);
         assert!(!changed2);
         assert_eq!(syntax_calls.get(), 1);
+
+        let _ = fs::remove_dir_all(&temp_root);
+    }
+
+    #[test]
+    fn test_apply_apache_security_hardening_without_httpd_exe_succeeds_idempotently() {
+        let temp_root = std::env::temp_dir().join(format!(
+            "lah_test_sec_no_httpd_{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let apache_dir = temp_root.join("Apache24");
+        let conf_dir = apache_dir.join("conf");
+        fs::create_dir_all(&conf_dir).unwrap();
+
+        let conf_path = conf_dir.join("httpd.conf");
+        let original_httpd = "Define SRVROOT \"D:/LAH/Apache24\"\nListen 80\n";
+        fs::write(&conf_path, original_httpd).unwrap();
+
+        // 確認暫存目錄下沒有 bin/httpd.exe
+        assert!(!apache_dir.join("bin").join("httpd.exe").is_file());
+
+        // 初次套用：無 httpd.exe 時應略過語法檢查並正常寫入回傳 (true, true)
+        let (ok1, changed1) = apply_apache_security_hardening(&conf_path, &temp_root, &|_, _| {});
+        assert!(ok1, "無 httpd.exe 時 apply_apache_security_hardening 應回傳 ok=true");
+        assert!(changed1, "初次套用應回傳 changed=true");
+
+        let httpd1 = fs::read_to_string(&conf_path).unwrap();
+        let sec_path = conf_dir.join("extra").join("lah-security.conf");
+        assert!(sec_path.is_file(), "應產出 conf/extra/lah-security.conf");
+        assert!(httpd1.contains("Include conf/extra/lah-security.conf"));
+
+        // 二次套用（雙軌等冪性）：應維持一致並回傳 (true, false)
+        let (ok2, changed2) = apply_apache_security_hardening(&conf_path, &temp_root, &|_, _| {});
+        assert!(ok2);
+        assert!(!changed2);
+        assert_eq!(fs::read_to_string(&conf_path).unwrap(), httpd1);
 
         let _ = fs::remove_dir_all(&temp_root);
     }
