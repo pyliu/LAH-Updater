@@ -46,10 +46,9 @@
   </dialog>
   <dialog id="api-setup-dialog" aria-labelledby="api-setup-title">
     <h2 id="api-setup-title">無法連線至智慧控管系統</h2>
-    <p class="muted">偵測不到 LAH-API 連線成功，請輸入正確的智慧控管系統 IP（例如 192.168.1.100 或 192.168.1.100:8080）或完整 API 網址：</p>
+    <p class="muted">偵測不到 LAH-API 連線成功，請輸入正確的智慧控管系統 IP（例如 127.0.0.1 或 192.168.1.100:8080）：</p>
     <form id="api-setup-form" class="dialog-form">
-      <label>智慧控管系統 IP／API 網址<input id="api-setup-input" type="text" placeholder="例如 192.168.1.100" required autocomplete="off"></label>
-      <p id="api-setup-preview" class="muted api-preview"></p>
+      <label>智慧控管系統 IP<input id="api-setup-input" type="text" placeholder="例如 192.168.1.100" required autocomplete="off"></label>
       <p id="api-setup-error" class="inline-error" role="alert" hidden></p>
       <div class="dialog-actions"><button type="button" id="api-setup-cancel">稍後再說</button><button class="primary" type="submit" id="api-setup-save">測試並儲存</button></div>
     </form>

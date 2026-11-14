@@ -62,12 +62,24 @@ function applyTheme(theme) {
   }
 }
 
+function extractLahApiHost(urlStr) {
+  const value = String(urlStr || '').trim();
+  if (!value) return '';
+  try {
+    const parsed = new URL(/^https?:\/\//i.test(value) ? value : `http://${value}`);
+    return parsed.protocol === 'https:' ? `https://${parsed.host}` : parsed.host;
+  } catch {
+    return value;
+  }
+}
+
 function normalizeLahApiUrl(raw) {
   const value = String(raw || '').trim();
   if (!value) return '';
   const withScheme = /^https?:\/\//i.test(value) ? value : `http://${value}`;
   try {
     const parsed = new URL(withScheme);
+    if (!parsed.hostname) return '';
     if (
       !parsed.pathname ||
       parsed.pathname === '/' ||
@@ -146,7 +158,8 @@ async function action(work, { refresh = true } = {}) {
     }
     if (message) toast(message);
   } catch (error) {
-    toast(String(error), true);
+    const info = describeLoadError(error);
+    toast(info.isApiError ? `${info.title}：${info.summary}` : String(error), true);
   } finally {
     setBusy(false);
   }
@@ -247,15 +260,16 @@ function bindCopy() {
   });
 }
 
-function describeLoadError(error) {
+function describeLoadError(error, targetUrl = '') {
   const raw = String(error ?? '').trim() || '未知錯誤';
   const lower = raw.toLowerCase();
-  const endpoint = snapshot?.settings?.lah_api_url || '';
+  const endpoint = targetUrl || snapshot?.settings?.lah_api_url || '';
+  const host = extractLahApiHost(endpoint);
   if (lower.includes('10061') || raw.includes('拒絕連線') || lower.includes('connection failed')) {
     return {
       title: '無法連線至智慧控管系統（LAH-API）',
-      summary: endpoint
-        ? `目標主機拒絕連線（${endpoint}），目前無法取得案件資料。`
+      summary: host
+        ? `目標主機拒絕連線（${host}），目前無法取得案件資料。`
         : '目標主機拒絕連線，目前無法取得案件資料。',
       hints: [
         '確認智慧控管系統伺服器（Apache／PHP 8.5 FastCGI）已啟動。',
@@ -402,7 +416,7 @@ function field(key, label, type = 'text', wide = false) {
 function renderSettings() {
   $('#content').innerHTML = `<div class="pagehead"><div><h2>系統設定</h2><p>${pages.settings[1]}</p></div><span class="badge" id="dirty-label">${dirty ? '尚未儲存' : '設定已載入'}</span></div>
     <form id="settings-form" class="settings">
-    <section><h3>服務連線</h3><div class="fields">${field('lah_api_url', 'LAH-API URL', 'url', true)}<div class="wide actions"><button id="test-lah-connection" type="button">測試連線</button></div><p id="lah-site-label" class="wide muted">${esc(snapshot.site_label || '尚未連線測試（請輸入本機或遠端 API 位址後按「測試連線」）')}</p></div><p class="formnote muted">輸入本機或遠端 LAH-API 網址後，按「儲存設定」即可永久記住此端點位址。</p></section>
+    <section><h3>服務連線</h3><div class="fields"><label class="wide">智慧控管系統 IP<input name="lah_api_host" type="text" value="${esc(extractLahApiHost(draft.lah_api_url))}" placeholder="例如 127.0.0.1 或 192.168.1.100:8080" required autocomplete="off"></label><div class="wide actions"><button id="test-lah-connection" type="button">測試連線</button></div><p id="lah-site-label" class="wide muted">${esc(snapshot.site_label || '尚未連線測試（請輸入本機或遠端系統 IP 後按「測試連線」）')}</p></div><p class="formnote muted">輸入智慧控管系統 IP（可選填 :Port）後，按「儲存設定」即可永久記住；API 路徑會自動對應。</p></section>
     <section><h3>排程設定</h3><div class="fields">${field('search_minutes', '搜尋間隔（分鐘）', 'number')}${field('max_retries', '最大重試（次，不含首次）', 'number')}${field('start_time', '開始時間', 'time')}${field('end_time', '結束時間', 'time')}</div><label class="checkbox-label"><input name="auto_start_schedule" type="checkbox" ${draft.auto_start_schedule ? 'checked' : ''}>啟動程式時自動開始排程</label><p class="formnote muted">採單日執行時段；開關僅於下次啟動生效。</p><div class="autostart-row"><span class="badge ${snapshot.os_autostart_enabled ? 'good' : ''}" id="autostart-state">開機自動啟動：${snapshot.os_autostart_enabled ? '已啟用' : '未啟用'}</span><div class="actions"><button id="enable-autostart" type="button">啟用開機啟動</button><button id="clear-autostart" type="button">清除開機啟動</button></div></div></section>
     <section><h3>派送閘道</h3><div class="fields">${field('gateway_url', '閘道 URL', 'url', true)}${field('sms_user', '簡訊帳號')}${field('sms_password', '簡訊密碼', 'password')}${field('mail_account', '郵件帳號')}${field('mail_password', '郵件密碼', 'password')}${field('mail_from', '寄件地址', 'email')}${field('username', '寄件者名稱')}</div><label class="checkbox-label"><input id="show-password" type="checkbox">顯示密碼</label><p class="formnote muted">帳密將以 Base64 編碼無損寫回同目錄 env.properties。</p></section>
     <section><h3>傳送測試</h3><div class="fields"><label>傳送管道<select id="test-channel"><option value="sms">簡訊</option><option value="email">郵件</option></select></label><label>測試收件者<input id="test-recipient" placeholder="手機號碼或 Email"></label><label class="wide">測試內容<textarea id="test-message" rows="4">這是一則地籍異動系統測試通知。</textarea></label><div class="wide"><button id="test-delivery" type="button">發送測試訊息</button></div></div><p class="formnote muted">將透過設定的派送閘道實際發送測試訊息（不寫入正式佇列）。</p></section>
@@ -411,11 +425,15 @@ function renderSettings() {
   $('#settings-form').oninput = (event) => {
     const target = event.target;
     if (!target.name) return;
-    draft[target.name] = target.type === 'checkbox'
-      ? target.checked
-      : target.type === 'number'
-        ? Number(target.value)
-        : target.value;
+    if (target.name === 'lah_api_host') {
+      draft.lah_api_url = normalizeLahApiUrl(target.value) || target.value.trim();
+    } else {
+      draft[target.name] = target.type === 'checkbox'
+        ? target.checked
+        : target.type === 'number'
+          ? Number(target.value)
+          : target.value;
+    }
     void setDirty(JSON.stringify(draft) !== JSON.stringify(snapshot.settings));
     $('#dirty-label').textContent = dirty ? '尚未儲存' : '設定已載入';
     $('#settings-error').hidden = true;
@@ -555,21 +573,14 @@ async function refresh() {
 function openApiSetupDialog() {
   const dialog = $('#api-setup-dialog');
   const input = $('#api-setup-input');
-  const preview = $('#api-setup-preview');
   const errBox = $('#api-setup-error');
   const saveBtn = $('#api-setup-save');
   const cancelBtn = $('#api-setup-cancel');
   if (!dialog || !input || dialog.open) return;
 
-  const updatePreview = () => {
-    const normalized = normalizeLahApiUrl(input.value);
-    preview.textContent = normalized ? `將連線至：${normalized}` : '請輸入有效的 IP 或 http(s) 網址。';
-    errBox.hidden = true;
-  };
-
-  input.value = snapshot?.settings?.lah_api_url || '';
-  updatePreview();
-  input.oninput = updatePreview;
+  input.value = extractLahApiHost(snapshot?.settings?.lah_api_url || '');
+  errBox.hidden = true;
+  input.oninput = () => { errBox.hidden = true; };
   cancelBtn.onclick = () => dialog.close();
   dialog.oncancel = (event) => { event.preventDefault(); dialog.close(); };
 
@@ -578,12 +589,14 @@ function openApiSetupDialog() {
     const url = normalizeLahApiUrl(input.value);
     if (!url) {
       errBox.hidden = false;
-      errBox.textContent = '請輸入有效的智慧控管系統 IP 或完整網址。';
+      errBox.textContent = '請輸入有效的智慧控管系統 IP（例如 192.168.1.100）。';
       input.focus();
       return;
     }
     saveBtn.disabled = true;
     cancelBtn.disabled = true;
+    const prevSaveLabel = saveBtn.textContent;
+    saveBtn.textContent = '測試中…';
     errBox.hidden = true;
     try {
       const meta = await invoke('test_lah_connection', { url });
@@ -599,9 +612,11 @@ function openApiSetupDialog() {
       await renderPage();
       toast(`連線成功：${meta.site_id} ${meta.office_name}，已儲存智慧控管系統位址。`);
     } catch (error) {
+      const info = describeLoadError(error, url);
       errBox.hidden = false;
-      errBox.textContent = `連線失敗：${String(error)}`;
+      errBox.innerHTML = `<strong>${esc(info.title)}</strong><p>${esc(info.summary)}</p><details class="error-details"><summary>檢視技術細節</summary><pre class="error-raw">${esc(info.raw)}</pre></details>`;
     } finally {
+      saveBtn.textContent = prevSaveLabel;
       saveBtn.disabled = false;
       cancelBtn.disabled = false;
     }

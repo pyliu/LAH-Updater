@@ -383,12 +383,18 @@ summary { cursor: pointer; color: var(--text-muted); font-size: 13px; font-weigh
   border-left: 4px solid var(--bad-border);
   background: var(--bad-bg);
   color: var(--bad-fg);
-  padding: 12px;
+  padding: 12px 14px;
   margin-top: 12px;
+  border-radius: 5px;
   font-size: 13px;
-  line-height: 1.7;
+  line-height: 1.65;
 }
 .inline-error[hidden] { display: none; }
+.inline-error strong { display: block; font-size: 13.5px; margin-bottom: 4px; }
+.inline-error p { margin: 0; font-size: 13px; line-height: 1.6; }
+.inline-error .error-details { margin-top: 8px; padding-top: 8px; border-top-color: var(--bad-border); }
+.inline-error .error-details summary { color: var(--bad-fg); font-size: 12px; }
+.inline-error .error-raw { font-size: 11.5px; max-height: 130px; overflow: auto; }
 
 .events {
   background: var(--bg-surface);
