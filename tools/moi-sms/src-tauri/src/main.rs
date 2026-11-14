@@ -10,7 +10,7 @@ use moi_sms::comm::SmsGatewayClient;
 use moi_sms::config::{
     read_env_settings_file, save_env_properties_file, EnvSavePatch, MailConfig, SmsApiConfig,
 };
-use moi_sms::lah_client::{LahApiClient, MetadataResponse, QueueEnqueueRequest};
+use moi_sms::lah_client::{normalize_lah_api_url, LahApiClient, MetadataResponse, QueueEnqueueRequest};
 use moi_sms::log_maintenance::{
     cleanup_logs_and_backups, read_latest_daily_log_tail, tw_date_string, DailyLogTail,
     DEFAULT_MAX_ENV_BACKUPS, DEFAULT_MAX_LOG_BYTES, LOG_COMPRESS_AFTER_DAYS,
@@ -316,7 +316,8 @@ async fn sync_cases(state: State<'_, Arc<DesktopState>>) -> Result<String, Strin
 }
 
 #[tauri::command]
-fn save_settings(settings: Settings, state: State<'_, Arc<DesktopState>>) -> Result<Snapshot, String> {
+fn save_settings(mut settings: Settings, state: State<'_, Arc<DesktopState>>) -> Result<Snapshot, String> {
+    settings.lah_api_url = normalize_lah_api_url(&settings.lah_api_url);
     settings.validate()?;
     let (start_hours, start_min) = parse_clock_parts(&settings.start_time)?;
     let (end_hours, end_min) = parse_clock_parts(&settings.end_time)?;
@@ -855,7 +856,7 @@ fn settings_from_env_properties(path: &std::path::Path) -> Result<Settings, Stri
     let cfg = read_env_settings_file(path).map_err(|e| format!("讀取 env.properties 失敗：{e:#}"))?;
     let mut settings = Settings::default();
     if let Some(url) = cfg.lah_api_url {
-        settings.lah_api_url = url;
+        settings.lah_api_url = normalize_lah_api_url(&url);
     }
     if let Some(ap_url) = cfg.ap_url.filter(|s| !s.trim().is_empty()) {
         settings.gateway_url = ap_url.trim().to_string();
@@ -907,7 +908,8 @@ fn load_initial_settings(
     match fs::read(json_path) {
         Ok(bytes) => match serde_json::from_slice::<Settings>(&bytes)
             .map_err(|_| "舊版設定檔 JSON 格式不符".to_string())
-            .and_then(|settings| {
+            .and_then(|mut settings| {
+                settings.lah_api_url = normalize_lah_api_url(&settings.lah_api_url);
                 settings.validate()?;
                 Ok(settings)
             }) {
@@ -1079,14 +1081,14 @@ mod tests {
         let target_env = resolve_env_save_path(app_dir.clone(), Some(exe_dir.clone()));
         assert_eq!(target_env, exe_dir.join("env.properties"));
 
-        // 2. 當 env.properties 尚未建立時，向下相容讀取舊版 desktop-demo.json
+        // 2. 當 env.properties 尚未建立時，向下相容讀取舊版 desktop-demo.json 並自動升級 PHP 8.5 路徑
         let legacy = app_dir.join("desktop-demo.json");
         fs::write(&legacy, r#"{"lah_api_url":"http://10.0.0.5/api/sms_v1_api.php"}"#).unwrap();
         let found_legacy = find_legacy_json_path(&app_dir, Some(&exe_dir));
         assert_eq!(found_legacy.as_deref(), Some(legacy.as_path()));
         let (loaded, warn) = load_initial_settings(&target_env, found_legacy.as_deref());
         assert!(warn.is_none());
-        assert_eq!(loaded.lah_api_url, "http://10.0.0.5/api/sms_v1_api.php");
+        assert_eq!(loaded.lah_api_url, "http://10.0.0.5/LAH-API/v1/sms_v1_api.php");
         assert!(!loaded.auto_start_schedule);
 
         // 3. 若 env.properties 存在，則以 env.properties 為單一事實來源（優先於舊 JSON）
@@ -1176,7 +1178,7 @@ mod tests {
             calls: recorded_calls.clone(),
         };
         let client = LahApiClient::with_timeouts(
-            "http://127.0.0.1/api/sms_v1_api.php",
+            "http://127.0.0.1/LAH-API/v1/sms_v1_api.php",
             transport,
             DEFAULT_LAH_TIMEOUT,
             SYNC_LAH_TIMEOUT,
@@ -1198,11 +1200,11 @@ mod tests {
             *recorded_calls.lock().unwrap(),
             vec![
                 (
-                    "http://127.0.0.1/api/sms_v1_api.php/cases/sync".to_string(),
+                    "http://127.0.0.1/LAH-API/v1/sms_v1_api.php/cases/sync".to_string(),
                     SYNC_LAH_TIMEOUT
                 ),
                 (
-                    "http://127.0.0.1/api/sms_v1_api.php/queue/enqueue".to_string(),
+                    "http://127.0.0.1/LAH-API/v1/sms_v1_api.php/queue/enqueue".to_string(),
                     SYNC_LAH_TIMEOUT
                 ),
             ]

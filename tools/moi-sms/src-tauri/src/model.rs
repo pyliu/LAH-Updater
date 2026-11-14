@@ -1,3 +1,4 @@
+use moi_sms::lah_client::DEFAULT_LAH_API_URL;
 use moi_sms::log_maintenance::{append_daily_log_line, DEFAULT_MAX_LOG_BYTES};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
@@ -23,7 +24,7 @@ pub struct Settings {
 impl Default for Settings {
     fn default() -> Self {
         Self {
-            lah_api_url: "http://127.0.0.1/api/sms_v1_api.php".into(),
+            lah_api_url: DEFAULT_LAH_API_URL.into(),
             gateway_url: "https://gateway.example.com/send".into(),
             sms_user: String::new(),
             sms_password: String::new(),

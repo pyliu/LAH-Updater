@@ -365,7 +365,7 @@ mod tests {
         );
 
         let lah = LahApiClient::with_transport(
-            "http://127.0.0.1/api/sms_v1_api.php",
+            "http://127.0.0.1/LAH-API/v1/sms_v1_api.php",
             lah_transport,
             Duration::from_secs(5),
         )
@@ -437,7 +437,7 @@ mod tests {
         );
 
         let lah = LahApiClient::with_transport(
-            "http://127.0.0.1/api/sms_v1_api.php",
+            "http://127.0.0.1/LAH-API/v1/sms_v1_api.php",
             lah_transport,
             Duration::from_secs(5),
         )

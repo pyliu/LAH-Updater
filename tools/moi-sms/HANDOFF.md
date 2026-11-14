@@ -17,7 +17,7 @@
 2. **Tauri 2 桌面控管端（`src-tauri/` 與 `ui/`）**
    - 已串接 `LAH-API`：支援首頁即時統計（`main` / `wait` / `log`）、案件清單查詢與篩選、一鍵觸發案件同步與入列（`POST /cases/sync` + `POST /queue/enqueue`）。
    - 設定與連線測試：
-     - 預設端點：`http://127.0.0.1/api/sms_v1_api.php`（並支援 Apache PHP 8.5 路徑 `http://127.0.0.1/LAH-API/v1/sms_v1_api.php`）。
+     - 預設端點：`http://127.0.0.1/LAH-API/v1/sms_v1_api.php`（PHP 8.5 FastCGI 軌道，並自動將舊版 PHP 7.4 `/api/sms_v1_api.php` 與相容別名 `/LAH-API/api/sms_v1_api.php` 升級至 PHP 8.5 路徑）。
      - 支援於「系統設定」修改並記住遠端 `LAH-API URL`，提供「測試連線（`GET /metadata`）」與「從 `env.properties` 匯入」功能。
      - 設定檔優先讀取執行檔同目錄 `settings.json`（可攜式部署），否則存於系統 `app_config_dir/settings.json`（並相容讀取舊版 `desktop-demo.json`）。
    - 檔案日誌與視窗生命週期：

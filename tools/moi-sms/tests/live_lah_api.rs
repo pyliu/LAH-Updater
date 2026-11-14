@@ -4,7 +4,7 @@ use moi_sms::lah_client::{LahApiClient, QueueEnqueueRequest};
 #[ignore = "需要本機 Apache LAH-API 服務啟動才執行"]
 fn test_live_lah_api_endpoints_roundtrip() {
     let base_url = std::env::var("LAH_API_URL")
-        .unwrap_or_else(|_| "http://127.0.0.1/api/sms_v1_api.php".to_string());
+        .unwrap_or_else(|_| "http://127.0.0.1/LAH-API/v1/sms_v1_api.php".to_string());
     let client = LahApiClient::new(&base_url).expect("valid LAH-API URL");
 
     let meta = client.get_metadata().expect("GET /metadata");

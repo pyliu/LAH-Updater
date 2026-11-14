@@ -12,7 +12,13 @@
   <div class="app" id="app">
     <header>
       <div class="brand"><div class="mark" aria-hidden="true">MOI</div><div><h1>地籍異動通知管理</h1><small>案件同步 · 簡訊與郵件派送</small></div></div>
-      <div class="topmeta">桃園地政事務所<br><small>Tauri 桌面版 / 0.1.0</small></div>
+      <div class="header-right">
+        <button type="button" id="theme-toggle" class="theme-toggle" aria-pressed="false" title="切換亮色高對比／深色護眼主題">
+          <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+          <span>深色模式</span>
+        </button>
+        <div class="topmeta">桃園地政事務所<br><small>Tauri 桌面版 / 0.1.0</small></div>
+      </div>
     </header>
     <div class="status">
       <div class="state"><span class="badge" id="schedule-state">載入中</span><span class="badge" id="api-state">LAH-API：檢查中</span><span class="muted" id="schedule-time"></span></div>

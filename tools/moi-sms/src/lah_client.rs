@@ -9,6 +9,22 @@ use crate::comm::{validate_http_url, HttpTransport, UreqTransport};
 pub const DEFAULT_LAH_TIMEOUT: Duration = Duration::from_secs(30);
 /// 案件掃描同步與佇列搬移逾時（240 秒，涵蓋 Oracle 9i 多表查詢與批次寫入耗時）。
 pub const SYNC_LAH_TIMEOUT: Duration = Duration::from_secs(240);
+/// 預設 `LAH-API` PHP 8.5 FastCGI 端點網址。
+pub const DEFAULT_LAH_API_URL: &str = "http://127.0.0.1/LAH-API/v1/sms_v1_api.php";
+
+/// 正規化 `LAH-API` 端點網址：去除尾端斜線，並將舊版 PHP 7.4 `/api/sms_v1_api.php`
+/// 或相容別名 `/LAH-API/api/sms_v1_api.php` 自動升級為 PHP 8.5 `/LAH-API/v1/sms_v1_api.php`。
+pub fn normalize_lah_api_url(raw: &str) -> String {
+    let trimmed = raw.trim().trim_end_matches('/');
+    let lower = trimmed.to_ascii_lowercase();
+    for legacy_suffix in ["/lah-api/api/sms_v1_api.php", "/api/sms_v1_api.php"] {
+        if lower.ends_with(legacy_suffix) {
+            let prefix_len = trimmed.len() - legacy_suffix.len();
+            return format!("{}/LAH-API/v1/sms_v1_api.php", &trimmed[..prefix_len]);
+        }
+    }
+    trimmed.to_string()
+}
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
 pub struct MetadataResponse {
@@ -222,9 +238,10 @@ impl<T: HttpTransport> LahApiClient<T> {
         timeout: Duration,
         sync_timeout: Duration,
     ) -> Result<Self> {
-        validate_http_url(base_url).context("LAH-API URL 格式無效")?;
+        let normalized = normalize_lah_api_url(base_url);
+        validate_http_url(&normalized).context("LAH-API URL 格式無效")?;
         Ok(Self {
-            base_url: base_url.trim().trim_end_matches('/').to_string(),
+            base_url: normalized,
             timeout,
             sync_timeout,
             transport,
@@ -364,28 +381,55 @@ mod tests {
         .is_err());
 
         let client = LahApiClient::with_transport(
-            "http://127.0.0.1/api/sms_v1_api.php/",
+            "http://127.0.0.1/LAH-API/v1/sms_v1_api.php/",
             StubTransport::with_json(
                 r#"{"site_id":"HA","office_name":"桃園地政事務所","county_name":"桃園市"}"#,
             ),
             DEFAULT_LAH_TIMEOUT,
         )
         .unwrap();
-        assert_eq!(client.base_url(), "http://127.0.0.1/api/sms_v1_api.php");
+        assert_eq!(
+            client.base_url(),
+            "http://127.0.0.1/LAH-API/v1/sms_v1_api.php"
+        );
 
         let meta = client.get_metadata().unwrap();
         assert_eq!(meta.site_id, "HA");
         assert_eq!(meta.office_name, "桃園地政事務所");
         assert_eq!(
-            client.transport.last_get.borrow().as_ref().map(|(u, d)| (u.as_str(), *d)),
-            Some(("http://127.0.0.1/api/sms_v1_api.php/metadata", DEFAULT_LAH_TIMEOUT))
+            client
+                .transport
+                .last_get
+                .borrow()
+                .as_ref()
+                .map(|(u, d)| (u.as_str(), *d)),
+            Some((
+                "http://127.0.0.1/LAH-API/v1/sms_v1_api.php/metadata",
+                DEFAULT_LAH_TIMEOUT
+            ))
+        );
+
+        // 舊版 PHP 7.4 (/api/sms_v1_api.php) 與相容別名應自動升級為 PHP 8.5 路徑
+        let upgraded = LahApiClient::with_transport(
+            "http://127.0.0.1/api/sms_v1_api.php/",
+            StubTransport::with_json("{}"),
+            DEFAULT_LAH_TIMEOUT,
+        )
+        .unwrap();
+        assert_eq!(
+            upgraded.base_url(),
+            "http://127.0.0.1/LAH-API/v1/sms_v1_api.php"
+        );
+        assert_eq!(
+            normalize_lah_api_url("https://10.0.0.5:8443/LAH-API/api/sms_v1_api.php/"),
+            "https://10.0.0.5:8443/LAH-API/v1/sms_v1_api.php"
         );
     }
 
     #[test]
     fn test_sync_enqueue_pending_report_and_records() {
         let client = LahApiClient::with_transport(
-            "http://127.0.0.1/api/sms_v1_api.php",
+            DEFAULT_LAH_API_URL,
             StubTransport::with_json(
                 r#"{"target_date":"1151113","user_cases_scanned":5,"user_notifications_inserted":2,"gov_cases_scanned":1,"gov_notifications_inserted":1}"#,
             ),
@@ -396,7 +440,10 @@ mod tests {
         let sync = client.sync_cases(Some("1151113")).unwrap();
         assert_eq!(sync.user_notifications_inserted, 2);
         let (post_url, post_body, sync_timeout) = client.transport.last_post.borrow().clone().unwrap();
-        assert_eq!(post_url, "http://127.0.0.1/api/sms_v1_api.php/cases/sync");
+        assert_eq!(
+            post_url,
+            "http://127.0.0.1/LAH-API/v1/sms_v1_api.php/cases/sync"
+        );
         assert_eq!(post_body["target_date_yyy_mm_dd"], "1151113");
         assert_eq!(sync_timeout, SYNC_LAH_TIMEOUT);
 

@@ -33,6 +33,34 @@ function todayRocDate() {
 let query = { keyword: '', channel: '', status: '', date: todayRocDate(), sort_by: 'time', ascending: false };
 let toastTimer;
 let promptedApiSetup = false;
+const THEME_STORAGE_KEY = 'moi-sms-theme';
+const THEME_ICONS = {
+  dark: '<svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg><span>亮色模式</span>',
+  light: '<svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg><span>深色模式</span>',
+};
+
+function getSavedTheme() {
+  try {
+    return localStorage.getItem(THEME_STORAGE_KEY) === 'dark' ? 'dark' : 'light';
+  } catch {
+    return 'light';
+  }
+}
+
+function applyTheme(theme) {
+  const next = theme === 'dark' ? 'dark' : 'light';
+  document.documentElement.dataset.theme = next;
+  const btn = $('#theme-toggle');
+  if (btn) {
+    btn.setAttribute('aria-pressed', String(next === 'dark'));
+    btn.innerHTML = THEME_ICONS[next];
+  }
+  try {
+    localStorage.setItem(THEME_STORAGE_KEY, next);
+  } catch {
+    // 忽略儲存限制
+  }
+}
 
 function normalizeLahApiUrl(raw) {
   const value = String(raw || '').trim();
@@ -40,8 +68,12 @@ function normalizeLahApiUrl(raw) {
   const withScheme = /^https?:\/\//i.test(value) ? value : `http://${value}`;
   try {
     const parsed = new URL(withScheme);
-    if (!parsed.pathname || parsed.pathname === '/') {
-      parsed.pathname = '/api/sms_v1_api.php';
+    if (
+      !parsed.pathname ||
+      parsed.pathname === '/' ||
+      /^\/(?:LAH-API\/)?api\/sms_v1_api\.php\/?$/i.test(parsed.pathname)
+    ) {
+      parsed.pathname = '/LAH-API/v1/sms_v1_api.php';
     }
     return parsed.toString();
   } catch {
@@ -482,6 +514,11 @@ function openApiSetupDialog() {
 }
 
 async function start() {
+  applyTheme(getSavedTheme());
+  $('#theme-toggle')?.addEventListener('click', () => {
+    const current = document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light';
+    applyTheme(current === 'dark' ? 'light' : 'dark');
+  });
   for (const tab of document.querySelectorAll('[data-page]')) tab.onclick = () => switchPage(tab.dataset.page);
   $('#open-api-setup')?.addEventListener('click', openApiSetupDialog);
   $('#schedule').onclick = () => action(async () => {
