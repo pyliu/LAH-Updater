@@ -247,10 +247,109 @@ function bindCopy() {
   });
 }
 
+function describeLoadError(error) {
+  const raw = String(error ?? '').trim() || '未知錯誤';
+  const lower = raw.toLowerCase();
+  const endpoint = snapshot?.settings?.lah_api_url || '';
+  if (lower.includes('10061') || raw.includes('拒絕連線') || lower.includes('connection failed')) {
+    return {
+      title: '無法連線至智慧控管系統（LAH-API）',
+      summary: endpoint
+        ? `目標主機拒絕連線（${endpoint}），目前無法取得案件資料。`
+        : '目標主機拒絕連線，目前無法取得案件資料。',
+      hints: [
+        '確認智慧控管系統伺服器（Apache／PHP 8.5 FastCGI）已啟動。',
+        '點擊下方「設定系統 IP」檢查主機 IP 與端點網址是否正確。',
+        '若為本機執行，請確認本機服務已於 127.0.0.1 正常監聽。',
+      ],
+      isApiError: true,
+      raw,
+    };
+  }
+  if (lower.includes('timed out') || raw.includes('逾時')) {
+    return {
+      title: '智慧控管系統（LAH-API）連線逾時',
+      summary: '伺服器回應時間過長，目前無法載入案件資料。',
+      hints: [
+        '請檢查網路連線品質與後端伺服器負載狀態。',
+        '稍後點擊「重新連線」，或確認系統 IP 設定是否正確。',
+      ],
+      isApiError: true,
+      raw,
+    };
+  }
+  if (raw.includes('LAH-API') || lower.includes('http get') || lower.includes('http post')) {
+    return {
+      title: '智慧控管系統（LAH-API）存取失敗',
+      summary: '無法從後端服務取得資料，請檢查服務狀態或端點設定。',
+      hints: [
+        '確認 LAH-API 服務運作正常且可回應請求。',
+        '點擊「設定系統 IP」檢查端點位址是否正確。',
+      ],
+      isApiError: true,
+      raw,
+    };
+  }
+  return {
+    title: '無法載入桌面服務',
+    summary: '桌面程式初始化或讀取資料時發生異常。',
+    hints: [
+      '請點擊「重新載入」再試一次；若持續發生，請查看「日誌追蹤」或將技術細節提供給維運人員。',
+    ],
+    isApiError: false,
+    raw,
+  };
+}
+
+function renderLoadError(error, onRetry) {
+  const info = describeLoadError(error);
+  const content = $('#content');
+  content.classList.remove('records-view');
+  if (info.isApiError) {
+    const apiAlert = $('#api-alert');
+    if (apiAlert) apiAlert.hidden = true;
+  }
+  content.innerHTML = `<section class="load-error" role="alert">
+    <div class="error-header">
+      <svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+      <h2>${esc(info.title)}</h2>
+    </div>
+    <p class="error-summary">${esc(info.summary)}</p>
+    <ul class="error-hints">${info.hints.map((hint) => `<li>${esc(hint)}</li>`).join('')}</ul>
+    <div class="actions">
+      <button class="primary" id="retry-load" type="button">${info.isApiError ? '重新連線' : '重新載入'}</button>
+      ${info.isApiError ? '<button id="error-open-ip" type="button">設定系統 IP</button>' : ''}
+      <button id="copy-error" type="button">複製錯誤資訊</button>
+    </div>
+    <details class="error-details">
+      <summary>檢視技術細節（供維運人員排查）</summary>
+      <pre class="error-raw">${esc(info.raw)}</pre>
+    </details>
+  </section>`;
+  $('#retry-load').onclick = onRetry;
+  $('#error-open-ip')?.addEventListener('click', openApiSetupDialog);
+  $('#copy-error')?.addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(info.raw);
+      toast('錯誤資訊已複製。');
+    } catch {
+      toast('請展開技術細節選取文字，再按 Ctrl+C 複製。');
+    }
+  });
+  return info;
+}
+
 async function renderRecords() {
   const request = ++sequence;
   const currentPage = page;
-  const result = await invoke('query_records', { query: { ...query, table: currentPage } });
+  let result;
+  try {
+    result = await invoke('query_records', { query: { ...query, table: currentPage } });
+  } catch (error) {
+    if (request !== sequence || page !== currentPage) return;
+    renderLoadError(error, refresh);
+    return;
+  }
   if (request !== sequence || page !== currentPage) return;
   const oldScroll = $('.tablewrap')?.scrollTop || 0;
   records = result.items;
@@ -542,9 +641,8 @@ async function start() {
     await renderPage();
     if (snapshot.startup_warning) toast(snapshot.startup_warning, true);
   } catch (error) {
-    $('#content').innerHTML = `<div class="load-error"><h2>無法載入桌面服務</h2><p>${esc(error)}</p><button id="retry-load">重新載入</button></div>`;
-    $('#retry-load').onclick = () => location.reload();
-    toast(String(error), true);
+    const info = renderLoadError(error, () => location.reload());
+    toast(info.title, true);
   } finally {
     setBusy(false);
     if (!snapshot) for (const button of document.querySelectorAll('#schedule, #sync, .nav button')) button.disabled = true;

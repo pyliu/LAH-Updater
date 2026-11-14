@@ -431,8 +431,58 @@ summary { cursor: pointer; color: var(--text-muted); font-size: 13px; font-weigh
 .error-toast { background: var(--toast-error-bg); }
 .toast[hidden] { display: none; }
 
-.loading, .load-error { padding: 35px 15px; }
-.load-error p { margin: 14px 0; }
+.loading { padding: 35px 15px; }
+
+.load-error {
+  max-width: 740px;
+  margin: 8px auto;
+  padding: 24px 26px;
+  background: var(--bg-surface);
+  border: 1px solid var(--line);
+  border-left: 5px solid var(--bad-border);
+  border-radius: 8px;
+  box-shadow: 0 2px 10px #0000000d;
+}
+.error-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--bad-fg);
+  margin-bottom: 10px;
+}
+.error-header svg { flex-shrink: 0; }
+.error-summary {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--text-main);
+  margin-bottom: 12px;
+}
+.error-hints {
+  margin: 0 0 18px;
+  padding-left: 20px;
+  color: var(--text-muted);
+  font-size: 13.5px;
+  line-height: 1.8;
+}
+.error-details {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line-soft);
+}
+.error-raw {
+  margin: 10px 0 0;
+  padding: 12px 14px;
+  background: var(--bg-surface-alt);
+  border: 1px solid var(--line-soft);
+  border-radius: 6px;
+  color: var(--text-main);
+  font-family: 'Cascadia Mono', 'Consolas', 'Microsoft JhengHei', monospace;
+  font-size: 12.5px;
+  line-height: 1.65;
+  white-space: pre-wrap;
+  word-break: break-word;
+  user-select: all;
+}
 
 dialog {
   border: 1px solid var(--line);
